@@ -67,7 +67,7 @@ sites:
     secondary_languages: []
     target_markets: []
     business_category: UNKNOWN
-    foundation_year: UNKNOWN
+    foundation_year: 2018                  # OWNER-CONFIRMED: PAM AI Studio is PAM İstanbul's AI unit; the parent's founding year is the entity fact its pages state
     content_cadence_days: UNKNOWN      # owner has not set a publishing cadence for this site
     content_sections: []
     primary_business_objectives: []
@@ -83,7 +83,7 @@ sites:
     competitor_set: []
     core_commercial_topics: []
     core_informational_topics: []
-    brand_entities: []
+    brand_entities: [PAM AI Studio, PAM İstanbul]
     people_entities: []
     social_identity_urls: []
     business_locations: []

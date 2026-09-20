@@ -132,3 +132,12 @@ test("the report separates a confirmed defect from something to read", () => {
   assert.match(md, /\*\*REVIEW\*\*/, "a CANDIDATE must not be presented as a confirmed defect");
   assert.match(md, /Google states it ignores them/);
 });
+
+test("the Turkish locative founding form is caught too", () => {
+  // "2017'de kuruldu" is the everyday phrasing and sat in pamaistudio.com's own llms.txt
+  // while the check passed it. Ablative ("2017'den beri") is a weaker claim and stays
+  // CANDIDATE; the locative states a founding outright.
+  assert.match(msgs("PAM İstanbul 2017'de kuruldu.")[0], /^CONFIRMED/);
+  assert.match(msgs("PAM İstanbul 2017'da kuruldu.")[0], /^CONFIRMED/);
+  assert.deepEqual(msgs("PAM İstanbul 2018'de kuruldu."), []);
+});

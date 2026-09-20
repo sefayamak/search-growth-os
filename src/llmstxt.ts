@@ -130,6 +130,9 @@ export function findContradictions(text: string, facts: RegistryFacts): Contradi
   const strong = [
     new RegExp(String.raw`${STRONG}\D{0,20}${YEAR}`, "i"),
     new RegExp(String.raw`${YEAR}\s*(?:yılında|yilinda)\s*\W{0,3}${STRONG}`, "i"),
+    // "2017'de kuruldu" — the locative suffix, not the ablative. Missing this let
+    // pamaistudio.com state the wrong founding year in its own llms.txt undetected.
+    new RegExp(String.raw`${YEAR}['’]?d[ae]\s+kurul\w*`, "i"),
   ];
   const weak = [
     new RegExp(String.raw`${WEAK}\D{0,20}${YEAR}`, "i"),
