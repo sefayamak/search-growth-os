@@ -27,6 +27,7 @@ sites:
     business_category: photo, film and AI production studio
     foundation_year: 2018                  # OWNER-CONFIRMED 2026-09-20. Source of truth for every entity surface.
                                            # The live site currently asserts 2017 in 288 files — see sites/pamistanbul/entity-facts.md
+    content_cadence_days: 10               # OWNER-SET 2026-09-20: at most 10 days between published pieces
     primary_business_objectives:
       - qualified production briefs from organic search
       - international (EN) enquiry flow
@@ -65,6 +66,7 @@ sites:
     target_markets: []
     business_category: UNKNOWN
     foundation_year: UNKNOWN
+    content_cadence_days: UNKNOWN      # owner has not set a publishing cadence for this site
     primary_business_objectives: []
     primary_conversion_events: []
     google_search_console_property: NOT_CONNECTED
@@ -97,6 +99,7 @@ sites:
     target_markets: []
     business_category: UNKNOWN
     foundation_year: UNKNOWN
+    content_cadence_days: UNKNOWN      # owner has not set a publishing cadence for this site
     primary_business_objectives: []
     primary_conversion_events: []
     google_search_console_property: NOT_CONNECTED
@@ -129,6 +132,7 @@ sites:
     target_markets: []
     business_category: UNKNOWN
     foundation_year: UNKNOWN
+    content_cadence_days: UNKNOWN      # owner has not set a publishing cadence for this site
     primary_business_objectives: []
     primary_conversion_events: []
     google_search_console_property: NOT_CONNECTED
@@ -161,6 +165,7 @@ sites:
     target_markets: []
     business_category: UNKNOWN
     foundation_year: UNKNOWN
+    content_cadence_days: UNKNOWN      # owner has not set a publishing cadence for this site
     primary_business_objectives: []
     primary_conversion_events: []
     google_search_console_property: NOT_CONNECTED
@@ -193,6 +198,7 @@ sites:
     target_markets: []
     business_category: UNKNOWN
     foundation_year: UNKNOWN
+    content_cadence_days: UNKNOWN      # owner has not set a publishing cadence for this site
     primary_business_objectives: []
     primary_conversion_events: []
     google_search_console_property: NOT_CONNECTED
@@ -225,6 +231,7 @@ sites:
     target_markets: []
     business_category: UNKNOWN
     foundation_year: UNKNOWN
+    content_cadence_days: UNKNOWN      # owner has not set a publishing cadence for this site
     primary_business_objectives: []
     primary_conversion_events: []
     google_search_console_property: NOT_CONNECTED

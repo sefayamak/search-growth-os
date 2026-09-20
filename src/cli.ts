@@ -5,9 +5,12 @@
 //   compliance --stdin --kind k     read content from stdin
 //   registry <path>                 validate a site registry (yaml subset / json)
 //   integrations                    print adapter connection states
+//   portfolio [--site id] [--onboarded-only] [--sample N] [--delay ms] [--out dir]
+//                                   measure publishing cadence across the registry
 import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { crawl } from "./crawler.ts";
+import { assessPortfolio, cadenceToMarkdown } from "./cadence.ts";
 import { runAudit } from "./audit.ts";
 import { buildReport, reportToMarkdown } from "./report.ts";
 import { checkCompliance, kindFromPath } from "./compliance.ts";
@@ -91,12 +94,57 @@ async function main() {
       else { console.error(res.errors.join("\n")); process.exitCode = 1; }
       return;
     }
+    case "portfolio": {
+      // Cadence measurement reads sitemaps and publish dates only. It derives no keyword,
+      // competitor or strategy, so unlike `audit` it may look at every registered site —
+      // that is what makes "check my sites" answerable in one pass. Turning a measurement
+      // into ADVICE is still gated: see policies/portfolio-isolation.md.
+      const reg = loadRegistry(opt("registry", join("config", "sites.yaml")));
+      if (!reg.ok) throw new Error(`registry invalid:\n${reg.errors.join("\n")}`);
+      const only = opt("site");
+      let sites = reg.registry!.sites;
+      if (only) {
+        sites = sites.filter((s) => s.id === only);
+        if (!sites.length) throw new Error(`site "${only}" is not in the registry`);
+      }
+      if (flag("onboarded-only")) sites = sites.filter((s) => onboardedSites(reg.registry!).some((o) => o.id === s.id));
+
+      const results = await assessPortfolio(
+        sites.map((s) => ({
+          id: s.id,
+          domain: s.canonical_hostname && !["UNKNOWN", "NOT_CONNECTED"].includes(s.canonical_hostname) ? s.canonical_hostname : s.production_domain,
+          onboardingStatus: s.onboarding_status,
+          sitemaps: (s.sitemap_locations ?? []).filter((u) => typeof u === "string" && u.startsWith("http")),
+          cadenceDays: typeof s.content_cadence_days === "number" ? s.content_cadence_days : null,
+        })),
+        { samplePages: Number(opt("sample", "6")), delayMs: Number(opt("delay", "800")) },
+        (s) => process.stderr.write(s + "\n"),
+      );
+
+      const outDir = opt("out", join("reports", "runs"));
+      mkdirSync(outDir, { recursive: true });
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const base = join(outDir, `portfolio_${stamp}`);
+      writeFileSync(`${base}.cadence.json`, JSON.stringify(results, null, 2));
+      const md = cadenceToMarkdown(results);
+      writeFileSync(`${base}.cadence.md`, md);
+      console.log(md);
+      for (const r of results) {
+        console.error(`CADENCE ${r.siteId} verdict=${r.verdict} days=${r.daysSincePublish ?? "null"} expected=${r.expectedCadenceDays}`
+          + ` section=${r.contentSection?.pattern ?? "none"} source=${r.latestPublish?.source ?? "none"} status=${r.onboardingStatus}`);
+      }
+      // A site that could not be measured is not a passing site. Exit 4 keeps an
+      // unreachable host from reading as "nothing to report" in a scheduled run.
+      if (results.some((r) => r.error)) process.exitCode = 4;
+      console.error(`\nwritten: ${base}.cadence.json / .cadence.md`);
+      return;
+    }
     case "integrations": {
       for (const s of allStatuses()) console.log(`${s.state.padEnd(14)} ${s.name} — ${s.note}`);
       return;
     }
     default:
-      console.error("commands: crawl | audit | compliance | registry | integrations");
+      console.error("commands: crawl | audit | compliance | registry | integrations | portfolio");
       process.exitCode = 1;
   }
 }

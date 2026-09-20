@@ -21,11 +21,32 @@ site A's registry entry and site A's artifacts, and nothing else.
 
 ## Onboarding status gates work
 
-| Status | Crawl | Analyse | Propose changes | Ship changes |
-|---|---|---|---|---|
-| `pilot_onboarding` | yes | yes | yes, PR only | only with explicit owner approval |
-| `active` | yes | yes | yes, PR only | per `deployment_approval_policy` |
-| `registered_not_onboarded` | **no** | **no** | **no** | **no** |
+| Status | Observe | Crawl | Analyse | Propose changes | Ship changes |
+|---|---|---|---|---|---|
+| `pilot_onboarding` | yes | yes | yes | yes, PR only | only with explicit owner approval |
+| `active` | yes | yes | yes | yes, PR only | per `deployment_approval_policy` |
+| `registered_not_onboarded` | yes, bounded | **no** | **no** | **no** | **no** |
+
+### Why observation is its own column
+
+"Which of my sites has gone quiet" is a question about the portfolio, and refusing
+to answer it for six sites out of seven would make the registry useless for the
+first thing an owner asks. So observation is carved out explicitly rather than
+smuggled in under crawling.
+
+**Observation is the `portfolio` command and nothing else**: robots.txt, sitemaps,
+and a small sample of content pages read for the publish date they state about
+themselves. It yields one measurement — days since the last publish — and no
+keyword, competitor, topic, audience or strategy. It cannot leak between sites
+because it derives nothing that could leak.
+
+The boundary holds where it matters: a measurement may be reported for any
+registered site, but **turning that measurement into advice requires onboarding**.
+For a `registered_not_onboarded` site the honest output is "42 days, and this site
+is not onboarded, so no topic or strategy will be produced for it". Recommending
+what to publish on a site whose audience, market and inventory were never
+established is invention, and its neighbour being onboarded is not evidence
+about it.
 
 A registered-but-not-onboarded site exists so the portfolio is complete and so
 nobody has to re-discover it later. Touching one requires the owner to onboard

@@ -14,7 +14,7 @@
     "site": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "onboarding_status", "production_domain", "canonical_hostname", "repository", "framework", "deployment_provider", "primary_language", "secondary_languages", "target_markets", "business_category", "primary_business_objectives", "primary_conversion_events", "google_search_console_property", "ga4_property", "bing_webmaster_property", "cdn_log_source", "indexnow_status", "robots_policy", "sitemap_locations", "known_subdomains", "competitor_set", "core_commercial_topics", "core_informational_topics", "brand_entities", "people_entities", "social_identity_urls", "business_locations", "risk_level", "deployment_approval_policy"],
+      "required": ["id", "onboarding_status", "production_domain", "canonical_hostname", "repository", "framework", "deployment_provider", "primary_language", "secondary_languages", "target_markets", "business_category", "foundation_year", "content_cadence_days", "primary_business_objectives", "primary_conversion_events", "google_search_console_property", "ga4_property", "bing_webmaster_property", "cdn_log_source", "indexnow_status", "robots_policy", "sitemap_locations", "known_subdomains", "competitor_set", "core_commercial_topics", "core_informational_topics", "brand_entities", "people_entities", "social_identity_urls", "business_locations", "risk_level", "deployment_approval_policy"],
       "properties": {
         "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
         "onboarding_status": {
@@ -30,6 +30,14 @@
         "secondary_languages": { "type": "array", "items": { "type": "string" } },
         "target_markets": { "type": "array", "items": { "type": "string" } },
         "business_category": { "type": "string" },
+        "foundation_year": {
+          "anyOf": [{ "type": "integer", "minimum": 1900 }, { "$ref": "#/$defs/sentinel" }],
+          "description": "Owner-confirmed founding year. Source of truth for entity surfaces: when the live site disagrees, the site is wrong."
+        },
+        "content_cadence_days": {
+          "anyOf": [{ "type": "integer", "minimum": 1, "maximum": 365 }, { "$ref": "#/$defs/sentinel" }],
+          "description": "Days the owner intends to leave between published pieces. Never inferred from the site's history; UNKNOWN makes cadence verdicts fall back to a stated default."
+        },
         "primary_business_objectives": { "type": "array", "items": { "type": "string" } },
         "primary_conversion_events": { "type": "array", "items": { "type": "string" }, "description": "Must exist in GA4 before being used as a KPI." },
         "google_search_console_property": { "$ref": "#/$defs/stringOrSentinel" },

@@ -17,6 +17,7 @@ sites:
     target_markets: [TR]
     business_category: photo, film and production studio
     foundation_year: UNKNOWN                # owner-confirmed only; never inferred from the site's own copy
+    content_cadence_days: UNKNOWN   # days between published pieces — an owner decision, never inferred
     primary_business_objectives:
       - qualified production briefs (form and hello@ inbox)
       - retainer / monthly content contracts
