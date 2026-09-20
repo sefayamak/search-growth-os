@@ -1,4 +1,9 @@
-# pamistanbul.com — first production technical baseline
+# pamistanbul.com — PARTIAL_BASELINE_SAMPLE (120 pages)
+
+> **This is a sample, not a full baseline.** It crawled 120 of the site's pages
+> by following links. The complete measurement is
+> `2026-09-20-FULL-BASELINE.md`, which processed all 726 sitemap URLs.
+> Kept for the record because it is where two detector bugs were found.
 
 Measured 2026-09-20 by the remote runner (GitHub Actions run 35503032935,
 commit `38a5445`) against the live site. Read-only crawl, 120 pages, 800 ms

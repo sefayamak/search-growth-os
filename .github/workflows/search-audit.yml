@@ -88,7 +88,8 @@ jobs:
         if: always()
         run: |
           if [ -f audit-report.md ]; then
-            { echo "## Search audit — ${{ inputs.site || 'pamistanbul' }} (${{ inputs.mode || 'sample' }})"; echo; head -c 60000 audit-report.md; } >> "$GITHUB_STEP_SUMMARY"
+            KIND=$(grep -m1 -o "PARTIAL_BASELINE_SAMPLE\|FULL_BASELINE" audit-report.md || echo unknown)
+            { echo "## Search audit — ${{ inputs.site || 'pamistanbul' }} ($KIND)"; echo; head -c 60000 audit-report.md; } >> "$GITHUB_STEP_SUMMARY"
           else
             echo "No report produced — the crawl did not reach the target. See the step log." >> "$GITHUB_STEP_SUMMARY"
           fi
