@@ -8,6 +8,32 @@ dosyadan öğren, oturum geçmişinden değil — o kaybolur, bu kalır.
 
 ---
 
+## 0. Yeni oturum: ilk beş dakika
+
+**YAPMA.** Bunlar zaten yapıldı ve tekrarı saatler yer:
+
+- Depoyu yeniden keşfetme, dosyaları tek tek okuma — durum bu dosyada
+- Ölçümleri yeniden çalıştırma — 20 Eylül sonuçları bölüm 5'te, sitelerde değişen
+  bir şey yoksa yeniden koşmaya gerek yok
+- `llms.txt` konusunu yeniden araştırma — bitti, kaynaklar
+  `policies/references/llms-txt.md` içinde tarihli duruyor
+- Kuruluş yılını yeniden sorgulama — 2018, karar verildi (bölüm 3)
+- Diğer altı siteyi klonlama — yalnız o siteye dokunacaksan gerekir
+- Yeni bir denetim aracı yazma — `portfolio`, `llmstxt`, `audit` zaten var
+
+**YAP.** Tek komut, otuz saniye:
+
+```bash
+cd search-growth-os && git pull && npm test
+```
+
+65 test yeşil gelmeli. Sonra bölüm 2'deki tek adıma geç.
+
+Bir şeyin hâlâ geçerli olup olmadığından şüphelenirsen ölçümü tekrarla —
+ama önce bu dosyadaki sayıya bak; çoğu soru orada cevaplı.
+
+---
+
 ## 1. Tek cümleyle nerede kaldık
 
 Search Growth OS kuruldu ve çalışıyor; 7 sitenin içerik ritmi ve `llms.txt`

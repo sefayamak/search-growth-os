@@ -1,7 +1,12 @@
 # Search Growth OS — devralma notu
 
-**Bu depoyu açtıysan önce [`DEVAM.md`](DEVAM.md) oku.** İşin nerede bırakıldığı,
-açık PR'lar, verilmiş kararlar ve sıradaki tek adım orada.
+**Bu depoyu açtıysan önce [`DEVAM.md`](DEVAM.md) oku** — hepsini, başka bir şeye
+bakmadan. İşin nerede bırakıldığı, açık PR'lar, verilmiş kararlar, son ölçümler ve
+sıradaki tek adım orada.
+
+Özellikle **bölüm 0**: hangi işlerin zaten yapıldığını ve tekrarlanmaması
+gerektiğini söylüyor. Ölçümü yeniden koşmak, konuyu yeniden araştırmak veya
+verilmiş bir kararı yeniden tartışmak saatler yer ve hiçbir şey kazandırmaz.
 
 Sefa Yamak'ın yedi web sitesi için SEO / AEO / GEO ölçüm ve öneri sistemi.
 Türkçe konuş; teknik terimler İngilizce kalabilir. Laf kalabalığı yok, sonuçla başla.
