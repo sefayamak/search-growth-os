@@ -69,11 +69,26 @@ jobs:
           # Exit 4 means at least one host could not be measured. Failing here keeps an
           # unreachable site from reading as "nothing to report" in a scheduled run.
 
+      - name: llms.txt inventory
+        if: always()
+        env:
+          SEARCH_GROWTH_USER_AGENT: "SearchGrowthOS/0.1 (+https://pamistanbul.com; read-only llms.txt inventory; contact hello@pamistanbul.com)"
+        run: |
+          set -o pipefail
+          node --experimental-strip-types src/cli.ts llmstxt \
+            ${{ inputs.site != '' && format('--site {0}', inputs.site) || '' }} \
+            --out reports/runs | tee llmstxt-report.md
+          # Exit 5 means a live file contradicts an owner-confirmed fact. That is a real
+          # defect on a production site, so it must not pass as green.
+
       - name: Summary
         if: always()
         run: |
           if [ -f portfolio-report.md ]; then
             { echo "## Portfolio content check"; echo; cat portfolio-report.md; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -f llmstxt-report.md ]; then
+            { echo; cat llmstxt-report.md; } >> "$GITHUB_STEP_SUMMARY"
           else
             echo "No report produced — see the step log." >> "$GITHUB_STEP_SUMMARY"
           fi
@@ -85,6 +100,7 @@ jobs:
           name: portfolio-check-${{ github.run_id }}
           path: |
             portfolio-report.md
+            llmstxt-report.md
             reports/runs/
           retention-days: 30
           if-no-files-found: warn

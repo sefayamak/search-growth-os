@@ -7,10 +7,12 @@
 //   integrations                    print adapter connection states
 //   portfolio [--site id] [--onboarded-only] [--sample N] [--delay ms] [--out dir]
 //                                   measure publishing cadence across the registry
+//   llmstxt [--site id] [--out dir]  inventory each site's llms.txt against the spec and the registry
 import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { crawl } from "./crawler.ts";
 import { assessPortfolio, cadenceToMarkdown } from "./cadence.ts";
+import { inspectPortfolio, llmsTxtToMarkdown } from "./llmstxt.ts";
 import { runAudit } from "./audit.ts";
 import { buildReport, reportToMarkdown } from "./report.ts";
 import { checkCompliance, kindFromPath } from "./compliance.ts";
@@ -140,12 +142,53 @@ async function main() {
       console.error(`\nwritten: ${base}.cadence.json / .cadence.md`);
       return;
     }
+    case "llmstxt": {
+      // Inventory only. This reads two public files per site and compares them to facts the
+      // owner already confirmed; it derives no strategy, so like `portfolio` it may look at
+      // every registered site (policies/portfolio-isolation.md).
+      const reg = loadRegistry(opt("registry", join("config", "sites.yaml")));
+      if (!reg.ok) throw new Error(`registry invalid:\n${reg.errors.join("\n")}`);
+      const only = opt("site");
+      let sites = reg.registry!.sites;
+      if (only) {
+        sites = sites.filter((s) => s.id === only);
+        if (!sites.length) throw new Error(`site "${only}" is not in the registry`);
+      }
+      const results = await inspectPortfolio(
+        sites.map((s) => ({
+          id: s.id,
+          domain: s.canonical_hostname && !["UNKNOWN", "NOT_CONNECTED"].includes(s.canonical_hostname) ? s.canonical_hostname : s.production_domain,
+          onboardingStatus: s.onboarding_status,
+          foundationYear: typeof s.foundation_year === "number" ? s.foundation_year : null,
+          brandEntities: Array.isArray(s.brand_entities) ? s.brand_entities : [],
+        })),
+        {},
+        (s) => process.stderr.write(s + "\n"),
+      );
+      const outDir = opt("out", join("reports", "runs"));
+      mkdirSync(outDir, { recursive: true });
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const base = join(outDir, `llmstxt_${stamp}`);
+      writeFileSync(`${base}.json`, JSON.stringify(results, null, 2));
+      const md = llmsTxtToMarkdown(results);
+      writeFileSync(`${base}.md`, md);
+      console.log(md);
+      for (const r of results) {
+        console.error(`LLMSTXT ${r.siteId} present=${r.present} status=${r.status} tokens=${r.tokensLow}-${r.tokensHigh}`
+          + ` links=${r.spec?.linkCount ?? 0} questions=${r.spec?.questionCount ?? 0} full=${r.full.present}`
+          + ` contradictions=${r.contradictions.length}`);
+      }
+      // A contradiction is a real defect on a live site, so it must not exit green.
+      if (results.some((r) => r.contradictions.some((c) => c.confidence === "CONFIRMED"))) process.exitCode = 5;
+      console.error(`\nwritten: ${base}.json / ${base}.md`);
+      return;
+    }
     case "integrations": {
       for (const s of allStatuses()) console.log(`${s.state.padEnd(14)} ${s.name} — ${s.note}`);
       return;
     }
     default:
-      console.error("commands: crawl | audit | compliance | registry | integrations | portfolio");
+      console.error("commands: crawl | audit | compliance | registry | integrations | portfolio | llmstxt");
       process.exitCode = 1;
   }
 }
