@@ -41,6 +41,45 @@ Google's own documentation before quoting the date.
 The practical consequence: **no amount of content in `llms.txt` is a Google ranking
 action.** Writing one is a bet on non-Google assistants that choose to fetch it.
 
+## Does anything read it
+
+Measured, not assumed. Two independent server-log studies point the same way.
+
+**Ahrefs, published 2026-06-15** — 137,210 domains with traffic in May 2026, checked for an
+`llms.txt` returning HTTP 200, then every request to `/llms.txt` classified by user agent:
+
+| Finding | Figure |
+|---|---|
+| Files receiving **zero** requests in May 2026 | **97%** |
+| Of the 3% with traffic, share that was bots | 96% |
+| AI search bots (OAI-SearchBot, PerplexityBot, Claude Web) share of requests | **1.1%** |
+| AI coding agents (e.g. Claude-Code) | ~10.5% |
+| Largest single consumer | tools auditing whether you have an `llms.txt` |
+
+**EZY Research** — 83 sites, 12 weeks of logs. Over that period OpenAI fetched `llms.txt`
+7 times and `robots.txt` 3,990 times; Anthropic 9 against 3,120; PerplexityBot **0** against
+775. Separate 48-day and 14-day single-host studies recorded zero `llms.txt` requests while
+AI crawlers hit ordinary pages normally.
+
+So the file is not merely unweighted by Google — it is, in the main, unfetched.
+
+**Status of these figures:** reported through search result summaries. `ahrefs.com`,
+`searchenginejournal.com` and `ppc.land` are all blocked by this environment's egress
+proxy, so the primary write-ups could not be read here. Two independent studies agreeing
+is why they are quoted at all; confirm before putting a number in a client-facing document.
+
+## Neither does schema move AI citations
+
+Relevant because "add FAQ schema" is the usual next suggestion after llms.txt. Ahrefs ran a
+controlled test: 1,885 pages that added JSON-LD between August 2025 and March 2026, matched
+against 4,000 control pages. Google AI Overviews citations **declined 4.6%** on the treated
+pages (small, statistically significant against controls); AI Mode and ChatGPT differences
+were within noise. The authors note schema correlates with better-maintained sites, which
+is the more likely source of any apparent lift.
+
+Treat structured data as what it is — machine-readable description, and the route to the
+rich results it is actually eligible for — not as a lever on AI citation.
+
 ## So what does limit it
 
 Not a rule — a budget. The file competes for space in a context window against the page
