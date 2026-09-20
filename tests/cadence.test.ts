@@ -293,3 +293,43 @@ test("a NO_CONTENT_SECTION verdict shows the site's real structure", async () =>
     assert.match(structure!, /projeler \(1\)/);
   } finally { site.server.close(); }
 });
+
+test("a registry-declared section is found where no generic word would match", async () => {
+  // The real failure this fixes: pamistanbul.com publishes under /pamlab/, and the generic
+  // word list reported it as having no content line at all across 726 URLs. A false
+  // negative is quieter than a false positive and therefore worse — it hides real work.
+  const site = await startSite({
+    urls: [["/"], ["/pamlab/aeo-nedir"], ["/pamlab/ai-video"], ["/hizmetler/x"]],
+    pages: {
+      "/": "<html><head><title>Ana</title></head><body>x</body></html>",
+      "/pamlab/aeo-nedir": post("2026-09-03", "AEO nedir"),
+      "/pamlab/ai-video": post("2026-08-14", "AI video"),
+      "/hizmetler/x": "<html><head><title>H</title></head><body>x</body></html>",
+    },
+  });
+  try {
+    const undeclared = await assessCadence(
+      { id: "t", domain: site.host, onboardingStatus: "active", sitemaps: [], cadenceDays: 10 },
+      { now: NOW, delayMs: 0 },
+    );
+    assert.equal(undeclared.verdict, "NO_CONTENT_SECTION", "without a declaration the brand word is invisible");
+
+    const declared = await assessCadence(
+      { id: "t", domain: site.host, onboardingStatus: "active", sitemaps: [], cadenceDays: 10, contentSections: ["pamlab"] },
+      { now: NOW, delayMs: 0 },
+    );
+    assert.equal(declared.contentSection?.pattern, "pamlab");
+    assert.equal(declared.latestPublish?.date, "2026-09-03");
+    assert.equal(declared.daysSincePublish, 17);
+    assert.equal(declared.verdict, "DUE");
+  } finally { site.server.close(); }
+});
+
+test("a declared section is normalised and cannot be outvoted by a generic one", () => {
+  // Slashes and case are forgiving; the declaration still competes on URL count.
+  assert.equal(discoverContentSection(["https://x.com/pamlab/a"], ["/PamLab/"])!.pattern, "pamlab");
+  assert.equal(discoverContentSection([
+    "https://x.com/pamlab/a",
+    "https://x.com/blog/a", "https://x.com/blog/b", "https://x.com/blog/c",
+  ], ["pamlab"])!.pattern, "blog", "declaring a section does not force it to win");
+});

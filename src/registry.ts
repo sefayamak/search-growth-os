@@ -21,6 +21,11 @@ export interface SiteEntry {
    *  the system measures the real gap, but only the owner decides which gap is too long.
    *  UNKNOWN makes every cadence verdict for this site fall back to a stated default. */
   content_cadence_days: number | Sentinel;
+  /** Path segments that hold this site's editorial content, when they are not one of the
+   *  generic words the cadence engine knows. PAM İstanbul publishes under `pamlab`, which
+   *  no generic list would contain; leaving it undeclared reported the site as having no
+   *  content line at all. Empty is fine for a site whose section is a generic word. */
+  content_sections: string[];
   primary_business_objectives: string[]; primary_conversion_events: string[];
   google_search_console_property: string | Sentinel; ga4_property: string | Sentinel; bing_webmaster_property: string | Sentinel;
   cdn_log_source: string | Sentinel; indexnow_status: "enabled" | "disabled" | Sentinel;
@@ -82,8 +87,8 @@ export function parseYamlSubset(text: string): Node {
 }
 
 // --- validation ---------------------------------------------------------------
-const REQUIRED: (keyof SiteEntry)[] = ["id", "onboarding_status", "production_domain", "canonical_hostname", "repository", "framework", "deployment_provider", "primary_language", "secondary_languages", "target_markets", "business_category", "foundation_year", "content_cadence_days", "primary_business_objectives", "primary_conversion_events", "google_search_console_property", "ga4_property", "bing_webmaster_property", "cdn_log_source", "indexnow_status", "robots_policy", "sitemap_locations", "known_subdomains", "competitor_set", "core_commercial_topics", "core_informational_topics", "brand_entities", "people_entities", "social_identity_urls", "business_locations", "risk_level", "deployment_approval_policy"];
-const LISTS: (keyof SiteEntry)[] = ["secondary_languages", "target_markets", "primary_business_objectives", "primary_conversion_events", "sitemap_locations", "known_subdomains", "competitor_set", "core_commercial_topics", "core_informational_topics", "brand_entities", "people_entities", "social_identity_urls", "business_locations"];
+const REQUIRED: (keyof SiteEntry)[] = ["id", "onboarding_status", "production_domain", "canonical_hostname", "repository", "framework", "deployment_provider", "primary_language", "secondary_languages", "target_markets", "business_category", "foundation_year", "content_cadence_days", "content_sections", "primary_business_objectives", "primary_conversion_events", "google_search_console_property", "ga4_property", "bing_webmaster_property", "cdn_log_source", "indexnow_status", "robots_policy", "sitemap_locations", "known_subdomains", "competitor_set", "core_commercial_topics", "core_informational_topics", "brand_entities", "people_entities", "social_identity_urls", "business_locations", "risk_level", "deployment_approval_policy"];
+const LISTS: (keyof SiteEntry)[] = ["content_sections", "secondary_languages", "target_markets", "primary_business_objectives", "primary_conversion_events", "sitemap_locations", "known_subdomains", "competitor_set", "core_commercial_topics", "core_informational_topics", "brand_entities", "people_entities", "social_identity_urls", "business_locations"];
 const SENTINEL_OK: (keyof SiteEntry)[] = ["repository", "framework", "deployment_provider", "google_search_console_property", "ga4_property", "bing_webmaster_property", "cdn_log_source", "indexnow_status", "robots_policy"];
 const PLACEHOLDER = /\b(todo|tbd|example\.com|lorem|xxx|placeholder|fill me)\b/i;
 

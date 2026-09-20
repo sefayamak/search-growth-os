@@ -14,7 +14,7 @@
     "site": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "onboarding_status", "production_domain", "canonical_hostname", "repository", "framework", "deployment_provider", "primary_language", "secondary_languages", "target_markets", "business_category", "foundation_year", "content_cadence_days", "primary_business_objectives", "primary_conversion_events", "google_search_console_property", "ga4_property", "bing_webmaster_property", "cdn_log_source", "indexnow_status", "robots_policy", "sitemap_locations", "known_subdomains", "competitor_set", "core_commercial_topics", "core_informational_topics", "brand_entities", "people_entities", "social_identity_urls", "business_locations", "risk_level", "deployment_approval_policy"],
+      "required": ["id", "onboarding_status", "production_domain", "canonical_hostname", "repository", "framework", "deployment_provider", "primary_language", "secondary_languages", "target_markets", "business_category", "foundation_year", "content_cadence_days", "content_sections", "primary_business_objectives", "primary_conversion_events", "google_search_console_property", "ga4_property", "bing_webmaster_property", "cdn_log_source", "indexnow_status", "robots_policy", "sitemap_locations", "known_subdomains", "competitor_set", "core_commercial_topics", "core_informational_topics", "brand_entities", "people_entities", "social_identity_urls", "business_locations", "risk_level", "deployment_approval_policy"],
       "properties": {
         "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
         "onboarding_status": {
@@ -33,6 +33,10 @@
         "foundation_year": {
           "anyOf": [{ "type": "integer", "minimum": 1900 }, { "$ref": "#/$defs/sentinel" }],
           "description": "Owner-confirmed founding year. Source of truth for entity surfaces: when the live site disagrees, the site is wrong."
+        },
+        "content_sections": {
+          "type": "array", "items": { "type": "string" },
+          "description": "Path segments holding this site's editorial content when they are not generic words. Leaving a brand-specific section undeclared makes the site report as having no content line at all."
         },
         "content_cadence_days": {
           "anyOf": [{ "type": "integer", "minimum": 1, "maximum": 365 }, { "$ref": "#/$defs/sentinel" }],

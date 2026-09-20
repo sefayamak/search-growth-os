@@ -116,6 +116,7 @@ async function main() {
           onboardingStatus: s.onboarding_status,
           sitemaps: (s.sitemap_locations ?? []).filter((u) => typeof u === "string" && u.startsWith("http")),
           cadenceDays: typeof s.content_cadence_days === "number" ? s.content_cadence_days : null,
+          contentSections: Array.isArray(s.content_sections) ? s.content_sections : [],
         })),
         { samplePages: Number(opt("sample", "6")), delayMs: Number(opt("delay", "800")) },
         (s) => process.stderr.write(s + "\n"),

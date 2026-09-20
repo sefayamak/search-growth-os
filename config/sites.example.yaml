@@ -18,6 +18,7 @@ sites:
     business_category: photo, film and production studio
     foundation_year: UNKNOWN                # owner-confirmed only; never inferred from the site's own copy
     content_cadence_days: UNKNOWN   # days between published pieces — an owner decision, never inferred
+    content_sections: []            # path segments holding editorial content, when not a generic word (e.g. [pamlab])
     primary_business_objectives:
       - qualified production briefs (form and hello@ inbox)
       - retainer / monthly content contracts

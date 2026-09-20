@@ -86,14 +86,23 @@ export function daysBetween(fromIso: string, now = new Date()): number {
 
 /** Which editorial section this site uses, by URL evidence. Picks the pattern carrying the
  *  most URLs so a stray `/news/` link cannot outvote a real `/blog/`. */
-export function discoverContentSection(urls: string[]): { pattern: string; urlCount: number } | null {
+export function discoverContentSection(
+  urls: string[],
+  /** Site-declared section names from the registry. A brand is free to call its editorial
+   *  section anything — PAM İstanbul calls its blog `pamlab` — and no global word list can
+   *  contain every such name. Missing one produces a false NEGATIVE: the site is reported
+   *  as having no content line while it publishes regularly, which is the quieter and more
+   *  damaging error, so the registry gets to override the guess. */
+  declared: string[] = [],
+): { pattern: string; urlCount: number } | null {
+  const patterns = [...new Set([...declared.map((d) => d.toLowerCase().replace(/^\/+|\/+$/g, "")), ...CONTENT_PATTERNS])];
   const counts = new Map<string, number>();
   for (const u of urls) {
     let segments: string[];
     try { segments = new URL(u).pathname.toLowerCase().split("/").filter(Boolean); } catch { continue; }
     // The section marker must be a path segment, never a substring: `/kurumsal-blogger/`
     // is not a blog, and `/haberler-hakkinda/` is not the news section.
-    for (const p of CONTENT_PATTERNS) {
+    for (const p of patterns) {
       if (!segments.includes(p)) continue;
       // A bare section index (/blog/) is not an article; only deeper URLs are entries.
       if (segments[segments.length - 1] === p) continue;
@@ -210,7 +219,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Measure one site's publishing cadence. Read-only: sitemap plus a handful of GETs. */
 export async function assessCadence(
-  site: { id: string; domain: string; onboardingStatus: string; sitemaps: string[]; cadenceDays?: number | null },
+  site: { id: string; domain: string; onboardingStatus: string; sitemaps: string[]; cadenceDays?: number | null; contentSections?: string[] },
   partial: Partial<CadenceOptions> = {},
   log: (s: string) => void = () => {},
 ): Promise<CadenceResult> {
@@ -242,15 +251,16 @@ export async function assessCadence(
   }
   base.sitemapUrls = entries.length;
 
-  const section = discoverContentSection(entries.map((e) => e.loc));
+  const section = discoverContentSection(entries.map((e) => e.loc), site.contentSections ?? []);
   if (!section) {
     // "No editorial section" is a claim about the site, but it could equally be a gap in
     // the pattern list. Printing the site's actual top-level structure lets that be told
     // apart at a glance instead of trusted.
     return { ...base, verdict: "NO_CONTENT_SECTION", label: "FACT",
       notes: [...notes,
-        `no editorial section found among ${entries.length} sitemap URLs (looked for: ${CONTENT_PATTERNS.join(", ")})`,
+        `no editorial section found among ${entries.length} sitemap URLs (looked for: ${[...(site.contentSections ?? []), ...CONTENT_PATTERNS].join(", ")})`,
         `the site's own top-level structure: ${topSegments(entries.map((e) => e.loc))}`,
+        "if one of those IS this site's editorial section, declare it as content_sections in the registry rather than leaving it undetected",
       ] };
   }
   base.contentSection = section;
@@ -312,7 +322,8 @@ export async function assessCadence(
 }
 
 export interface PortfolioCadenceSite {
-  id: string; domain: string; onboardingStatus: string; sitemaps: string[]; cadenceDays?: number | null;
+  id: string; domain: string; onboardingStatus: string; sitemaps: string[];
+  cadenceDays?: number | null; contentSections?: string[];
 }
 
 /** Sequential on purpose: one site at a time keeps the request rate obviously polite and
