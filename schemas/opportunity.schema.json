@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "search-growth-os/opportunity",
+  "title": "Prioritized opportunity. Scores are ordinal (1-5), never false precision.",
+  "type": "object",
+  "required": ["id", "site_id", "title", "type", "expected_business_impact", "search_opportunity", "confidence", "effort", "risk", "reversibility", "evidence_quality", "evidence", "label", "requires_human_approval"],
+  "properties": {
+    "id": { "type": "string" },
+    "site_id": { "type": "string" },
+    "title": { "type": "string" },
+    "type": { "enum": ["technical", "content", "architecture", "entity", "media", "performance", "measurement", "aeo", "geo"] },
+    "expected_business_impact": { "type": "integer", "minimum": 1, "maximum": 5, "description": "Commercial relevance first; vanity impressions score low." },
+    "search_opportunity": { "type": "integer", "minimum": 1, "maximum": 5 },
+    "confidence": { "type": "integer", "minimum": 1, "maximum": 5 },
+    "effort": { "type": "integer", "minimum": 1, "maximum": 5 },
+    "risk": { "type": "integer", "minimum": 1, "maximum": 5 },
+    "reversibility": { "enum": ["trivial", "easy", "hard", "irreversible"] },
+    "evidence_quality": { "enum": ["first_party_measured", "crawl_measured", "third_party", "expert_judgement"] },
+    "evidence": { "type": "array", "items": { "type": "string" } },
+    "label": { "enum": ["INFERENCE", "HYPOTHESIS", "RECOMMENDATION"] },
+    "requires_human_approval": { "type": "boolean" },
+    "high_risk_category": { "type": "string", "description": "From policies/high-risk-changes.md when applicable." },
+    "proposed_experiment_id": { "type": "string" }
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "search-growth-os/site-registry",
+  "title": "Search Growth OS site registry",
+  "type": "object",
+  "required": ["version", "sites"],
+  "properties": {
+    "version": { "const": 1 },
+    "sites": { "type": "array", "items": { "$ref": "#/$defs/site" } }
+  },
+  "$defs": {
+    "sentinel": { "enum": ["NOT_CONNECTED", "UNKNOWN"] },
+    "stringOrSentinel": { "anyOf": [{ "type": "string", "minLength": 1 }, { "$ref": "#/$defs/sentinel" }] },
+    "site": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "onboarding_status", "production_domain", "canonical_hostname", "repository", "framework", "deployment_provider", "primary_language", "secondary_languages", "target_markets", "business_category", "primary_business_objectives", "primary_conversion_events", "google_search_console_property", "ga4_property", "bing_webmaster_property", "cdn_log_source", "indexnow_status", "robots_policy", "sitemap_locations", "known_subdomains", "competitor_set", "core_commercial_topics", "core_informational_topics", "brand_entities", "people_entities", "social_identity_urls", "business_locations", "risk_level", "deployment_approval_policy"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "onboarding_status": {
+          "enum": ["pilot_onboarding", "active", "registered_not_onboarded"],
+          "description": "Gates every skill. Only pilot_onboarding and active sites may be crawled or changed. registered_not_onboarded sites are placeholders and must keep competitor_set and topic lists empty."
+        },
+        "production_domain": { "type": "string", "pattern": "^[^/]+$" },
+        "canonical_hostname": { "type": "string" },
+        "repository": { "$ref": "#/$defs/stringOrSentinel" },
+        "framework": { "$ref": "#/$defs/stringOrSentinel" },
+        "deployment_provider": { "$ref": "#/$defs/stringOrSentinel" },
+        "primary_language": { "type": "string", "minLength": 2 },
+        "secondary_languages": { "type": "array", "items": { "type": "string" } },
+        "target_markets": { "type": "array", "items": { "type": "string" } },
+        "business_category": { "type": "string" },
+        "primary_business_objectives": { "type": "array", "items": { "type": "string" } },
+        "primary_conversion_events": { "type": "array", "items": { "type": "string" }, "description": "Must exist in GA4 before being used as a KPI." },
+        "google_search_console_property": { "$ref": "#/$defs/stringOrSentinel" },
+        "ga4_property": { "$ref": "#/$defs/stringOrSentinel" },
+        "bing_webmaster_property": { "$ref": "#/$defs/stringOrSentinel" },
+        "cdn_log_source": { "$ref": "#/$defs/stringOrSentinel" },
+        "indexnow_status": { "enum": ["enabled", "disabled", "NOT_CONNECTED", "UNKNOWN"] },
+        "robots_policy": { "$ref": "#/$defs/stringOrSentinel" },
+        "sitemap_locations": { "type": "array", "items": { "type": "string" } },
+        "known_subdomains": { "type": "array", "items": { "type": "string" } },
+        "competitor_set": { "type": "array", "items": { "type": "string" }, "description": "Owner-confirmed only." },
+        "core_commercial_topics": { "type": "array", "items": { "type": "string" } },
+        "core_informational_topics": { "type": "array", "items": { "type": "string" } },
+        "brand_entities": { "type": "array", "items": { "type": "string" } },
+        "people_entities": { "type": "array", "items": { "type": "string" }, "description": "Publicly listed, with consent. Never invent." },
+        "social_identity_urls": { "type": "array", "items": { "type": "string", "format": "uri" } },
+        "business_locations": { "type": "array", "items": { "type": "string" } },
+        "risk_level": { "enum": ["low", "medium", "high"] },
+        "deployment_approval_policy": { "enum": ["pr_only", "pr_plus_human_approval", "manual_only"] }
+      }
+    }
+  }
+}

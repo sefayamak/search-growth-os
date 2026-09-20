@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>http://127.0.0.1/</loc><lastmod>2026-09-01</lastmod></url>
+  <url><loc>http://127.0.0.1/services/</loc></url>
+  <url><loc>http://127.0.0.1/noindexed</loc></url>
+  <url><loc>http://127.0.0.1/old-a</loc></url>
+  <url><loc>http://127.0.0.1/orphan</loc></url>
+</urlset>

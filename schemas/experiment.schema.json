@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "search-growth-os/experiment",
+  "title": "Search experiment / change record. Every significant optimization becomes one of these.",
+  "type": "object",
+  "required": ["id", "site_id", "hypothesis", "change", "target_metric", "guardrail_metrics", "baseline", "start_date", "affected_pages", "measurement_window_days", "rollback", "status", "evidence_labels"],
+  "properties": {
+    "id": { "type": "string" },
+    "site_id": { "type": "string" },
+    "pr_url": { "type": "string" },
+    "hypothesis": { "type": "string", "description": "Labelled HYPOTHESIS. What we expect and why." },
+    "change": { "type": "string" },
+    "target_metric": { "type": "string", "examples": ["non-brand clicks to /hizmetler", "contact_form_submit from organic"] },
+    "guardrail_metrics": { "type": "array", "items": { "type": "string" }, "examples": [["conversion rate", "indexed page count", "LCP p75"]] },
+    "baseline": { "type": "object", "description": "Measured values with date range and source; NOT_CONNECTED when a source is missing." },
+    "start_date": { "type": "string", "format": "date" },
+    "affected_pages": { "type": "array", "items": { "type": "string" } },
+    "control_pages": { "type": "array", "items": { "type": "string" } },
+    "measurement_window_days": { "type": "integer", "minimum": 14 },
+    "confounders": { "type": "array", "items": { "type": "string" }, "description": "Known deploys, seasonality, confirmed search updates in the window." },
+    "result": { "type": "object" },
+    "confidence": { "enum": ["low", "medium", "high"] },
+    "decision": { "enum": ["keep", "revert", "iterate", "inconclusive"] },
+    "rollback": { "type": "object", "required": ["instructions", "status"], "properties": { "instructions": { "type": "string" }, "status": { "enum": ["available", "executed", "not_needed"] } } },
+    "status": { "enum": ["proposed", "approved", "running", "measured", "closed"] },
+    "evidence_labels": { "type": "array", "items": { "enum": ["FACT", "INFERENCE", "HYPOTHESIS", "RECOMMENDATION", "IMPLEMENTED_CHANGE", "VERIFIED_RESULT"] } }
+  }
+}

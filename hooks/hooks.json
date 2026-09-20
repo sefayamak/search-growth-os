@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node --experimental-strip-types \"${CLAUDE_PLUGIN_ROOT}/hooks/compliance-gate.ts\"",
+            "timeout": 20,
+            "statusMessage": "Search Growth OS compliance gate"
+          }
+        ]
+      }
+    ]
+  }
+}

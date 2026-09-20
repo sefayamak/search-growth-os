@@ -1,0 +1,7 @@
+.env
+.env.*
+!.env.example
+reports/runs/
+node_modules/
+*.log
+evals/results/

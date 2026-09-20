@@ -1,0 +1,103 @@
+// Search Growth OS CLI — read-only.
+//   crawl <url> [--max-pages N] [--max-depth N] [--delay ms] [--out dir]
+//   audit <url> [...same]           crawl + checks + dry-run report (json + md)
+//   compliance <file> [--kind k]    run the compliance gate on a file
+//   compliance --stdin --kind k     read content from stdin
+//   registry <path>                 validate a site registry (yaml subset / json)
+//   integrations                    print adapter connection states
+import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { crawl } from "./crawler.ts";
+import { runAudit } from "./audit.ts";
+import { buildReport, reportToMarkdown } from "./report.ts";
+import { checkCompliance, kindFromPath } from "./compliance.ts";
+import { loadRegistry, onboardedSites } from "./registry.ts";
+import { allStatuses } from "./adapters/index.ts";
+
+const args = process.argv.slice(2);
+const cmd = args[0];
+function opt(name: string, def: string): string;
+function opt(name: string): string | undefined;
+function opt(name: string, def?: string) { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] : def; }
+const flag = (name: string) => args.includes(`--${name}`);
+
+function slug(u: string) { return u.replace(/^https?:\/\//, "").replace(/[^a-z0-9.-]+/gi, "_"); }
+
+async function main() {
+  switch (cmd) {
+    case "crawl":
+    case "audit": {
+      // Two ways in. `--site <id>` resolves the target through the registry and is the
+      // only path the remote runner uses, because the registry is where the
+      // onboarding gate lives: a site that is merely registered must never be crawled.
+      const siteId = opt("site");
+      let url = args[1] && !args[1].startsWith("--") ? args[1] : undefined;
+      if (siteId) {
+        const reg = loadRegistry(opt("registry", join("config", "sites.yaml")));
+        if (!reg.ok) throw new Error(`registry invalid:\n${reg.errors.join("\n")}`);
+        const site = reg.registry!.sites.find((s) => s.id === siteId);
+        if (!site) throw new Error(`site "${siteId}" is not in the registry`);
+        if (!onboardedSites(reg.registry!).some((s) => s.id === siteId))
+          throw new Error(`site "${siteId}" is ${site.onboarding_status}: it must be onboarded before it can be crawled (policies/portfolio-isolation.md)`);
+        const host = site.canonical_hostname && !["UNKNOWN", "NOT_CONNECTED"].includes(site.canonical_hostname) ? site.canonical_hostname : site.production_domain;
+        url = `https://${host}/`;
+        console.error(`site ${siteId} (${site.onboarding_status}) → ${url}`);
+      }
+      if (!url) throw new Error("usage: audit <url> | audit --site <registry id>");
+      const full = flag("full");
+      // In full mode the sitemap is the universe, so the cap must not silently truncate it.
+      // The explicit --max-pages still acts as a ceiling, raised to cover the sitemap.
+      const cap = Number(opt("max-pages", full ? "5000" : "50"));
+      const result = await crawl({ startUrl: url, fromSitemap: full, maxPages: full ? Math.max(cap, 5000) : cap, maxDepth: Number(opt("max-depth", full ? "2" : "3")), delayMs: Number(opt("delay", "500")) }, (s) => process.stderr.write(s + "\n"));
+      // Unreachable target must fail loudly. A report built from zero fetched pages
+      // would otherwise look like a clean site.
+      const first = result.records[0];
+      if (!first || first.page.status === 0 || first.page.status >= 400) {
+        const why = first ? `${first.page.status || "no response"}${first.page.error ? ` (${first.page.error})` : ""}` : "no pages fetched";
+        console.error(`CRAWL FAILED: ${url} unreachable — ${why}`);
+        const robotsOk = result.robots.fetched && result.robots.status > 0 && result.robots.status < 400;
+        console.error(robotsOk
+          ? `robots.txt returned ${result.robots.status}, so the host is reachable and this page itself is failing.`
+          : `robots.txt also failed (${result.robots.status || "no response"}): the whole host is unreachable from this runner — DNS, TLS, network egress policy, or a WAF refusing the crawler.`);
+        process.exitCode = 3;
+        return;
+      }
+      const outDir = opt("out", join("reports", "runs"));
+      mkdirSync(outDir, { recursive: true });
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const base = join(outDir, `${slug(result.site)}_${stamp}`);
+      writeFileSync(`${base}.crawl.json`, JSON.stringify(result, null, 2));
+      if (cmd === "crawl") { console.log(`${base}.crawl.json`); return; }
+      const findings = runAudit(result);
+      const report = buildReport(result, findings, allStatuses().map(({ name, state, note }) => ({ name, state, note })));
+      writeFileSync(`${base}.audit.json`, JSON.stringify(report, null, 2));
+      writeFileSync(`${base}.audit.md`, reportToMarkdown(report));
+      console.log(reportToMarkdown(report));
+      console.error(`\nwritten: ${base}.audit.json / .audit.md / .crawl.json`);
+      return;
+    }
+    case "compliance": {
+      const path = flag("stdin") ? undefined : args[1];
+      const content = path ? readFileSync(path, "utf8") : readFileSync(0, "utf8");
+      const kind = (opt("kind") ?? (path ? kindFromPath(path) : "text")) as Parameters<typeof checkCompliance>[1]["kind"];
+      const res = checkCompliance(content, { kind, path });
+      console.log(JSON.stringify(res, null, 2));
+      process.exitCode = res.verdict === "REJECT" ? 2 : res.verdict === "FLAG" ? 1 : 0;
+      return;
+    }
+    case "registry": {
+      const res = loadRegistry(args[1] ?? join("config", "sites.example.yaml"));
+      if (res.ok) console.log(`OK: ${res.registry!.sites.length} site(s): ${res.registry!.sites.map((s) => s.id).join(", ")}`);
+      else { console.error(res.errors.join("\n")); process.exitCode = 1; }
+      return;
+    }
+    case "integrations": {
+      for (const s of allStatuses()) console.log(`${s.state.padEnd(14)} ${s.name} — ${s.note}`);
+      return;
+    }
+    default:
+      console.error("commands: crawl | audit | compliance | registry | integrations");
+      process.exitCode = 1;
+  }
+}
+main().catch((e) => { console.error(e); process.exitCode = 1; });

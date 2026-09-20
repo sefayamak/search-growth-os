@@ -1,0 +1,8 @@
+{
+  "name": "search-growth-os",
+  "displayName": "Search Growth OS",
+  "version": "0.1.0",
+  "description": "Multi-site SEO / AEO / GEO search-growth operating system: read-only crawl and audit engine, expert agents, compliance gate, measurement schemas, evals. Policy-first: official search-engine documentation outranks folklore.",
+  "author": { "name": "PAM İstanbul" },
+  "license": "UNLICENSED"
+}

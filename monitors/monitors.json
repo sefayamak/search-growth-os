@@ -1,0 +1,8 @@
+[
+  {
+    "name": "search-os-alerts",
+    "command": "touch ./reports/alerts.log && tail -n 0 -F ./reports/alerts.log",
+    "description": "Material findings appended by scheduled audits (critical/high only). Empty by default; nothing is written until a scheduled audit exists and runs.",
+    "when": "interactive"
+  }
+]

@@ -1,0 +1,246 @@
+# Search Growth OS — site registry (LIVE).
+# Schema: schemas/site-registry.schema.json · validate: npm run cli -- registry config/sites.yaml
+#
+# Rules this file obeys:
+#   * Unknown or unconnected values are the literal NOT_CONNECTED / UNKNOWN. Never a guess.
+#   * onboarding_status gates every skill. Only pilot_onboarding and active sites may be
+#     crawled or changed. registered_not_onboarded sites are placeholders only.
+#   * Nothing is inherited between sites. Competitors, topics, objectives and strategy are
+#     per-site work products even though one person owns all of them. See
+#     policies/portfolio-isolation.md.
+#
+# Verified 2026-09-20 via the Vercel API (read-only): every domain below resolves to a
+# Vercel project in team sefayamaks-projects, and each is marked `verified: true` there.
+version: 1
+sites:
+  # ─────────────────────────────────────────────────────────── PILOT
+  - id: pamistanbul
+    onboarding_status: pilot_onboarding
+    production_domain: pamistanbul.com
+    canonical_hostname: pamistanbul.com    # FACT (repo): 732 canonicals on apex; .well-known/ai.txt declares Canonical-Host apex. NOTE: legacy .htaccess forces www — conflict, see reports
+    repository: sefayamak/pamistanbul-site # FACT: production deployment dpl_4CyY9N8A… built from this repo, branch main, commit 7741193
+    framework: static HTML (no build step; 807 .html files; vercel.json cleanUrls + 803 redirects)
+    deployment_provider: vercel            # project "pamistanbul" (prj_S9dGhXvSg9xbSA0o7rPg0wfbUv85)
+    primary_language: tr
+    secondary_languages: [en]
+    target_markets: [TR, global]
+    business_category: photo, film and AI production studio
+    foundation_year: 2018                  # OWNER-CONFIRMED 2026-09-20. Source of truth for every entity surface.
+                                           # The live site currently asserts 2017 in 288 files — see sites/pamistanbul/entity-facts.md
+    primary_business_objectives:
+      - qualified production briefs from organic search
+      - international (EN) enquiry flow
+    primary_conversion_events:
+      - lead_form_submit                   # referenced in repo commit history; must be confirmed in GA4 before use as a KPI
+    google_search_console_property: "sc-domain:pamistanbul.com"  # owner-confirmed 2026-09-20: domain property (covers apex + www + any subdomain)
+    ga4_property: UNKNOWN                  # measurement ID G-EYY9Z20XJ4 is in the repo (1604 refs); the numeric property behind it is NOT yet confirmed. Candidate: 426911036 ("Sefa Yamak - GA4") — must be verified against the data stream before use
+    bing_webmaster_property: NOT_CONNECTED   # no BingSiteAuth.xml and no msvalidate.01 meta in the repo
+    cdn_log_source: NOT_CONNECTED
+    indexnow_status: enabled               # FACT: 3 key files at root; one (af3b9d12…) holds the wrong key, so submissions signed with it fail verification
+    robots_policy: "search+AI-answer allowed; training crawlers (GPTBot, ClaudeBot, anthropic-ai, CCBot, Bytespider) disallowed; Google-Extended deliberately allowed"
+    sitemap_locations: ["https://pamistanbul.com/sitemap.xml"]
+    known_subdomains: []
+    competitor_set: []                     # owner-confirmed only
+    core_commercial_topics: []             # to be derived from Search Console once connected, not guessed
+    core_informational_topics: []
+    brand_entities: [PAM İstanbul]
+    people_entities: []
+    social_identity_urls: []
+    business_locations: [İstanbul]
+    risk_level: high
+    deployment_approval_policy: pr_plus_human_approval
+
+  # ──────────────────────────────── REGISTERED — NOT ONBOARDED
+  # Placeholders. Not crawled, not analysed, not optimized. Each one gets its own
+  # objectives, market, languages, competitors and strategy at its own onboarding.
+  - id: pamaistudio
+    onboarding_status: registered_not_onboarded
+    production_domain: pamaistudio.com
+    canonical_hostname: UNKNOWN            # apex and www both attached, neither redirects
+    repository: UNKNOWN
+    framework: UNKNOWN
+    deployment_provider: vercel            # project "pamaistudio"
+    primary_language: UNKNOWN
+    secondary_languages: []
+    target_markets: []
+    business_category: UNKNOWN
+    foundation_year: UNKNOWN
+    primary_business_objectives: []
+    primary_conversion_events: []
+    google_search_console_property: NOT_CONNECTED
+    ga4_property: "537055021"       # FACT: GA4 property id, account Sefa Yamak (76122862). Credentials not yet issued, so no data is readable yet.
+    bing_webmaster_property: NOT_CONNECTED
+    cdn_log_source: NOT_CONNECTED
+    indexnow_status: UNKNOWN
+    robots_policy: UNKNOWN
+    sitemap_locations: []
+    known_subdomains: []
+    competitor_set: []
+    core_commercial_topics: []
+    core_informational_topics: []
+    brand_entities: []
+    people_entities: []
+    social_identity_urls: []
+    business_locations: []
+    risk_level: high
+    deployment_approval_policy: pr_plus_human_approval
+
+  - id: spryhand
+    onboarding_status: registered_not_onboarded
+    production_domain: spryhand.com
+    canonical_hostname: spryhand.com       # FACT: www → apex, 308
+    repository: UNKNOWN
+    framework: UNKNOWN
+    deployment_provider: vercel            # project "spryhand"
+    primary_language: UNKNOWN
+    secondary_languages: []
+    target_markets: []
+    business_category: UNKNOWN
+    foundation_year: UNKNOWN
+    primary_business_objectives: []
+    primary_conversion_events: []
+    google_search_console_property: NOT_CONNECTED
+    ga4_property: "551083665"       # FACT: GA4 property id, account Spry Hand (405598086). Credentials not yet issued, so no data is readable yet.
+    bing_webmaster_property: NOT_CONNECTED
+    cdn_log_source: NOT_CONNECTED
+    indexnow_status: UNKNOWN
+    robots_policy: UNKNOWN
+    sitemap_locations: []
+    known_subdomains: []
+    competitor_set: []
+    core_commercial_topics: []
+    core_informational_topics: []
+    brand_entities: []
+    people_entities: []
+    social_identity_urls: []
+    business_locations: []
+    risk_level: high
+    deployment_approval_policy: pr_plus_human_approval
+
+  - id: decideplan
+    onboarding_status: registered_not_onboarded
+    production_domain: decideplan.com
+    canonical_hostname: decideplan.com     # FACT: www → apex, 308
+    repository: UNKNOWN
+    framework: UNKNOWN
+    deployment_provider: vercel            # project "decideplan"
+    primary_language: UNKNOWN
+    secondary_languages: []
+    target_markets: []
+    business_category: UNKNOWN
+    foundation_year: UNKNOWN
+    primary_business_objectives: []
+    primary_conversion_events: []
+    google_search_console_property: NOT_CONNECTED
+    ga4_property: "550748133"       # FACT: GA4 property id, account Sefa Yamak (76122862). Credentials not yet issued, so no data is readable yet.
+    bing_webmaster_property: NOT_CONNECTED
+    cdn_log_source: NOT_CONNECTED
+    indexnow_status: UNKNOWN
+    robots_policy: UNKNOWN
+    sitemap_locations: []
+    known_subdomains: []
+    competitor_set: []
+    core_commercial_topics: []
+    core_informational_topics: []
+    brand_entities: []
+    people_entities: []
+    social_identity_urls: []
+    business_locations: []
+    risk_level: high
+    deployment_approval_policy: pr_plus_human_approval
+
+  - id: rightlisted
+    onboarding_status: registered_not_onboarded
+    production_domain: rightlisted.com
+    canonical_hostname: UNKNOWN            # apex and www both attached, neither redirects
+    repository: UNKNOWN
+    framework: UNKNOWN
+    deployment_provider: vercel            # project "rightlisted"
+    primary_language: UNKNOWN
+    secondary_languages: []
+    target_markets: []
+    business_category: UNKNOWN
+    foundation_year: UNKNOWN
+    primary_business_objectives: []
+    primary_conversion_events: []
+    google_search_console_property: NOT_CONNECTED
+    ga4_property: "550073067"       # FACT: GA4 property id, account Sefa Yamak (76122862). Credentials not yet issued, so no data is readable yet.
+    bing_webmaster_property: NOT_CONNECTED
+    cdn_log_source: NOT_CONNECTED
+    indexnow_status: UNKNOWN
+    robots_policy: UNKNOWN
+    sitemap_locations: []
+    known_subdomains: []
+    competitor_set: []
+    core_commercial_topics: []
+    core_informational_topics: []
+    brand_entities: []
+    people_entities: []
+    social_identity_urls: []
+    business_locations: []
+    risk_level: high
+    deployment_approval_policy: pr_plus_human_approval
+
+  - id: untitledportraits
+    onboarding_status: registered_not_onboarded
+    production_domain: untitledportraits.com
+    canonical_hostname: UNKNOWN            # apex and www both attached, neither redirects
+    repository: UNKNOWN
+    framework: UNKNOWN
+    deployment_provider: vercel            # project "untitledportraits"
+    primary_language: UNKNOWN
+    secondary_languages: []
+    target_markets: []
+    business_category: UNKNOWN
+    foundation_year: UNKNOWN
+    primary_business_objectives: []
+    primary_conversion_events: []
+    google_search_console_property: NOT_CONNECTED
+    ga4_property: "543604651"       # FACT: GA4 property id, account Sefa Yamak (76122862). Credentials not yet issued, so no data is readable yet.
+    bing_webmaster_property: NOT_CONNECTED
+    cdn_log_source: NOT_CONNECTED
+    indexnow_status: UNKNOWN
+    robots_policy: UNKNOWN
+    sitemap_locations: []
+    known_subdomains: []
+    competitor_set: []
+    core_commercial_topics: []
+    core_informational_topics: []
+    brand_entities: []
+    people_entities: []
+    social_identity_urls: []
+    business_locations: []
+    risk_level: high
+    deployment_approval_policy: pr_plus_human_approval
+
+  - id: myhappymade
+    onboarding_status: registered_not_onboarded
+    production_domain: myhappymade.com
+    canonical_hostname: myhappymade.com    # FACT: www → apex, 308
+    repository: UNKNOWN
+    framework: UNKNOWN
+    deployment_provider: vercel            # project "myhappymade-web" serves the domain; a separate "myhappymade" project holds only a vercel.app host
+    primary_language: UNKNOWN
+    secondary_languages: []
+    target_markets: []
+    business_category: UNKNOWN
+    foundation_year: UNKNOWN
+    primary_business_objectives: []
+    primary_conversion_events: []
+    google_search_console_property: NOT_CONNECTED
+    ga4_property: "540424289"       # FACT: GA4 property id, account Sefa Yamak (76122862). Credentials not yet issued, so no data is readable yet.
+    bing_webmaster_property: NOT_CONNECTED
+    cdn_log_source: NOT_CONNECTED
+    indexnow_status: UNKNOWN
+    robots_policy: UNKNOWN
+    sitemap_locations: []
+    known_subdomains: []
+    competitor_set: []
+    core_commercial_topics: []
+    core_informational_topics: []
+    brand_entities: []
+    people_entities: []
+    social_identity_urls: []
+    business_locations: []
+    risk_level: high
+    deployment_approval_policy: pr_plus_human_approval

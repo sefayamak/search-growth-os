@@ -1,0 +1,48 @@
+# Search Growth OS — site registry (example).
+# Copy to config/sites.yaml (git-ignored) and fill from real sources.
+# Unknown or unconnected values MUST be the literal NOT_CONNECTED or UNKNOWN.
+# Never fabricate a property id, a competitor, or a person.
+# Schema: schemas/site-registry.schema.json
+version: 1
+sites:
+  - id: pamistanbul
+    onboarding_status: pilot_onboarding     # pilot_onboarding | active | registered_not_onboarded
+    production_domain: pamistanbul.com
+    canonical_hostname: pamistanbul.com
+    repository: UNKNOWN                     # website repo is not the CRM repo; confirm with owner
+    framework: UNKNOWN
+    deployment_provider: vercel             # Vercel project "pamistanbul" exists in the team (FACT, 2026-09-20)
+    primary_language: tr
+    secondary_languages: [en]
+    target_markets: [TR]
+    business_category: photo, film and production studio
+    foundation_year: UNKNOWN                # owner-confirmed only; never inferred from the site's own copy
+    primary_business_objectives:
+      - qualified production briefs (form and hello@ inbox)
+      - retainer / monthly content contracts
+    primary_conversion_events:
+      - contact_form_submit                 # must be verified in GA4 before it is used as a KPI
+      - hello_mail_reply
+    google_search_console_property: NOT_CONNECTED
+    ga4_property: NOT_CONNECTED
+    bing_webmaster_property: NOT_CONNECTED
+    cdn_log_source: NOT_CONNECTED
+    indexnow_status: UNKNOWN
+    robots_policy: UNKNOWN                  # read from live robots.txt at first audit; not reachable from the build sandbox
+    sitemap_locations: []
+    known_subdomains: []
+    competitor_set: []                      # fill only with domains the owner confirms as competitors
+    core_commercial_topics:
+      - ürün fotoğrafı çekimi
+      - reklam filmi prodüksiyonu
+      - e-ticaret fotoğraf çekimi
+      - AI prodüksiyon
+    core_informational_topics:
+      - prodüksiyon süreci ve brief
+      - call sheet nedir
+    brand_entities: [PAM İstanbul]
+    people_entities: []                     # only publicly listed team members, with consent
+    social_identity_urls: []
+    business_locations: [İstanbul]
+    risk_level: high                        # live commercial site; all changes PR + human approval
+    deployment_approval_policy: pr_plus_human_approval

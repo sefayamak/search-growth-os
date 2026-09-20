@@ -1,0 +1,24 @@
+{
+  "name": "search-growth-os",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Search Growth OS — read-only search audit engine and Claude Code plugin runtime. Zero runtime dependencies by design (cost discipline, supply-chain surface).",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "cli": "node --experimental-strip-types src/cli.ts",
+    "fixture:serve": "node --experimental-strip-types tests/fixture-server.ts",
+    "plugin:validate": "claude plugin validate .",
+    "plugin:eval": "claude plugin eval .",
+    "baseline": "node --experimental-strip-types src/cli.ts audit --site pamistanbul --full",
+    "summarize": "node --experimental-strip-types bin/summarize.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sefayamak/search-growth-os"
+  }
+}

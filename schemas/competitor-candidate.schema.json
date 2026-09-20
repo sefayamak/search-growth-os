@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "search-growth-os/competitor-candidate",
+  "title": "A discovered competitor candidate. Every discovered domain enters as CANDIDATE_COMPETITOR and stays there until a human validates it.",
+  "type": "object",
+  "required": ["site_id", "domain", "status", "category", "evidence", "discovered_at", "discovery_method"],
+  "properties": {
+    "site_id": { "type": "string", "description": "Which registered site this candidate belongs to. Candidates are never shared between sites." },
+    "domain": { "type": "string" },
+    "status": {
+      "enum": ["CANDIDATE_COMPETITOR", "VALIDATED", "REJECTED"],
+      "description": "Discovery can only produce CANDIDATE_COMPETITOR. Only a human moves it to VALIDATED or REJECTED."
+    },
+    "category": {
+      "enum": [
+        "DIRECT_BUSINESS_COMPETITOR",
+        "SEARCH_COMPETITOR",
+        "CONTENT_COMPETITOR",
+        "AI_CITATION_COMPETITOR",
+        "DIRECTORY",
+        "MARKETPLACE",
+        "MEDIA",
+        "NON_COMPETITOR"
+      ],
+      "description": "Kept strictly separate. A directory that outranks us is not a business competitor, and conflating them corrupts every gap analysis built on top."
+    },
+    "category_rationale": { "type": "string", "description": "Why this category and not another." },
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "description": "At least one concrete observation. A domain never enters on assertion alone.",
+      "items": {
+        "type": "object",
+        "required": ["kind", "detail", "observed_at", "source"],
+        "properties": {
+          "kind": { "enum": ["query_overlap", "serp_overlap", "ai_citation", "ai_mention", "topic_overlap", "site_read", "owner_statement"] },
+          "detail": { "type": "string" },
+          "observed_at": { "type": "string", "format": "date-time" },
+          "source": { "type": "string", "description": "Search Console, a licensed provider (named), an AI platform, or a page URL actually read. Never prohibited SERP scraping." },
+          "queries": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "overlap_strength": {
+      "type": "object",
+      "description": "Deliberately coarse. One shared keyword is not competition.",
+      "properties": {
+        "shared_query_count": { "type": "integer", "minimum": 0 },
+        "shared_commercial_query_count": { "type": "integer", "minimum": 0 },
+        "shared_topics": { "type": "array", "items": { "type": "string" } },
+        "ai_prompts_cited_together": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "offers_same_service": { "enum": ["yes", "no", "partial", "UNKNOWN"], "description": "Read from their own site. UNKNOWN until a page was actually read." },
+    "serves_same_market": { "enum": ["yes", "no", "partial", "UNKNOWN"] },
+    "discovered_at": { "type": "string", "format": "date-time" },
+    "discovery_method": { "type": "string" },
+    "validated_by": { "type": "string", "description": "Person who validated or rejected. Absent while status is CANDIDATE_COMPETITOR." },
+    "validated_at": { "type": "string", "format": "date-time" },
+    "notes": { "type": "string" }
+  }
+}

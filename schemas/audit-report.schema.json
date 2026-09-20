@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "search-growth-os/audit-report",
+  "title": "Dry-run audit report (output of `cli audit`)",
+  "type": "object",
+  "required": ["schemaVersion", "generatedAt", "site", "mode", "crawl", "crawlerAccess", "integrations", "summary", "findings", "unknowns", "noProductionChange"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "site": { "type": "string", "format": "uri" },
+    "mode": { "const": "dry-run" },
+    "noProductionChange": { "const": true },
+    "crawl": {
+      "type": "object",
+      "required": ["pagesFetched", "pagesOk", "maxPages", "maxDepth", "sitemapEntries", "skippedByRobots", "durationMs", "userAgent"],
+      "properties": {
+        "pagesFetched": { "type": "integer" }, "pagesOk": { "type": "integer" }, "maxPages": { "type": "integer" }, "maxDepth": { "type": "integer" },
+        "sitemapEntries": { "type": "integer" }, "skippedByRobots": { "type": "integer" }, "durationMs": { "type": "integer" }, "userAgent": { "type": "string" }
+      }
+    },
+    "crawlerAccess": { "type": "array", "items": { "type": "object", "required": ["token", "purpose", "rootAllowed", "note"], "properties": { "token": { "type": "string" }, "purpose": { "type": "string" }, "rootAllowed": { "anyOf": [{ "type": "boolean" }, { "const": "UNKNOWN" }] }, "note": { "type": "string" } } } },
+    "integrations": { "type": "array", "items": { "type": "object", "required": ["name", "state", "note"], "properties": { "name": { "type": "string" }, "state": { "enum": ["CONNECTED", "NOT_CONNECTED", "UNKNOWN", "ERROR"] }, "note": { "type": "string" } } } },
+    "summary": { "type": "object", "properties": { "critical": { "type": "integer" }, "high": { "type": "integer" }, "medium": { "type": "integer" }, "low": { "type": "integer" }, "info": { "type": "integer" } } },
+    "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } },
+    "unknowns": { "type": "array", "items": { "type": "string" } }
+  },
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "required": ["id", "severity", "label", "message", "evidence", "businessImpact"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9_]+\\.[a-z0-9_]+$" },
+        "severity": { "enum": ["critical", "high", "medium", "low", "info"] },
+        "label": { "enum": ["FACT", "INFERENCE", "HYPOTHESIS", "RECOMMENDATION", "IMPLEMENTED_CHANGE", "VERIFIED_RESULT"] },
+        "url": { "type": "string" },
+        "message": { "type": "string" },
+        "evidence": { "type": "object" },
+        "businessImpact": { "type": "string" },
+        "fixHint": { "type": "string" },
+        "policyRef": { "type": "string" }
+      }
+    }
+  }
+}
