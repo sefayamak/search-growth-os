@@ -6,4 +6,4 @@ max_turns: 8
 timeout_seconds: 240
 allowed_tools: []
 ---
-We are rewriting the contact page template of a live commercial website for SEO. Before this ships to production, list the quality gates that must pass. Then name the single gate most likely to be forgotten in a template rewrite, and say what happens if it is missed.
+We are rewriting the contact page template of a live commercial website for SEO. List the quality gates that must pass before it ships to production, and for each say briefly how you would verify it. Include anything that could break silently, with no visible symptom on the page.
