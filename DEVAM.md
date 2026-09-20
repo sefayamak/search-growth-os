@@ -78,7 +78,7 @@ node --experimental-strip-types src/cli.ts portfolio     # içerik ritmi, 7 site
 node --experimental-strip-types src/cli.ts llmstxt       # llms.txt envanteri
 node --experimental-strip-types src/cli.ts audit --site pamistanbul --full
 node --experimental-strip-types src/cli.ts registry config/sites.yaml
-npm test                                                  # 66 test
+npm test                                                  # 65 test
 ```
 
 Bağımlılık yok, sadece Node 24.
@@ -174,6 +174,12 @@ Araç dört kez yanlış çalıştı. Dördü de teste bağlandı (`tests/llmstx
 | `2017'de kuruldu` kalıbı desende yoktu | pamaistudio'nun 8 hatası "temiz" göründü |
 | Türkçe/İngilizce kelime sırası tek yönlü tarandı | İki dilli sitenin yarısı atlandı |
 | `llms-full.txt`'te başka şirketlerin kuruluş yılı PAM'ınki sanıldı | 5 yanlış alarm |
+
+Beşincisi bu devir notunu yazarken çıktı: `pamaistudio` kaydına
+`foundation_year: 2018` eklemek, "hiçbir site pilotun yılını miras almasın"
+testini kırdı. Test haklı bir endişeyi koruyordu; kural gevşetilmedi, pamaistudio
+adıyla ve gerekçesiyle istisna olarak yazıldı. Onaylanmış bir gerçek ile kolaya
+kaçmış bir kopya arasındaki fark, testin okunabilir olmasıyla korunuyor.
 
 Ayrıca:
 

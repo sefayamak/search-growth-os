@@ -55,7 +55,7 @@ node --experimental-strip-types src/cli.ts llmstxt       # llms.txt envanteri
 node --experimental-strip-types src/cli.ts audit --site pamistanbul --full
 node --experimental-strip-types src/cli.ts registry config/sites.yaml
 node --experimental-strip-types src/cli.ts compliance <dosya>
-npm test        # 66 doğrulama
+npm test        # 65 doğrulama
 npm run typecheck
 ```
 

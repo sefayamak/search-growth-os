@@ -91,7 +91,18 @@ test("foundation year is owner-confirmed truth, and never a guess", () => {
   assert.equal(pilot.foundation_year, 2018);
   assert.equal(pilot.google_search_console_property, "sc-domain:pamistanbul.com");
   // Sites nobody has confirmed stay UNKNOWN rather than inheriting the pilot's year.
-  for (const s of r.registry!.sites.filter((s) => s.id !== "pamistanbul")) assert.equal(s.foundation_year, "UNKNOWN", s.id);
+  //
+  // pamaistudio is the one named exception, and it is an exception by confirmation rather
+  // than by convenience: PAM AI Studio is PAM İstanbul's own AI unit, its pages state the
+  // parent's founding year as a fact about themselves, and the owner confirmed 2018 for it
+  // on 2026-09-20. Without that year recorded the contradiction check has nothing to
+  // compare against — which is precisely why that site served the wrong year undetected
+  // through two scans. Any site added to this map must earn it the same way: a written
+  // owner confirmation, never a copy of the pilot's value because it was convenient.
+  const CONFIRMED_YEARS: Record<string, number> = { pamistanbul: 2018, pamaistudio: 2018 };
+  for (const s of r.registry!.sites) {
+    assert.equal(s.foundation_year, CONFIRMED_YEARS[s.id] ?? "UNKNOWN", s.id);
+  }
   // Implausible or fabricated years are rejected.
   for (const bad of [1700, 3000, "2018" as unknown as number]) {
     assert.equal(validateRegistry({ version: 1, sites: [{ ...pilot, foundation_year: bad }] }).ok, false, String(bad));
