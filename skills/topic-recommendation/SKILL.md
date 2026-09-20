@@ -62,7 +62,10 @@ violation (`policies/compliance.md`), not a rounding issue.
 - `FAQPage` rich results are limited to well-known authoritative government and health
   sites (Google, Aug 2023). Mass FAQ pages for a production studio will not earn rich
   results; propose FAQ blocks for answer extraction, never as a rich-result play.
-- Google ignores `llms.txt` for ranking. Do not propose it as an SEO action.
+- Google ignores `llms.txt` for ranking, and says so in its own documentation. Never
+  propose it as an SEO action, and never answer "how many questions should llms.txt hold"
+  with a number presented as a spec limit: the specification has no question section at
+  all. See `policies/references/llms-txt.md`.
 - Citation by an assistant follows from a clear, verifiable, well-structured answer on a
   page the assistant may crawl. Check the site's own robots policy before promising reach
   to a crawler it blocks (`ai-crawler-access-audit`).

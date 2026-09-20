@@ -14,41 +14,36 @@ This is the reference point the weekly Monday check compares against.
 | spryhand | registered | /guides/ (50) | UNKNOWN | — | 14d (default) | **UNKNOWN** | none |
 | rightlisted | registered | — | UNKNOWN | — | 14d (default) | **UNKNOWN** | none |
 | untitledportraits | registered | — | UNKNOWN | — | 14d (default) | **UNKNOWN** | none |
-| pamistanbul | **pilot** | — | UNKNOWN | — | 10d (registry) | **NO_CONTENT_SECTION** | none |
+| pamistanbul | **pilot** | /pamlab/ (175) | 2026-09-03 | 17 | 10d (registry) | **DUE** | `datePublished` · CONFIRMED |
 | pamaistudio | registered | — | UNKNOWN | — | 14d (default) | **NO_CONTENT_SECTION** | none |
 
-## The pilot result, and why it is not the answer that was wanted
+## Correction — the first pilot result was wrong
 
-pamistanbul.com cannot be told "you have not published in N days", and the reason is not
-a limitation of the measurement. Across **726 sitemap URLs there is no editorial section
-at all**. The site's own top-level structure:
+The first run reported pamistanbul.com as `NO_CONTENT_SECTION` across 726 sitemap URLs.
+**That was an instrument error, not a finding about the site.**
+
+PAM İstanbul publishes under `/pamlab/`: 86 Turkish and 89 English articles, every one of
+them already carrying `datePublished` in `BlogPosting` JSON-LD. The content line exists,
+is well formed, and was measurable the whole time. What failed is that no generic word
+list contains a brand's own name for its blog, and `pamlab` is such a name.
+
+This is a **false negative**, and it is the more dangerous direction. A site wrongly
+accused of a defect gets argued with; a site wrongly told it has no content line is
+believed, and the real measurement never happens. It was caught only because the report
+prints the site's own top-level structure next to the verdict — `pamlab (87)` was sitting
+in that list.
+
+Fixed by letting the registry declare `content_sections`, which is merged ahead of the
+generic list without overriding the most-populated-pattern rule. Re-measured live in run
+[35522205646](https://github.com/sefayamak/search-growth-os/actions/runs/35522205646):
 
 ```
-en (368) · projects (113) · video (92) · pamlab (87) · services (20)
-artists (16) · case-studies (11) · +14 single root pages
+CADENCE pamistanbul verdict=DUE days=17 expected=10 section=pamlab
+        source=jsonld_datePublished status=pilot_onboarding
 ```
 
-Among those root pages are `produksiyon-sirketi-nasil-secilir`, `hibrit-produksiyon` and
-`promo-filmi` — editorial writing that exists but sits loose at the root rather than in a
-section, with no publish date attached to it.
-
-So the honest statement is: **the site has articles but no content line.** Nothing on it
-says when anything was added, which means no cadence can be measured, no freshness can be
-signalled to a search engine, and no assistant can tell a current answer from a 2019 one.
-
-That is a finding about the site, not a gap in the tool. It was separated from a
-pattern-list blind spot by printing the site's real structure next to the verdict.
-
-## What would make the pilot measurable
-
-1. A section — `/blog/`, `/makale/` or `/rehber/` — with the existing loose articles moved
-   into it under redirects, so a content line exists at all.
-2. `datePublished` (and `dateModified` when revised) in `Article` / `BlogPosting` JSON-LD
-   on every piece. This is what makes the cadence measurable, and it is the same field an
-   AI assistant reads to decide whether an answer is current.
-
-Both are content-architecture changes to `sefayamak/pamistanbul-site`. **Neither has been
-made.** No production change has been proposed or shipped.
+The newest article states **2026-09-03**, which is **17 days** against the owner-set
+10-day cadence. Past the cadence, not yet double it, so the verdict is `DUE`.
 
 ## Two things this measurement does not claim
 
