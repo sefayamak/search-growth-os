@@ -105,6 +105,21 @@ export function discoverContentSection(urls: string[]): { pattern: string; urlCo
   return best;
 }
 
+/** The site's most common first path segments, for telling "this site has no editorial
+ *  section" apart from "our pattern list is missing this site's word for one". */
+export function topSegments(urls: string[], limit = 12): string {
+  const counts = new Map<string, number>();
+  for (const u of urls) {
+    let segs: string[];
+    try { segs = new URL(u).pathname.toLowerCase().split("/").filter(Boolean); } catch { continue; }
+    const key = segs.length ? segs[0] : "(root)";
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  const sorted = [...counts].sort((a, b) => b[1] - a[1]);
+  const shown = sorted.slice(0, limit).map(([k, n]) => `${k} (${n})`).join(", ");
+  return sorted.length > limit ? `${shown}, +${sorted.length - limit} more` : shown;
+}
+
 /** True when sitemap lastmod values carry real per-URL information. A generator that stamps
  *  every entry identically tells us when the site was BUILT, which is not when it published. */
 export function lastmodIsInformative(entries: SitemapEntry[]): boolean {
@@ -229,8 +244,14 @@ export async function assessCadence(
 
   const section = discoverContentSection(entries.map((e) => e.loc));
   if (!section) {
+    // "No editorial section" is a claim about the site, but it could equally be a gap in
+    // the pattern list. Printing the site's actual top-level structure lets that be told
+    // apart at a glance instead of trusted.
     return { ...base, verdict: "NO_CONTENT_SECTION", label: "FACT",
-      notes: [...notes, `no editorial section found among ${entries.length} sitemap URLs (looked for: ${CONTENT_PATTERNS.join(", ")})`] };
+      notes: [...notes,
+        `no editorial section found among ${entries.length} sitemap URLs (looked for: ${CONTENT_PATTERNS.join(", ")})`,
+        `the site's own top-level structure: ${topSegments(entries.map((e) => e.loc))}`,
+      ] };
   }
   base.contentSection = section;
 

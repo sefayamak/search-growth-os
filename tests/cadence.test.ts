@@ -271,3 +271,25 @@ test("an unreachable host is an error, never a clean result", async () => {
   assert.ok(results[0].error, "the failure must be carried, so the run can exit non-zero");
   assert.equal(results[0].daysSincePublish, null);
 });
+
+test("a NO_CONTENT_SECTION verdict shows the site's real structure", async () => {
+  // Without this, "no blog found" is indistinguishable from "our pattern list is missing
+  // this site's word for a blog" — the difference between a finding and a blind spot.
+  const site = await startSite({
+    urls: [["/"], ["/hizmetler/a"], ["/hizmetler/b"], ["/projeler/x"]],
+    pages: {
+      "/": "<html><head><title>A</title></head><body>x</body></html>",
+      "/hizmetler/a": "<html><head><title>A</title></head><body>x</body></html>",
+      "/hizmetler/b": "<html><head><title>B</title></head><body>x</body></html>",
+      "/projeler/x": "<html><head><title>X</title></head><body>x</body></html>",
+    },
+  });
+  try {
+    const r = await assessCadence({ id: "t", domain: site.host, onboardingStatus: "active", sitemaps: [] }, { now: NOW, delayMs: 0 });
+    assert.equal(r.verdict, "NO_CONTENT_SECTION");
+    const structure = r.notes.find((n) => n.startsWith("the site's own top-level structure"));
+    assert.ok(structure, "the report must show what the site does have");
+    assert.match(structure!, /hizmetler \(2\)/);
+    assert.match(structure!, /projeler \(1\)/);
+  } finally { site.server.close(); }
+});
