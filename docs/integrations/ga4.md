@@ -1,6 +1,8 @@
 # Google Analytics 4 — connection
 
-State today: **NOT_CONNECTED**.
+State today: **client implemented, credential NOT_CONNECTED.**
+
+`src/adapters/ga4.ts` `runReport` üzerinden gerçek çağrı yapıyor: landing page, organik edinim, AI asistan referansları ve dönüşümler — hepsi sayfalamalı. AI kaynak listesi `SEARCH_GROWTH_AI_REFERRERS` ile yapılandırılır, koda gömülü değildir. Kimlik yoksa `null`.
 
 1. Service account (can be the same as GSC); enable "Google Analytics Data API".
 2. Add the service-account email to the GA4 property as **Viewer**.

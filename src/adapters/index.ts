@@ -3,6 +3,8 @@
 // synthesizes numbers. Real API clients are added only when credentials exist;
 // the interfaces below are the stable surface the skills and agents rely on.
 import type { IntegrationState } from "../types.ts";
+import * as gscClient from "./gsc.ts";
+import * as ga4Client from "./ga4.ts";
 
 export interface AdapterStatus { name: string; state: IntegrationState; note: string; envVar: string }
 
@@ -57,15 +59,35 @@ const status = (name: string, envVar: string, extra = ""): AdapterStatus => {
   return { name, envVar, state: present ? "UNKNOWN" : "NOT_CONNECTED", note: present ? `credential present; client not implemented in Phase 1 (no live call attempted)${extra}` : `set ${envVar} (see docs/integrations/)${extra}` };
 };
 
-// Phase 1 stubs: honest NOT_CONNECTED / UNKNOWN. Implementations land per integration
-// after credentials exist and a read-only smoke test proves the scope.
+// Istemcisi YAZILMIS adapterler icin ayri bir durum uretici. Fark onemli:
+// yukaridaki "UNKNOWN" not'u "client not implemented" diyor ve artik GSC/GA4
+// icin DOGRU DEGIL. Burada UNKNOWN'in anlami "kimlik var, canli cagri henuz
+// denenmedi" — denemenin yolu smokeTest(). Kimlik yoksa yine NOT_CONNECTED.
+const liveStatus = (name: string, envVar: string): AdapterStatus => {
+  const present = !!process.env[envVar];
+  return {
+    name, envVar,
+    state: present ? "UNKNOWN" : "NOT_CONNECTED",
+    note: present
+      ? "credential present; client implemented — run smokeTest() to confirm the property grant"
+      : `set ${envVar} (see docs/integrations/)`,
+  };
+};
+
+// GSC ve GA4 artik gercek istemci; digerleri hala durust stub. Sozlesme ikisinde
+// de ayni: kimlik yoksa null, sayi uydurma yok.
 export const searchConsole: SearchConsoleAdapter = {
-  status: () => status("Google Search Console", "SEARCH_GROWTH_GSC_CREDENTIALS_JSON"),
-  searchAnalytics: async () => null, urlInspection: async () => null, sitemaps: async () => null,
+  status: () => liveStatus("Google Search Console", gscClient.GSC_ENV),
+  searchAnalytics: gscClient.searchAnalytics,
+  urlInspection: gscClient.urlInspection,
+  sitemaps: gscClient.sitemaps,
 };
 export const ga4: Ga4Adapter = {
-  status: () => status("Google Analytics 4", "SEARCH_GROWTH_GA4_CREDENTIALS_JSON"),
-  landingPages: async () => null, organicAcquisition: async () => null, aiReferrals: async () => null, conversions: async () => null,
+  status: () => liveStatus("Google Analytics 4", ga4Client.GA4_ENV),
+  landingPages: ga4Client.landingPages,
+  organicAcquisition: ga4Client.organicAcquisition,
+  aiReferrals: ga4Client.aiReferrals,
+  conversions: ga4Client.conversions,
 };
 export const bing: BingAdapter = {
   status: () => status("Bing Webmaster Tools", "SEARCH_GROWTH_BING_API_KEY"),
