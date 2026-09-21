@@ -17,6 +17,10 @@
     "baseline": "node --experimental-strip-types src/cli.ts audit --site pamistanbul --full",
     "summarize": "node --experimental-strip-types bin/summarize.ts"
   },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "typescript": "^5.9.3"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/sefayamak/search-growth-os"
