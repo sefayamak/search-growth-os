@@ -1,0 +1,45 @@
+# Depo testlerini her PR'da calistirir.
+#
+# 2026-09-21'e kadar bu depoda 65 test vardi ve HICBIRI PR'da kosmuyordu:
+# iki workflow da yalnizca workflow_dispatch + schedule ile tetikleniyordu.
+# Yani bir PR testleri kirabilir ve merge edilene kadar kimse gormezdi.
+#
+# Bu is ag ERISIMI GEREKTIRMEZ: testler kendi HTTP fixture sunucularini
+# ayaga kaldiriyor. Dolayisiyla bloke edici olmasi guvenli — gecici bir
+# dis kesinti bu isi kirmizi yakamaz.
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"        # native TypeScript type stripping
+
+
+      - run: npm install --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Testler
+        run: npm test
+
+      - name: Registry dogrulamasi
+        run: node --experimental-strip-types src/cli.ts registry config/sites.yaml
