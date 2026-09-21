@@ -6,6 +6,10 @@ Türkçe yazıldı; teknik terimler İngilizce kaldı.
 **"Devam et" denildiğinde:** aşağıdaki "Sıradaki tek adım"dan başla. Geçmişi bu
 dosyadan öğren, oturum geçmişinden değil — o kaybolur, bu kalır.
 
+**Ofis bilgisayarından, kurulum yapmadan çalışacaksan:** [`OFIS.md`](OFIS.md).
+Her şey tarayıcıdan yapılabiliyor — ölçüm GitHub Actions'ta koşuyor, Vercel'in bu
+sistemle bir ilgisi yok (o yalnız siteleri yayına alıyor).
+
 ---
 
 ## 0. Yeni oturum: ilk beş dakika

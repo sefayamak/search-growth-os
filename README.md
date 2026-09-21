@@ -1,5 +1,12 @@
 # Search Growth OS
 
+> **Sefa için — nereden başlanır**
+>
+> - Devam edeceksen: **[`DEVAM.md`](DEVAM.md)** — nerede kaldık, sıradaki adım, verilmiş kararlar
+> - Ofis bilgisayarındaysan, kurulum yapmadan: **[`OFIS.md`](OFIS.md)** — her şey tarayıcıdan
+>
+> Aşağısı sistemin teknik tanımı, İngilizce.
+
 Reusable, multi-site **search growth operating system** for Claude Code:
 SEO + AEO (answer engines) + GEO (generative search). It discovers problems
 with a read-only crawler, verifies them with evidence, prioritizes, prepares
