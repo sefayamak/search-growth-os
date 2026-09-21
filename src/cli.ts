@@ -187,8 +187,35 @@ async function main() {
       for (const s of allStatuses()) console.log(`${s.state.padEnd(14)} ${s.name} — ${s.note}`);
       return;
     }
+    // Olcum raporu. Credential yoksa NOT_CONNECTED yazar ve DURUR — sifir
+    // uretmez, tahmin etmez. Amaci, neyin olculebildigini ve neyin hala
+    // baglanmadigini tek bakista gostermek.
+    case "measure": {
+      const { periods, brandPatterns } = await import("./measure.ts");
+      const { searchConsole, ga4 } = await import("./adapters/index.ts");
+      const reg = loadRegistry(args[1] ?? "config/sites.yaml");
+      if (!reg.ok || !reg.registry) { console.error(reg.errors.join("\n")); process.exitCode = 1; return; }
+      const p = periods(new Date());
+      console.log(`dönemler  : ${p.current.label} ${p.current.start}..${p.current.end}`);
+      console.log(`            ${p.previous.label} ${p.previous.start}..${p.previous.end}`);
+      console.log(`            ${p.yearAgo.label} ${p.yearAgo.start}..${p.yearAgo.end}`);
+      const gsc = searchConsole.status(), an = ga4.status();
+      console.log(`\nSearch Console : ${gsc.state} — ${gsc.note}`);
+      console.log(`GA4            : ${an.state} — ${an.note}\n`);
+      for (const site of reg.registry.sites) {
+        const prop = String(site.google_search_console_property);
+        const ga = String(site.ga4_property);
+        console.log(`${site.id}`);
+        console.log(`  GSC property : ${prop}`);
+        console.log(`  GA4 property : ${ga}`);
+        console.log(`  marka deseni : ${brandPatterns(site).join(" · ") || "(yok — brand_entities boş)"}`);
+        // Veri cekilmiyor: adapter null donuyor ve bu katman onu sifira cevirmiyor.
+        console.log(`  veri         : NOT_CONNECTED`);
+      }
+      return;
+    }
     default:
-      console.error("commands: crawl | audit | compliance | registry | integrations | portfolio | llmstxt");
+      console.error("commands: crawl | audit | compliance | registry | integrations | measure | portfolio | llmstxt");
       process.exitCode = 1;
   }
 }
