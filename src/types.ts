@@ -60,6 +60,10 @@ export interface ImageRef {
   width?: string;
   height?: string;
   loading?: string;
+  /** The image's box is already reserved by CSS — an explicit `aspect-ratio`, or a
+   *  next/image `fill` stretched inside a sized parent. Such an image cannot shift the
+   *  layout, so width/height add nothing (and next/image rejects them in fill mode). */
+  reservesSpace?: boolean;
 }
 
 export interface JsonLdBlock {

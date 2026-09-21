@@ -144,3 +144,41 @@ test("the entity graph is not judged against page copy; content markup still is"
     .filter((f) => f.id === "schema.not_in_visible_content").map((f) => f.url);
   assert.deepEqual(hits, ["https://example.com/p"]);
 });
+
+test("an image whose box CSS already reserves is not a CLS finding; a bare <img> still is", () => {
+  const body = `<!doctype html><html lang="en"><head><title>Gallery — Example</title>
+    <link rel="canonical" href="https://example.com/g"/></head><body><h1>Gallery</h1>
+    <img alt="a" data-nimg="fill" style="position:absolute;height:100%;width:100%;left:0;top:0"/>
+    <img alt="b" style="position:absolute;width:100%;height:100%"/>
+    <img alt="c" src="/p.jpg" style="width:100%;aspect-ratio:0.8;object-fit:cover"/>
+    <p>${"word ".repeat(200)}</p></body></html>`;
+  const withBare = body.replace("</body>", `<img src="/c.jpg" alt="c"/></body>`);
+  const rec = (u: string, b: string) => ({
+    page: { url: u, finalUrl: u, status: 200, redirectChain: [], headers: {}, contentType: "text/html", body: b, bytes: b.length, fetchMs: 1 },
+    html: parseHtml(b, u), xRobots: [], depth: 0, discoveredFrom: null, contentHash: u,
+  } as CrawlRecord);
+  const hits = runAudit(result([rec("https://example.com/g", body), rec("https://example.com/h", withBare)]))
+    .filter((fd) => fd.id === "media.dimensions_missing");
+  assert.deepEqual(hits.map((h) => h.url), ["https://example.com/h"]);
+  assert.equal(hits[0].evidence.noDims, 1, "the two fill images were counted as well");
+});
+
+test("hreflang alternates sharing a title are one page in two languages, not duplicates", () => {
+  // A series named after a place keeps that name in both languages.
+  const mk = (url: string, other: string) => {
+    const b = `<!doctype html><html><head><title>Nepal | Untitled Portraits</title>
+      <link rel="canonical" href="${url}"/>
+      <link rel="alternate" hreflang="en" href="${url.includes("/en/") ? url : other}"/>
+      <link rel="alternate" hreflang="tr" href="${url.includes("/tr/") ? url : other}"/></head>
+      <body><h1>Nepal</h1><p>${"word ".repeat(200)}</p></body></html>`;
+    return { page: { url, finalUrl: url, status: 200, redirectChain: [], headers: {}, contentType: "text/html", body: b, bytes: b.length, fetchMs: 1 },
+      html: parseHtml(b, url), xRobots: [], depth: 0, discoveredFrom: null, contentHash: url } as CrawlRecord;
+  };
+  const en = "https://example.com/en/series/nepal", tr = "https://example.com/tr/seriler/nepal";
+  assert.deepEqual(runAudit(result([mk(en, tr), mk(tr, en)])).filter((fd) => fd.id === "meta.title_duplicate"), []);
+
+  // Two same-language pages sharing a title, with no alternate link between them, still count.
+  const plain = (u: string) => page(u, u);
+  assert.equal(runAudit(result([plain("https://example.com/en/shop"), plain("https://example.com/en/store")]))
+    .filter((fd) => fd.id === "meta.title_duplicate").length, 1);
+});

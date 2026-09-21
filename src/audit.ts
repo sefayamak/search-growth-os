@@ -129,17 +129,32 @@ export const checks: Record<string, Check> = {
   },
 
   "meta.titles": (r) => {
-    const seen = new Map<string, string[]>();
+    const seen = new Map<string, CrawlRecord[]>();
     const out: Finding[] = [];
     for (const x of canonicalPages(r)) {
       const t = x.html!.title;
       if (!t) { out.push(f("meta.title_missing", "high", `${x.page.finalUrl} has no <title>`, {}, "Title is the primary snippet/ranking text signal.", { url: x.page.finalUrl })); continue; }
       if (t.length > 70) out.push(f("meta.title_long", "low", `${x.page.finalUrl} title is ${t.length} chars`, { title: t }, "Likely truncated in SERP; Google may rewrite it.", { url: x.page.finalUrl }));
       if (t.length < 15) out.push(f("meta.title_short", "low", `${x.page.finalUrl} title is ${t.length} chars`, { title: t }, "Too little context for users and rewriting.", { url: x.page.finalUrl }));
-      seen.set(t, [...(seen.get(t) ?? []), x.page.finalUrl]);
+      seen.set(t, [...(seen.get(t) ?? []), x]);
       if (!x.html!.metaDescription) out.push(f("meta.description_missing", "low", `${x.page.finalUrl} has no meta description`, {}, "Google generates snippets anyway; a good description improves CTR on commercial pages.", { url: x.page.finalUrl }));
     }
-    for (const [t, urls] of seen) if (urls.length > 1) out.push(f("meta.title_duplicate", "medium", `${urls.length} pages share the title "${t}"`, { urls }, "Duplicate titles signal duplicate/thin pages and confuse users in SERP.", { label: "INFERENCE" }));
+    for (const [t, group] of seen) {
+      if (group.length < 2) continue;
+      // Pages that declare each other as hreflang alternates are language variants
+      // of one page, not duplicates. A proper noun is often the same word in both
+      // languages — a Nepal series is called "Nepal" in Turkish too — and the only
+      // way to satisfy a naive check would be to invent a title the place does not
+      // have. Google reads the hreflang pair and shows the right one.
+      const urls = group.map((g) => g.page.finalUrl);
+      const set = new Set(urls.map(norm));
+      const allAlternates = group.every((g) => {
+        const h = g.html!.hreflang.map((e) => norm(e.href));
+        return h.length > 0 && urls.every((u) => norm(u) === norm(g.page.finalUrl) || h.includes(norm(u)));
+      });
+      if (allAlternates && set.size === group.length) continue;
+      out.push(f("meta.title_duplicate", "medium", `${urls.length} pages share the title "${t}"`, { urls }, "Duplicate titles signal duplicate/thin pages and confuse users in SERP.", { label: "INFERENCE" }));
+    }
     return out;
   },
 
@@ -189,7 +204,11 @@ export const checks: Record<string, Check> = {
   "media.images": (r) => r.records.filter(htmlOk).flatMap((x) => {
     const imgs = x.html!.images;
     const missingAlt = imgs.filter((i) => i.alt === null).length;
-    const noDims = imgs.filter((i) => !i.width || !i.height).length;
+    // Only images whose box is NOT already reserved by CSS. Counting the rest
+    // produced 874 CLS findings across three sites whose galleries were correct:
+    // a gallery declaring `aspect-ratio` per photo cannot shift the layout, and
+    // for a next/image fill the implied fix is rejected by the framework.
+    const noDims = imgs.filter((i) => !i.reservesSpace && (!i.width || !i.height)).length;
     const out: Finding[] = [];
     if (missingAlt) out.push(f("media.alt_missing", "medium", `${x.page.finalUrl}: ${missingAlt}/${imgs.length} images lack an alt attribute`, { missingAlt, total: imgs.length }, "Images are first-class search assets for a photo/film studio; missing alt loses image search and accessibility.", { url: x.page.finalUrl, fixHint: "Describe the actual visual meaning; empty alt only for decorative images." }));
     if (noDims && imgs.length) out.push(f("media.dimensions_missing", "low", `${x.page.finalUrl}: ${noDims}/${imgs.length} images without width/height`, { noDims }, "Missing dimensions cause layout shift (CLS).", { url: x.page.finalUrl }));

@@ -100,6 +100,14 @@ export function parseHtml(html: string, baseUrl: string): ParsedHtml {
     src: absolutize(a.src ?? a["data-src"] ?? "", base) ?? (a.src ?? ""),
     alt: "alt" in a ? a.alt : null,
     width: a.width, height: a.height, loading: a.loading,
+    // width/height exist to reserve the box before the file arrives. CSS can reserve
+    // the same box three other ways, and then the attributes add nothing: an explicit
+    // aspect-ratio; a next/image fill (which rejects width/height outright); or
+    // width AND height both at 100%, which hands the box to the parent entirely.
+    // Recorded so the CLS check can tell "no dimensions" from "dimensions do not apply".
+    reservesSpace: a["data-nimg"] === "fill"
+      || /aspect-ratio\s*:/i.test(a.style ?? "")
+      || (/\bwidth\s*:\s*100%/i.test(a.style ?? "") && /\bheight\s*:\s*100%/i.test(a.style ?? "")),
   }));
 
   const jsonLd: JsonLdBlock[] = elements(html, "script")
