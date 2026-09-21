@@ -166,7 +166,11 @@ export const checks: Record<string, Check> = {
     return out;
   }),
 
-  "content.thin_or_js_only": (r) => r.records.filter(htmlOk).flatMap((x) => {
+  // canonicalPages, for the same reason as the duplicate checks: a variant that
+  // canonicalizes elsewhere is not an independently thin page, it is the same page
+  // reached by a second URL. Counting both doubled the thin-page count on a site
+  // that serves each tool at /x and /x.html.
+  "content.thin_or_js_only": (r) => canonicalPages(r).flatMap((x) => {
     const out: Finding[] = [];
     const noindex = [...x.html!.metaRobots, ...x.xRobots].includes("noindex");
     if (noindex) return out;

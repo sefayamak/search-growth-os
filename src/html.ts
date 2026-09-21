@@ -89,8 +89,17 @@ export function parseHtml(html: string, baseUrl: string): ParsedHtml {
     if (!a.href) continue;
     const abs = absolutize(a.href, base);
     if (!abs) continue;
+    // An image link's anchor text is the image's alt — Google states this outright,
+    // and a product grid wrapping a described photo in a link is doing it correctly.
+    // Reading only the stripped text called 26 such links "empty" on one site, and
+    // acting on that would have meant adding redundant labels under every tile.
+    let text = stripTags(m[2]);
+    if (!text) {
+      const img = tags(m[2], "img").map(parseAttrs).find((i) => (i.alt ?? "").trim());
+      if (img) text = img.alt!.trim();
+    }
     links.push({
-      href: abs, raw: a.href, text: stripTags(m[2]).slice(0, 200),
+      href: abs, raw: a.href, text: text.slice(0, 200),
       rel: (a.rel ?? "").toLowerCase().split(/\s+/).filter(Boolean),
       internal: new URL(abs).host === host,
     });
