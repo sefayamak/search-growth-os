@@ -182,3 +182,19 @@ test("hreflang alternates sharing a title are one page in two languages, not dup
   assert.equal(runAudit(result([plain("https://example.com/en/shop"), plain("https://example.com/en/store")]))
     .filter((fd) => fd.id === "meta.title_duplicate").length, 1);
 });
+
+test("an image link's anchor text is the image alt; a truly empty link still counts", () => {
+  const body = `<!doctype html><html lang="en"><head><title>Shop grid — Example</title>
+    <link rel="canonical" href="https://example.com/s"/></head><body><h1>Shop</h1>
+    ${[1, 2, 3, 4].map((n) => `<a href="/p/${n}"><img alt="Green crochet crossbody bag ${n}" data-nimg="fill" style="position:absolute;width:100%;height:100%"/></a>`).join("")}
+    <a href="/x"><span></span></a><a href="/y"><img alt="" src="/d.png"/></a>
+    <p>${"word ".repeat(200)}</p></body></html>`;
+  const rec = {
+    page: { url: "https://example.com/s", finalUrl: "https://example.com/s", status: 200, redirectChain: [], headers: {}, contentType: "text/html", body, bytes: body.length, fetchMs: 1 },
+    html: parseHtml(body, "https://example.com/s"), xRobots: [], depth: 0, discoveredFrom: null, contentHash: "s",
+  } as CrawlRecord;
+  assert.equal(rec.html!.links.filter((l) => !l.text).length, 2, "alt text was not read as anchor text");
+  assert.equal(rec.html!.links.find((l) => l.href.endsWith("/p/1"))!.text, "Green crochet crossbody bag 1");
+  // Two empty links is under the threshold the check uses, so nothing is reported.
+  assert.deepEqual(runAudit(result([rec])).filter((fd) => fd.id === "links.empty_anchor_text"), []);
+});

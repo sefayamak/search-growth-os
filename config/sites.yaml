@@ -53,20 +53,26 @@ sites:
     risk_level: high
     deployment_approval_policy: pr_plus_human_approval
 
-  # ──────────────────────────────── REGISTERED — NOT ONBOARDED
-  # Placeholders. Not crawled, not analysed, not optimized. Each one gets its own
-  # objectives, market, languages, competitors and strategy at its own onboarding.
+  # ──────────────────────────────────────────────── ACTIVE
+  # Onboarded 2026-09-21 at the owner's instruction to bring every site up to
+  # standard. Each was built locally and audited in its own production URL space
+  # (`audit <url> --local <server>`), which is where the facts below come from.
+  #
+  # Isolation has NOT changed: these are now measurable and changeable, but
+  # competitors, topics, objectives and strategy remain per-site work products.
+  # An empty list below means nobody has decided yet — never that the answer is
+  # none. See policies/portfolio-isolation.md.
   - id: pamaistudio
-    onboarding_status: registered_not_onboarded
+    onboarding_status: active
     production_domain: pamaistudio.com
-    canonical_hostname: UNKNOWN            # apex and www both attached, neither redirects
-    repository: UNKNOWN
-    framework: UNKNOWN
+    canonical_hostname: pamaistudio.com           # FACT (repo 2026-09-21): vercel.json 301s www -> apex for every path
+    repository: sefayamak/pamaistudio
+    framework: Vite SPA + api/render.js SSR shim on Vercel (255 routes, all 200)
     deployment_provider: vercel            # project "pamaistudio"
-    primary_language: UNKNOWN
-    secondary_languages: []
-    target_markets: []
-    business_category: UNKNOWN
+    primary_language: tr
+    secondary_languages: [en]
+    target_markets: [TR, global]
+    business_category: AI-powered commercial film and visual production (PAM Istanbul's AI unit)
     foundation_year: 2018                  # OWNER-CONFIRMED: PAM AI Studio is PAM İstanbul's AI unit; the parent's founding year is the entity fact its pages state
     content_cadence_days: UNKNOWN      # owner has not set a publishing cadence for this site
     content_sections: []
@@ -77,8 +83,8 @@ sites:
     bing_webmaster_property: NOT_CONNECTED
     cdn_log_source: NOT_CONNECTED
     indexnow_status: UNKNOWN
-    robots_policy: UNKNOWN
-    sitemap_locations: []
+    robots_policy: "search+AI-answer allowed; explicit groups for GPTBot, OAI-SearchBot, ClaudeBot, PerplexityBot"
+    sitemap_locations: ["https://pamaistudio.com/sitemap.xml"]
     known_subdomains: []
     competitor_set: []
     core_commercial_topics: []
@@ -86,24 +92,24 @@ sites:
     brand_entities: [PAM AI Studio, PAM İstanbul]
     people_entities: []
     social_identity_urls: []
-    business_locations: []
+    business_locations: [İstanbul]
     risk_level: high
     deployment_approval_policy: pr_plus_human_approval
 
   - id: spryhand
-    onboarding_status: registered_not_onboarded
+    onboarding_status: active
     production_domain: spryhand.com
     canonical_hostname: spryhand.com       # FACT: www → apex, 308
-    repository: UNKNOWN
-    framework: UNKNOWN
+    repository: sefayamak/spryhand
+    framework: Next.js 16 App Router (177 prerendered routes, 174 sitemap URLs)
     deployment_provider: vercel            # project "spryhand"
-    primary_language: UNKNOWN
+    primary_language: en
     secondary_languages: []
-    target_markets: []
-    business_category: UNKNOWN
+    target_markets: [global]
+    business_category: spreadsheet templates, calculators and trackers (digital products)
     foundation_year: UNKNOWN
     content_cadence_days: UNKNOWN      # owner has not set a publishing cadence for this site
-    content_sections: []
+    content_sections: [blog, guides]
     primary_business_objectives: []
     primary_conversion_events: []
     google_search_console_property: NOT_CONNECTED
@@ -112,12 +118,12 @@ sites:
     cdn_log_source: NOT_CONNECTED
     indexnow_status: UNKNOWN
     robots_policy: UNKNOWN
-    sitemap_locations: []
+    sitemap_locations: ["https://spryhand.com/sitemap.xml"]
     known_subdomains: []
     competitor_set: []
     core_commercial_topics: []
     core_informational_topics: []
-    brand_entities: []
+    brand_entities: [Spryhand]
     people_entities: []
     social_identity_urls: []
     business_locations: []
@@ -125,19 +131,19 @@ sites:
     deployment_approval_policy: pr_plus_human_approval
 
   - id: decideplan
-    onboarding_status: registered_not_onboarded
+    onboarding_status: active
     production_domain: decideplan.com
     canonical_hostname: decideplan.com     # FACT: www → apex, 308
-    repository: UNKNOWN
-    framework: UNKNOWN
+    repository: sefayamak/decideplan
+    framework: Next.js 16 App Router (142 prerendered routes, 137 sitemap URLs)
     deployment_provider: vercel            # project "decideplan"
-    primary_language: UNKNOWN
+    primary_language: en
     secondary_languages: []
-    target_markets: []
-    business_category: UNKNOWN
+    target_markets: [global]
+    business_category: budget decision tools — 19 spending categories with benchmark ranges
     foundation_year: UNKNOWN
     content_cadence_days: UNKNOWN      # owner has not set a publishing cadence for this site
-    content_sections: []
+    content_sections: [blog]
     primary_business_objectives: []
     primary_conversion_events: []
     google_search_console_property: NOT_CONNECTED
@@ -146,12 +152,12 @@ sites:
     cdn_log_source: NOT_CONNECTED
     indexnow_status: UNKNOWN
     robots_policy: UNKNOWN
-    sitemap_locations: []
+    sitemap_locations: ["https://decideplan.com/sitemap.xml"]
     known_subdomains: []
     competitor_set: []
     core_commercial_topics: []
     core_informational_topics: []
-    brand_entities: []
+    brand_entities: [DecidePlan]
     people_entities: []
     social_identity_urls: []
     business_locations: []
@@ -159,19 +165,19 @@ sites:
     deployment_approval_policy: pr_plus_human_approval
 
   - id: rightlisted
-    onboarding_status: registered_not_onboarded
+    onboarding_status: active
     production_domain: rightlisted.com
-    canonical_hostname: UNKNOWN            # apex and www both attached, neither redirects
-    repository: UNKNOWN
-    framework: UNKNOWN
+    canonical_hostname: www.rightlisted.com       # CORRECTED 2026-09-21: was UNKNOWN ("neither redirects"). server.js 301s the apex to www for EVERY path, and every canonical on the site names www.
+    repository: sefayamak/rightlisted
+    framework: Express (server.js) on Vercel; static tool pages under public/tools
     deployment_provider: vercel            # project "rightlisted"
-    primary_language: UNKNOWN
+    primary_language: en
     secondary_languages: []
-    target_markets: []
-    business_category: UNKNOWN
+    target_markets: [global]
+    business_category: Etsy and Amazon listing grader and keyword tools
     foundation_year: UNKNOWN
     content_cadence_days: UNKNOWN      # owner has not set a publishing cadence for this site
-    content_sections: []
+    content_sections: [blog]
     primary_business_objectives: []
     primary_conversion_events: []
     google_search_console_property: NOT_CONNECTED
@@ -180,12 +186,12 @@ sites:
     cdn_log_source: NOT_CONNECTED
     indexnow_status: UNKNOWN
     robots_policy: UNKNOWN
-    sitemap_locations: []
+    sitemap_locations: ["https://www.rightlisted.com/sitemap.xml"]
     known_subdomains: []
     competitor_set: []
     core_commercial_topics: []
     core_informational_topics: []
-    brand_entities: []
+    brand_entities: [Rightlisted]
     people_entities: []
     social_identity_urls: []
     business_locations: []
@@ -193,19 +199,19 @@ sites:
     deployment_approval_policy: pr_plus_human_approval
 
   - id: untitledportraits
-    onboarding_status: registered_not_onboarded
+    onboarding_status: active
     production_domain: untitledportraits.com
-    canonical_hostname: UNKNOWN            # apex and www both attached, neither redirects
-    repository: UNKNOWN
-    framework: UNKNOWN
+    canonical_hostname: www.untitledportraits.com  # CORRECTED 2026-09-21: was UNKNOWN ("neither redirects"). next.config.ts 301s apex and the old vercel.app host to www, and all 408 sitemap URLs are self-canonical on www.
+    repository: sefayamak/untitledportraits
+    framework: Next.js 16 App Router + next-intl (657 pages, 408 sitemap URLs, 323 images)
     deployment_provider: vercel            # project "untitledportraits"
-    primary_language: UNKNOWN
-    secondary_languages: []
-    target_markets: []
-    business_category: UNKNOWN
+    primary_language: tr
+    secondary_languages: [en]
+    target_markets: [TR, global]
+    business_category: fashion, commercial and portrait photography (Sefa Yamak)
     foundation_year: UNKNOWN
     content_cadence_days: UNKNOWN      # owner has not set a publishing cadence for this site
-    content_sections: []
+    content_sections: [blog]
     primary_business_objectives: []
     primary_conversion_events: []
     google_search_console_property: NOT_CONNECTED
@@ -214,32 +220,32 @@ sites:
     cdn_log_source: NOT_CONNECTED
     indexnow_status: UNKNOWN
     robots_policy: UNKNOWN
-    sitemap_locations: []
+    sitemap_locations: ["https://www.untitledportraits.com/sitemap.xml"]
     known_subdomains: []
     competitor_set: []
     core_commercial_topics: []
     core_informational_topics: []
-    brand_entities: []
-    people_entities: []
+    brand_entities: [Untitled Portraits]
+    people_entities: [Sefa Yamak]
     social_identity_urls: []
-    business_locations: []
+    business_locations: [İstanbul]
     risk_level: high
     deployment_approval_policy: pr_plus_human_approval
 
   - id: myhappymade
-    onboarding_status: registered_not_onboarded
+    onboarding_status: active
     production_domain: myhappymade.com
     canonical_hostname: myhappymade.com    # FACT: www → apex, 308
-    repository: UNKNOWN
-    framework: UNKNOWN
+    repository: sefayamak/myhappymade
+    framework: Next.js 16 App Router + next-intl (180 pages)
     deployment_provider: vercel            # project "myhappymade-web" serves the domain; a separate "myhappymade" project holds only a vercel.app host
-    primary_language: UNKNOWN
-    secondary_languages: []
-    target_markets: []
-    business_category: UNKNOWN
+    primary_language: en
+    secondary_languages: [tr]
+    target_markets: [global, TR]
+    business_category: handmade crochet bags (Etsy shop)
     foundation_year: UNKNOWN
     content_cadence_days: UNKNOWN      # owner has not set a publishing cadence for this site
-    content_sections: []
+    content_sections: [blog]
     primary_business_objectives: []
     primary_conversion_events: []
     google_search_console_property: NOT_CONNECTED
@@ -248,12 +254,12 @@ sites:
     cdn_log_source: NOT_CONNECTED
     indexnow_status: UNKNOWN
     robots_policy: UNKNOWN
-    sitemap_locations: []
+    sitemap_locations: ["https://myhappymade.com/sitemap.xml"]
     known_subdomains: []
     competitor_set: []
     core_commercial_topics: []
     core_informational_topics: []
-    brand_entities: []
+    brand_entities: [MyHappyMade]
     people_entities: []
     social_identity_urls: []
     business_locations: []

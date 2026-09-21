@@ -32,17 +32,27 @@ test("yaml subset handles nested maps, block lists, inline lists, quotes", () =>
   assert.equal(y.sites[0].nested.k, "v: with colon");
 });
 
-test("live registry holds the whole portfolio with only the pilot onboarded", () => {
+test("live registry holds the whole portfolio, and every site states how it was onboarded", () => {
   const r = loadRegistry(cfg("sites.yaml"));
   assert.ok(r.ok, r.errors.join("\n"));
   const sites = r.registry!.sites;
   assert.equal(sites.length, 7);
   const pilots = sites.filter((s) => s.onboarding_status === "pilot_onboarding");
   assert.deepEqual(pilots.map((s) => s.id), ["pamistanbul"]);
-  assert.equal(onboardedSites(r.registry!).length, 1, "only the pilot may be crawled");
-  // Every other portfolio site is registered but explicitly out of scope.
-  for (const s of sites.filter((s) => s.id !== "pamistanbul")) {
-    assert.equal(s.onboarding_status, "registered_not_onboarded", s.id);
+  // The whole portfolio was onboarded 2026-09-21 at the owner's instruction. The gate
+  // still exists and still means something — a status outside this set is rejected —
+  // but "only one site" is no longer the fact it encodes.
+  for (const s of sites) {
+    assert.ok(["pilot_onboarding", "active", "registered_not_onboarded"].includes(s.onboarding_status), `${s.id}: ${s.onboarding_status}`);
+  }
+  assert.equal(onboardedSites(r.registry!).length, 7, "every onboarded site is crawlable");
+  // An onboarded site must name its repository and framework: without those, a finding
+  // cannot be traced to the code that produced it and nothing can be fixed.
+  for (const s of sites) {
+    for (const key of ["repository", "framework", "canonical_hostname"] as const) {
+      assert.ok(s[key] && !["UNKNOWN", "NOT_CONNECTED"].includes(String(s[key]).split("#")[0].trim()),
+        `${s.id}: onboarded but ${key} is ${s[key]}`);
+    }
   }
   // A property identifier may be known before credentials exist, but it is either a
   // sentinel or a real GA4 numeric id — never a guess, and never a measurement ID.
@@ -63,15 +73,30 @@ test("live registry holds the whole portfolio with only the pilot onboarded", ()
   for (const s of sites) assert.ok(["NOT_CONNECTED", "UNKNOWN"].includes(String(s.bing_webmaster_property)), s.id);
 });
 
-test("portfolio isolation: a non-onboarded site cannot carry inherited strategy", () => {
+test("portfolio isolation: a registered site cannot carry inherited strategy", () => {
   const r = loadRegistry(cfg("sites.yaml"));
   const pilot = r.registry!.sites.find((s) => s.id === "pamistanbul")!;
-  const other = r.registry!.sites.find((s) => s.id === "spryhand")!;
-  // Simulate the failure this guards: copying the pilot's commercial context onto another site.
-  const leaked = { ...other, competitor_set: ["example-competitor.com"], core_commercial_topics: pilot.core_commercial_topics.concat("ürün fotoğrafı") };
+  // The test builds its own subject rather than borrowing a site from the live
+  // registry: every site is onboarded now, and a test that depends on which ones
+  // are not would stop proving anything the moment the portfolio changes again.
+  const registered = { ...pilot, id: "a-newly-registered-site", onboarding_status: "registered_not_onboarded" };
+  assert.equal(validateRegistry({ version: 1, sites: [{ ...registered, competitor_set: [], core_commercial_topics: [], core_informational_topics: [] }] }).ok, true);
+  // Simulate the failure this guards: copying one site's commercial context onto another.
+  const leaked = { ...registered, competitor_set: ["example-competitor.com"], core_commercial_topics: ["ürün fotoğrafı"] };
   const v = validateRegistry({ version: 1, sites: [leaked] });
   assert.equal(v.ok, false);
   assert.ok(v.errors.some((e) => /never inherit it from another site/.test(e)), v.errors.join("\n"));
+});
+
+test("onboarding did not hand any site another site's commercial context", () => {
+  // Onboarding made these sites measurable; it decided nothing about their markets.
+  // An empty list here means nobody has chosen yet — never that the answer is none.
+  const r = loadRegistry(cfg("sites.yaml"));
+  for (const s of r.registry!.sites) {
+    for (const k of ["competitor_set", "core_commercial_topics", "core_informational_topics"] as const) {
+      assert.deepEqual(s[k], [], `${s.id}: ${k} was filled in without an owner decision`);
+    }
+  }
 });
 
 test("onboarding_status is required and validated", () => {

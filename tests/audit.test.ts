@@ -107,10 +107,13 @@ test("crawl target resolution is gated by the registry", async () => {
   const { loadRegistry, onboardedSites } = await import("../src/registry.ts");
   const reg = loadRegistry(new URL("../config/sites.yaml", import.meta.url).pathname);
   assert.ok(reg.ok);
-  const allowed = onboardedSites(reg.registry!).map((s) => s.id);
-  assert.deepEqual(allowed, ["pamistanbul"]);
-  for (const id of ["spryhand", "pamaistudio", "decideplan", "rightlisted", "untitledportraits", "myhappymade"]) {
-    assert.ok(!allowed.includes(id), `${id} must not be crawlable`);
+  const allowed = onboardedSites(reg.registry!).map((s) => s.id).sort();
+  // The whole portfolio is onboarded, so the gate's job is now to reject an id that is
+  // not in the registry at all — which is the case that would otherwise crawl a
+  // stranger's site because of a typo in --site.
+  assert.deepEqual(allowed, ["decideplan", "myhappymade", "pamaistudio", "pamistanbul", "rightlisted", "spryhand", "untitledportraits"]);
+  for (const id of ["spryhand.com", "not-a-site", "", "pamistanbul-site"]) {
+    assert.ok(!allowed.includes(id), `${id} must not resolve`);
   }
 });
 
