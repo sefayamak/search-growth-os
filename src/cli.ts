@@ -1,6 +1,7 @@
 // Search Growth OS CLI — read-only.
 //   crawl <url> [--max-pages N] [--max-depth N] [--delay ms] [--out dir]
 //   audit <url> [...same]           crawl + checks + dry-run report (json + md)
+//   audit <prod-url> --local <url>  same, but served from a local build (pre-deploy)
 //   compliance <file> [--kind k]    run the compliance gate on a file
 //   compliance --stdin --kind k     read content from stdin
 //   registry <path>                 validate a site registry (yaml subset / json)
@@ -49,11 +50,17 @@ async function main() {
         console.error(`site ${siteId} (${site.onboarding_status}) → ${url}`);
       }
       if (!url) throw new Error("usage: audit <url> | audit --site <registry id>");
+      // Pre-deploy mode. The target keeps its production origin for every judgement the
+      // audit makes; only the bytes come from the local server. The onboarding gate above
+      // is not involved, because this reads a build, not a live site.
+      const local = opt("local");
+      const originAlias = local ? { from: new URL(url).origin, to: new URL(local).origin } : undefined;
+      if (originAlias) console.error(`pre-deploy: ${originAlias.from} served from ${originAlias.to}`);
       const full = flag("full");
       // In full mode the sitemap is the universe, so the cap must not silently truncate it.
       // The explicit --max-pages still acts as a ceiling, raised to cover the sitemap.
       const cap = Number(opt("max-pages", full ? "5000" : "50"));
-      const result = await crawl({ startUrl: url, fromSitemap: full, maxPages: full ? Math.max(cap, 5000) : cap, maxDepth: Number(opt("max-depth", full ? "2" : "3")), delayMs: Number(opt("delay", "500")) }, (s) => process.stderr.write(s + "\n"));
+      const result = await crawl({ startUrl: url, fromSitemap: full, maxPages: full ? Math.max(cap, 5000) : cap, maxDepth: Number(opt("max-depth", full ? "2" : "3")), delayMs: Number(opt("delay", originAlias ? "0" : "500")), originAlias }, (s) => process.stderr.write(s + "\n"));
       // Unreachable target must fail loudly. A report built from zero fetched pages
       // would otherwise look like a clean site.
       const first = result.records[0];

@@ -18,6 +18,23 @@ const f = (id: string, severity: Severity, message: string, evidence: Record<str
 const htmlOk = (r: CrawlRecord) => r.html && r.page.status === 200;
 const norm = (u: string) => { try { const x = new URL(u); x.hash = ""; return x.toString().replace(/\/$/, ""); } catch { return u; } };
 
+/** True when the page declares a canonical pointing at a DIFFERENT URL — i.e. the page is
+ *  a variant (?category=tote, ?type=calculator) whose indexing signals belong to that other
+ *  URL. Google consolidates such variants, so counting them as separate pages invents
+ *  duplicates that do not exist. */
+const isVariant = (x: CrawlRecord) => !!x.html!.canonical && norm(x.html!.canonical) !== norm(x.page.finalUrl);
+
+/** The URL set a duplicate-signal check may reason about: canonical pages only, and each
+ *  final URL once. Two request URLs can resolve to one final URL (a sitemap entry and a
+ *  redirect landing on it), which is normal crawling and not a duplicate page. Measured
+ *  on the live portfolio, skipping this step invented 9 duplicate-title and 7
+ *  duplicate-text findings against sites that had neither. */
+const canonicalPages = (r: { records: CrawlRecord[] }) => {
+  const byUrl = new Map<string, CrawlRecord>();
+  for (const x of r.records.filter(htmlOk)) if (!isVariant(x)) byUrl.set(norm(x.page.finalUrl), x);
+  return [...byUrl.values()];
+};
+
 export const checks: Record<string, Check> = {
   "http.errors": (r) => r.records.filter((x) => x.page.status >= 400 || x.page.status === 0).map((x) =>
     f("http.error", x.page.status >= 500 || x.page.status === 0 ? "high" : "medium",
@@ -114,7 +131,7 @@ export const checks: Record<string, Check> = {
   "meta.titles": (r) => {
     const seen = new Map<string, string[]>();
     const out: Finding[] = [];
-    for (const x of r.records.filter(htmlOk)) {
+    for (const x of canonicalPages(r)) {
       const t = x.html!.title;
       if (!t) { out.push(f("meta.title_missing", "high", `${x.page.finalUrl} has no <title>`, {}, "Title is the primary snippet/ranking text signal.", { url: x.page.finalUrl })); continue; }
       if (t.length > 70) out.push(f("meta.title_long", "low", `${x.page.finalUrl} title is ${t.length} chars`, { title: t }, "Likely truncated in SERP; Google may rewrite it.", { url: x.page.finalUrl }));
@@ -147,7 +164,7 @@ export const checks: Record<string, Check> = {
 
   "content.near_duplicates": (r) => {
     const byHash = new Map<string, string[]>();
-    for (const x of r.records.filter(htmlOk)) byHash.set(x.contentHash, [...(byHash.get(x.contentHash) ?? []), x.page.finalUrl]);
+    for (const x of canonicalPages(r)) byHash.set(x.contentHash, [...(byHash.get(x.contentHash) ?? []), x.page.finalUrl]);
     return [...byHash.values()].filter((u) => u.length > 1).map((urls) =>
       f("content.duplicate_text", "medium", `${urls.length} URLs serve identical visible text`, { urls }, "Duplicate URLs split signals; only one should be canonical.", { label: "INFERENCE", fixHint: "Canonicalize or 301 the duplicates to one URL." }));
   },
@@ -192,7 +209,16 @@ export const checks: Record<string, Check> = {
       // body copy. Comparing the whole string flagged 95 innocent pages on a real site.
       // Compare the SUBJECT instead: drop the brand suffix and the qualifier, then ask
       // whether any distinctive word of it appears on the page at all.
-      if (name) {
+      // ...and only for types that MARK UP THE PAGE'S CONTENT. Google's "don't mark up
+      // content that is not visible" rule governs those. It does not govern the entity
+      // graph: an Organization, its founder Person, the WebSite node or a BreadcrumbList
+      // describe the publisher and are correct on every page whether or not that page
+      // names them. Measured on a live 804-page site, treating the founder's Person node
+      // as an unmet page subject produced 842 high findings against correct markup — and
+      // "remove it" would have been the exact wrong fix, since that node is what ties the
+      // brand to a named human for entity resolution.
+      const CONTENT_TYPES = new Set(["Product", "Review", "Recipe", "Event", "Course", "JobPosting", "SoftwareApplication", "Book", "Movie", "Article", "NewsArticle", "BlogPosting", "HowTo", "VideoObject", "Offer", "Service"]);
+      if (name && b.types.some((t) => CONTENT_TYPES.has(t))) {
         const subject = name.split("|")[0].split("·")[0].split("—")[0].trim();
         const tokens = subject.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 4);
         const text = x.html!.textContent.toLowerCase();
@@ -211,6 +237,11 @@ export const checks: Record<string, Check> = {
     const h = x.html!.hreflang;
     if (!h.length) return [];
     const out: Finding[] = [];
+    // hreflang is read on the CANONICAL URL, so the set is judged there and not on
+    // whichever variant the crawler happened to fetch. A parameter variant is not a member
+    // of the set and must not list itself — on two live bilingual sites that single
+    // confusion produced 256 "missing self-reference" findings against correct markup.
+    if (isVariant(x)) return out;   // the canonical target is crawled on its own and carries the verdict
     const self = h.some((e) => norm(e.href) === norm(x.page.finalUrl));
     if (!self) out.push(f("i18n.hreflang_no_self", "medium", `${x.page.finalUrl} hreflang set lacks a self-reference`, { hreflang: h }, "Google requires each page in the set to list itself; otherwise the annotations are ignored.", { url: x.page.finalUrl }));
     if (!h.some((e) => e.lang.toLowerCase() === "x-default")) out.push(f("i18n.hreflang_no_xdefault", "low", `${x.page.finalUrl} hreflang has no x-default`, {}, "x-default governs unmatched locales; optional but recommended.", { url: x.page.finalUrl }));
@@ -223,7 +254,13 @@ export const checks: Record<string, Check> = {
   "performance.weight": (r) => r.records.filter((x) => x.page.status === 200 && x.page.bytes > 300_000).map((x) =>
     f("performance.html_weight", "low", `${x.page.finalUrl} HTML is ${Math.round(x.page.bytes / 1024)} KB`, { bytes: x.page.bytes, fetchMs: x.page.fetchMs }, "Heavy HTML delays LCP; Core Web Vitals need field data (CrUX/GSC) for a real verdict — this is a lab hint only.", { url: x.page.finalUrl, label: "INFERENCE" })),
 
-  "soft404": (r) => r.records.filter(htmlOk).filter((x) => /\b(404|not found|sayfa bulunamadı|bulunamadı)\b/i.test(x.html!.title ?? "") || (x.html!.wordCount < 40 && /\b(not found|bulunamadı)\b/i.test(x.html!.textContent))).map((x) =>
+  // A title is never enough on its own: "404 Magni" is the name of a real photographic
+  // series, and matching the bare token flagged two fully-built portfolio pages as soft
+  // 404s. A genuine soft 404 is a near-empty page, so the body has to corroborate the
+  // title before anything is reported.
+  "soft404": (r) => r.records.filter(htmlOk).filter((x) =>
+    (/\b(404|not found|sayfa bulunamadı|bulunamadı)\b/i.test(x.html!.title ?? "") && x.html!.wordCount < 150)
+    || (x.html!.wordCount < 40 && /\b(not found|bulunamadı)\b/i.test(x.html!.textContent))).map((x) =>
     f("indexability.soft_404", "medium", `${x.page.finalUrl} looks like a 404 page but returns 200`, { title: x.html!.title }, "Soft 404s waste crawl budget and can be indexed as junk.", { url: x.page.finalUrl, label: "INFERENCE", fixHint: "Return a real 404/410 status." })),
 };
 
