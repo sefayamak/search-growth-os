@@ -1,9 +1,11 @@
 # PAM İstanbul — SEO/AEO/GEO/LLMO referans uygulaması
 
-Ölçüm 2026-09-21, depo kaynağından (804 HTML). Canlı HTTP doğrulaması bu
-oturumdan yapılamadı: egress proxy pamistanbul.com ve pamaistudio.com dahil
-tüm dış alan adlarını blokluyor. Canlı doğrulama GitHub Actions runner'ından
-yapılır; aşağıdaki her satır **dosya düzeyinde** kanıtlanmıştır.
+Ölçüm 2026-09-21, depo kaynağından (804 HTML) **ve canlı HTTP ile**.
+
+Geliştirme ortamı dışarı çıkamıyor — egress proxy pamistanbul.com ve
+pamaistudio.com dahil tüm dış alan adlarını blokluyor. Bu yüzden canlı
+doğrulama için GitHub Actions runner'ında koşan bir checker yazıldı; 74
+cross-domain canonical hedefinin tamamı oradan ölçüldü (aşağıda).
 
 Bu dosya diğer altı siteye uygulanacak yöntemin referansıdır.
 
@@ -72,9 +74,22 @@ eklenirse → FAIL (PR #59 kuralı)".
 | Dil eşleşmesi doğru (TR→TR, EN→EN) | **74 / 74** |
 | pamistanbul sitemap'inde | **0 / 74** (doğru) |
 | İç link alan (UX rolü var) | **74 / 74** — 54'ü 5+ link |
+| **Canlı HTTP 200** | **74 / 74** |
+| **Yönlendirme sayısı** | **0** (hiçbirinde) |
+| **SEO hatası / altyapı hatası** | **0 / 0** |
 
 Hiçbiri REDIRECT CANDIDATE değil: hepsi navigasyonda gerçek rol oynuyor.
 Bu sayfalara hreflang EKLENMEZ — canonical'la çelişir.
+
+Canlı doğrulama `tools/audit/cross-domain-canonical-live.mjs` ile yapıldı
+(pamistanbul-site deposu, Actions run 35575489680):
+
+```
+toplam 74 · SEO hatası 0 · altyapı hatası 0
+```
+
+Bu kontrol artık haftalık koşuyor ve kırılırsa tek bir GitHub issue açıp
+onu güncelliyor. Geçici ağ hatası alarm üretmiyor.
 
 ## İnce içerik — 227 sayfa, karar: KEEP
 
