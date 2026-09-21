@@ -16,7 +16,17 @@ export const ROBOTS_TOKEN = "SearchGrowthOS";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export async function fetchPage(url: string, opts: Pick<CrawlOptions, "userAgent" | "timeoutMs">): Promise<FetchedPage> {
+type Alias = CrawlOptions["originAlias"];
+const swap = (url: string, from: string, to: string) => (url === from || url.startsWith(from + "/") ? to + url.slice(from.length) : url);
+/** Production URL in, transport URL out. Only the bytes move: everything the audit
+ *  reasons about stays in production URL space (see CrawlOptions.originAlias). */
+export const transportUrl = (url: string, a: Alias) => (a ? swap(url, a.from, a.to) : url);
+/** The inverse, for a Location header the local server answers with. Without it a single
+ *  redirect would drag the rest of the crawl into localhost space and every canonical
+ *  after it would read as a cross-host defect. */
+export const productionUrl = (url: string, a: Alias) => (a ? swap(url, a.to, a.from) : url);
+
+export async function fetchPage(url: string, opts: Pick<CrawlOptions, "userAgent" | "timeoutMs" | "originAlias">): Promise<FetchedPage> {
   const chain: FetchedPage["redirectChain"] = [];
   let current = url;
   const t0 = performance.now();
@@ -24,7 +34,7 @@ export async function fetchPage(url: string, opts: Pick<CrawlOptions, "userAgent
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs);
     try {
-      const res = await fetch(current, {
+      const res = await fetch(transportUrl(current, opts.originAlias), {
         redirect: "manual", signal: ctrl.signal,
         headers: { "user-agent": opts.userAgent, accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.5" },
       });
@@ -32,9 +42,9 @@ export async function fetchPage(url: string, opts: Pick<CrawlOptions, "userAgent
       res.headers.forEach((v, k) => { headers[k] = v; });
       if (res.status >= 300 && res.status < 400 && headers.location) {
         chain.push({ url: current, status: res.status });
-        const next = absolutize(headers.location, current);
+        const next = absolutize(headers.location, transportUrl(current, opts.originAlias));
         if (!next) break;
-        current = next;
+        current = productionUrl(next, opts.originAlias);
         continue;
       }
       const contentType = headers["content-type"] ?? "";

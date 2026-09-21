@@ -60,6 +60,10 @@ export interface ImageRef {
   width?: string;
   height?: string;
   loading?: string;
+  /** The image's box is already reserved by CSS — an explicit `aspect-ratio`, or a
+   *  next/image `fill` stretched inside a sized parent. Such an image cannot shift the
+   *  layout, so width/height add nothing (and next/image rejects them in fill mode). */
+  reservesSpace?: boolean;
 }
 
 export interface JsonLdBlock {
@@ -121,6 +125,12 @@ export interface CrawlOptions {
   respectRobots: boolean;
   timeoutMs: number;
   sameHostOnly: boolean;
+  /** Pre-deploy mode. Every URL keeps its PRODUCTION origin everywhere the audit reasons
+   *  about it — canonicals, sitemap membership, hreflang, same-host link following — but
+   *  the bytes are fetched from `to` instead of `from`. That is what lets a build be
+   *  audited in its own URL space before it ships; rewriting the URLs themselves would
+   *  make every absolute canonical look like a cross-host defect and hide the real ones. */
+  originAlias?: { from: string; to: string };
 }
 
 export interface CrawlResult {
