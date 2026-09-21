@@ -198,7 +198,7 @@ async function main() {
     // uretmez, tahmin etmez. Amaci, neyin olculebildigini ve neyin hala
     // baglanmadigini tek bakista gostermek.
     case "measure": {
-      const { periods, brandPatterns } = await import("./measure.ts");
+      const { periods, brandPatterns, splitByBrand } = await import("./measure.ts");
       const { searchConsole, ga4 } = await import("./adapters/index.ts");
       const reg = loadRegistry(args[1] ?? "config/sites.yaml");
       if (!reg.ok || !reg.registry) { console.error(reg.errors.join("\n")); process.exitCode = 1; return; }
@@ -215,14 +215,68 @@ async function main() {
         console.log(`${site.id}`);
         console.log(`  GSC property : ${prop}`);
         console.log(`  GA4 property : ${ga}`);
-        console.log(`  marka deseni : ${brandPatterns(site).join(" · ") || "(yok — brand_entities boş)"}`);
-        // Veri cekilmiyor: adapter null donuyor ve bu katman onu sifira cevirmiyor.
-        console.log(`  veri         : NOT_CONNECTED`);
+        const patterns = brandPatterns(site);
+        console.log(`  marka deseni : ${patterns.join(" · ") || "(yok — brand_entities boş)"}`);
+
+        // Gercek olcum. Iki sebep ayri ayri raporlanir ve BIRBIRINE
+        // karistirilmaz: kimligin olmamasi (portfoyun tamami icin tek bir
+        // eksik) ile property'nin registry'de bilinmemesi (o siteye ozel)
+        // farkli islerdir; ikisini "NOT_CONNECTED" diye tek torbaya koymak,
+        // hangisini duzeltecegini gizler.
+        if (gsc.state === "NOT_CONNECTED") { console.log(`  veri         : NOT_CONNECTED — ${gsc.envVar} yok`); continue; }
+        if (!prop || prop === "NOT_CONNECTED" || prop === "UNKNOWN") { console.log(`  veri         : NOT_CONNECTED — registry'de google_search_console_property yok`); continue; }
+        try {
+          const [now, then] = await Promise.all([
+            searchConsole.searchAnalytics(prop, p.current, ["query"]),
+            searchConsole.searchAnalytics(prop, p.yearAgo, ["query"]),
+          ]);
+          if (now === null) { console.log(`  veri         : NOT_CONNECTED — kimlik okunamadı`); continue; }
+          const a = splitByBrand(now, patterns);
+          const b = then ? splitByBrand(then, patterns) : null;
+          // Yuzde degisim yalnizca onceki donem SIFIR DEGILSE anlamlidir;
+          // 0'dan buyumeyi "%∞" diye yazmak raporu gurultuye cevirir.
+          const delta = (cur: number, prev: number) => (b === null ? "" : prev === 0 ? (cur === 0 ? "  (=)" : "  (yeni)") : `  (${cur >= prev ? "+" : ""}${(((cur - prev) / prev) * 100).toFixed(0)}% YoY)`);
+          const line = (label: string, t: { clicks: number; impressions: number; position: number; queries: number }, prev?: { clicks: number }) =>
+            console.log(`  ${label.padEnd(13)}: ${t.clicks} tık · ${t.impressions} gösterim · ort. ${t.position.toFixed(1)} · ${t.queries} sorgu${prev ? delta(t.clicks, prev.clicks) : ""}`);
+          line("toplam", a.all, b?.all);
+          line("marka", a.brand, b?.brand);
+          line("marka dışı", a.nonBrand, b?.nonBrand);
+        } catch (e) {
+          // Yetki hatasi "veri yok" gibi gosterilmez: servis hesabi
+          // property'ye eklenmemisse duzeltilecek sey budur.
+          console.log(`  veri         : HATA — ${(e as Error).message}`);
+        }
       }
       return;
     }
+    // Salt-okunur duman testi. "Env dolu" ile "API cevap veriyor" ayri
+    // seylerdir; servis hesabi property'ye eklenmemisse tek gorunen sey
+    // budur ve sessizce sifir trafik gibi okunmamalidir.
+    case "smoke": {
+      const gscC = await import("./adapters/gsc.ts");
+      const ga4C = await import("./adapters/ga4.ts");
+      const reg = loadRegistry(args[1] ?? "config/sites.yaml");
+      if (!reg.ok || !reg.registry) { console.error(reg.errors.join("\n")); process.exitCode = 1; return; }
+      let bad = 0;
+      for (const site of reg.registry.sites) {
+        const prop = String(site.google_search_console_property);
+        const ga = String(site.ga4_property);
+        if (prop && prop !== "NOT_CONNECTED" && prop !== "UNKNOWN") {
+          const r = await gscC.smokeTest(prop);
+          console.log(`${r.ok ? "OK  " : "FAIL"} GSC ${site.id} ${prop} — ${r.reason}`);
+          if (!r.ok) bad++;
+        }
+        if (ga && ga !== "NOT_CONNECTED" && ga !== "UNKNOWN") {
+          const r = await ga4C.smokeTest(ga);
+          console.log(`${r.ok ? "OK  " : "FAIL"} GA4 ${site.id} ${ga} — ${r.reason}`);
+          if (!r.ok) bad++;
+        }
+      }
+      if (bad) process.exitCode = 1;
+      return;
+    }
     default:
-      console.error("commands: crawl | audit | compliance | registry | integrations | measure | portfolio | llmstxt");
+      console.error("commands: crawl | audit | compliance | registry | integrations | measure | smoke | portfolio | llmstxt");
       process.exitCode = 1;
   }
 }
