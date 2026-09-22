@@ -1,6 +1,6 @@
 # Ölçüm — 2026-09-22
 
-Üreten: `.github/workflows/measure.yml` · run 35701383513 · commit 2f00181fd361cbfd6d3d4675f686af9c27cd209d
+Üreten: `.github/workflows/measure.yml` · run 35707000243 · commit 40f516f5f5deb5bda9f21d21e5b6797309a00d84
 
 NOT_CONNECTED yazan satır ölçülemedi demektir, sıfır demek DEĞİLDİR.
 
@@ -37,49 +37,56 @@ pamistanbul
   GSC property : sc-domain:pamistanbul.com
   GA4 property : 426911036
   marka deseni : pam istanbul · pamistanbul · pamistanbul com
-  toplam       : 204 tık · 58071 gösterim · ort. 3.5 · 1533 sorgu  (+920% YoY)
+  toplam       : 539 tık · 84163 gösterim · ort. 4.6 · 1533 sorgu  (+729% YoY)
+  (not: marka/marka-dışı ayrımı 26092 gösterimlik düşük-hacimli kuyruğu kapsamıyor — GSC sorgu satırı üretmiyor)
   marka        : 45 tık · 74 gösterim · ort. 2.8 · 2 sorgu  (+309% YoY)
   marka dışı   : 159 tık · 57997 gösterim · ort. 3.5 · 1531 sorgu  (+1667% YoY)
 pamaistudio
   GSC property : sc-domain:pamaistudio.com
   GA4 property : 537055021
   marka deseni : pam ai studio · pam istanbul · pamaistudio · pamaistudio com
-  toplam       : 0 tık · 319 gösterim · ort. 13.8 · 63 sorgu  (=)
+  toplam       : 20 tık · 1692 gösterim · ort. 9.1 · 63 sorgu  (yeni)
+  (not: marka/marka-dışı ayrımı 1373 gösterimlik düşük-hacimli kuyruğu kapsamıyor — GSC sorgu satırı üretmiyor)
   marka        : 0 tık · 34 gösterim · ort. 9.6 · 1 sorgu  (=)
   marka dışı   : 0 tık · 285 gösterim · ort. 14.3 · 62 sorgu  (=)
 spryhand
   GSC property : sc-domain:spryhand.com
   GA4 property : 551083665
   marka deseni : spryhand · spryhand com
-  toplam       : 0 tık · 2733 gösterim · ort. 66.7 · 716 sorgu  (=)
+  toplam       : 3 tık · 3970 gösterim · ort. 64.3 · 716 sorgu  (yeni)
+  (not: marka/marka-dışı ayrımı 1237 gösterimlik düşük-hacimli kuyruğu kapsamıyor — GSC sorgu satırı üretmiyor)
   marka        : 0 tık · 0 gösterim · ort. 0.0 · 0 sorgu  (=)
   marka dışı   : 0 tık · 2733 gösterim · ort. 66.7 · 716 sorgu  (=)
 decideplan
   GSC property : sc-domain:decideplan.com
   GA4 property : 550748133
   marka deseni : decideplan · decideplan com
-  toplam       : 0 tık · 422 gösterim · ort. 74.8 · 208 sorgu  (=)
+  toplam       : 0 tık · 706 gösterim · ort. 63.6 · 208 sorgu  (=)
+  (not: marka/marka-dışı ayrımı 284 gösterimlik düşük-hacimli kuyruğu kapsamıyor — GSC sorgu satırı üretmiyor)
   marka        : 0 tık · 0 gösterim · ort. 0.0 · 0 sorgu  (=)
   marka dışı   : 0 tık · 422 gösterim · ort. 74.8 · 208 sorgu  (=)
 rightlisted
   GSC property : sc-domain:rightlisted.com
   GA4 property : 550073067
   marka deseni : rightlisted · rightlisted com
-  toplam       : 0 tık · 279 gösterim · ort. 64.7 · 53 sorgu  (=)
+  toplam       : 1 tık · 482 gösterim · ort. 50.6 · 53 sorgu  (yeni)
+  (not: marka/marka-dışı ayrımı 203 gösterimlik düşük-hacimli kuyruğu kapsamıyor — GSC sorgu satırı üretmiyor)
   marka        : 0 tık · 0 gösterim · ort. 0.0 · 0 sorgu  (=)
   marka dışı   : 0 tık · 279 gösterim · ort. 64.7 · 53 sorgu  (=)
 untitledportraits
   GSC property : sc-domain:untitledportraits.com
   GA4 property : 543604651
   marka deseni : sefa yamak · untitled portraits · untitledportraits · untitledportraits com
-  toplam       : 2 tık · 180 gösterim · ort. 33.4 · 38 sorgu  (yeni)
+  toplam       : 8 tık · 653 gösterim · ort. 18.3 · 38 sorgu  (yeni)
+  (not: marka/marka-dışı ayrımı 473 gösterimlik düşük-hacimli kuyruğu kapsamıyor — GSC sorgu satırı üretmiyor)
   marka        : 1 tık · 16 gösterim · ort. 7.9 · 1 sorgu  (yeni)
   marka dışı   : 1 tık · 164 gösterim · ort. 35.9 · 37 sorgu  (yeni)
 myhappymade
   GSC property : sc-domain:myhappymade.com
   GA4 property : 540424289
   marka deseni : myhappymade · myhappymade com
-  toplam       : 0 tık · 17 gösterim · ort. 16.2 · 15 sorgu  (=)
+  toplam       : 3 tık · 165 gösterim · ort. 8.6 · 15 sorgu  (yeni)
+  (not: marka/marka-dışı ayrımı 148 gösterimlik düşük-hacimli kuyruğu kapsamıyor — GSC sorgu satırı üretmiyor)
   marka        : 0 tık · 0 gösterim · ort. 0.0 · 0 sorgu  (=)
   marka dışı   : 0 tık · 17 gösterim · ort. 16.2 · 15 sorgu  (=)
 ```
@@ -223,4 +230,48 @@ En değerli bölüm **sıfır tıklı ağırlık**: çok gösterim alıp hiç t�
         9 gos ·     0 tik · TO  0.00% · sira   7.0  https://www.untitledportraits.com/en/photographer-with-production-team
         9 gos ·     0 tik · TO  0.00% · sira  21.8  https://www.untitledportraits.com/en/series/india-editions
         9 gos ·     0 tik · TO  0.00% · sira   6.2  https://www.untitledportraits.com/tr/blog/fine-art-baski-nasil-satin-alinir
+```
+
+## Konu fırsatı — 7 site
+
+Google Trends ya da bir rakip analizi DEĞİL — sitenin kendi GSC verisinde,
+zaten görünüp tıklanmayan gerçek sorgular. Bu bir yayın listesi değil,
+"buraya bak" listesi: hangisinin içeriğe dönüşeceğine insan karar verir.
+
+```
+
+=== pamistanbul — 2026-08-24..2026-09-20
+  [YENİ          ]   3418 gös · sıra   9.4 · skor   363  "gemini ile fotoğraf yapma"
+  [YENİ          ]   1502 gös · sıra   8.2 · skor   184  "gemini fotoğraf yapma"
+  [YENİ          ]    594 gös · sıra   7.5 · skor    79  "kikis"
+  [YENİ          ]    374 gös · sıra   7.9 · skor    48  "gemini ai foto"
+  [YENİ          ]    301 gös · sıra   9.5 · skor    32  "seda sayan reklam"
+  [YENİ          ]    254 gös · sıra   9.2 · skor    28  "chatgpt görsel oluşturma"
+  [YENİ          ]    210 gös · sıra  10.0 · skor    21  "prodüksiyon"
+  [YENİ          ]    152 gös · sıra   7.5 · skor    20  "comfyui nedir"
+  [YENİ          ]    142 gös · sıra   7.3 · skor    19  "seda sayan ın oynadığı reklam"
+  [YENİ          ]    114 gös · sıra   6.1 · skor    19  "kikis corner"
+
+=== pamaistudio — 2026-08-24..2026-09-20
+  [YENİ          ]     40 gös · sıra  10.3 · skor     4  "harika şeyler dükkanı"
+  [YENİ          ]     21 gös · sıra   5.9 · skor     4  "high-efficiency & high-quality production with midjourney & stable diffusion"
+  [YENİ          ]     23 gös · sıra   7.0 · skor     3  "pam studio"
+  [YENİ          ]     58 gös · sıra  22.2 · skor     3  "midjourney vs stable diffusion"
+
+=== spryhand — 2026-08-24..2026-09-20
+  [YENİ          ]    121 gös · sıra  22.7 · skor     5  "rental property spreadsheet"
+  [YENİ          ]     64 gös · sıra  19.6 · skor     3  "rental property excel spreadsheet"
+  [YENİ          ]     32 gös · sıra  19.2 · skor     2  "rent spreadsheet"
+
+=== decideplan — 2026-08-24..2026-09-20
+  bu esiklerde fikir yok (gosterim/sira sinirlarini gormek icin --top artir)
+
+=== rightlisted — 2026-08-24..2026-09-20
+  bu esiklerde fikir yok (gosterim/sira sinirlarini gormek icin --top artir)
+
+=== untitledportraits — 2026-08-24..2026-09-20
+  bu esiklerde fikir yok (gosterim/sira sinirlarini gormek icin --top artir)
+
+=== myhappymade — 2026-08-24..2026-09-20
+  bu esiklerde fikir yok (gosterim/sira sinirlarini gormek icin --top artir)
 ```
