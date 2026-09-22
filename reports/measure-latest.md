@@ -1,6 +1,6 @@
 # Ölçüm — 2026-09-22
 
-Üreten: `.github/workflows/measure.yml` · run 35700325531 · commit 18faead5b4161a798fb6cb5baae79569cb2e20ec
+Üreten: `.github/workflows/measure.yml` · run 35701383513 · commit 2f00181fd361cbfd6d3d4675f686af9c27cd209d
 
 NOT_CONNECTED yazan satır ölçülemedi demektir, sıfır demek DEĞİLDİR.
 
@@ -30,8 +30,8 @@ dönemler  : son 28 gün 2026-08-24..2026-09-20
             önceki 28 gün 2026-07-27..2026-08-23
             geçen yıl aynı dönem 2025-08-25..2025-09-21
 
-Search Console : UNKNOWN — credential present; client implemented — run smokeTest() to confirm the property grant
-GA4            : UNKNOWN — credential present; client implemented — run smokeTest() to confirm the property grant
+Search Console : CONNECTED — live call succeeded in this run
+GA4            : UNKNOWN — credential present; no live call attempted yet in this run
 
 pamistanbul
   GSC property : sc-domain:pamistanbul.com
@@ -82,4 +82,145 @@ myhappymade
   toplam       : 0 tık · 17 gösterim · ort. 16.2 · 15 sorgu  (=)
   marka        : 0 tık · 0 gösterim · ort. 0.0 · 0 sorgu  (=)
   marka dışı   : 0 tık · 17 gösterim · ort. 16.2 · 15 sorgu  (=)
+```
+
+## Kırılım — gelir siteleri
+
+En değerli bölüm **sıfır tıklı ağırlık**: çok gösterim alıp hiç tıklanmayan sorgular.
+
+```
+
+=== pamistanbul — 2026-08-24..2026-09-20
+  toplam: 58071 gosterim · 204 tik · TO 0.35%
+
+  SIFIR TIKLI AGIRLIK: 16230 gosterim (27.9%), 1460 sorgu
+     1800 gos ·     0 tik · TO  0.00% · sira   1.0  داملاسو ایکیزوغلو
+     1281 gos ·     0 tik · TO  0.00% · sira   1.0  turan cihan şimşek
+     1035 gos ·     0 tik · TO  0.00% · sira   1.0  damlasu ikizoglu
+      993 gos ·     0 tik · TO  0.00% · sira   1.0  turhan cihan şimşek
+      594 gos ·     0 tik · TO  0.00% · sira   7.5  kikis
+      315 gos ·     0 tik · TO  0.00% · sira   1.0  داملاسو ایکیزاوغلو
+      301 gos ·     0 tik · TO  0.00% · sira   9.5  seda sayan reklam
+      250 gos ·     0 tik · TO  0.00% · sira   1.1  damla su ikizoğlu
+      210 gos ·     0 tik · TO  0.00% · sira  10.0  prodüksiyon
+      184 gos ·     0 tik · TO  0.00% · sira   1.0  damla su ikizoglu
+      152 gos ·     0 tik · TO  0.00% · sira   7.5  comfyui nedir
+      142 gos ·     0 tik · TO  0.00% · sira   7.3  seda sayan ın oynadığı reklam
+      132 gos ·     0 tik · TO  0.00% · sira   7.2  fotoğrafçı
+      123 gos ·     0 tik · TO  0.00% · sira   1.6  damla ikizoğlu
+      114 gos ·     0 tik · TO  0.00% · sira   6.1  kikis corner
+
+  TIK GETIREN SORGULAR (ilk 15)
+       72 gos ·    45 tik · TO 62.50% · sira   2.8  pam istanbul
+     3418 gos ·    24 tik · TO  0.70% · sira   9.4  gemini ile fotoğraf yapma
+    11573 gos ·    13 tik · TO  0.11% · sira   1.1  damlasu ikizoğlu
+     1502 gos ·    13 tik · TO  0.87% · sira   8.2  gemini fotoğraf yapma
+     1207 gos ·     9 tik · TO  0.75% · sira   4.4  promo filmi
+       13 gos ·     6 tik · TO 46.15% · sira   3.9  pam studio
+      255 gos ·     5 tik · TO  1.96% · sira   4.1  emre başaran
+       21 gos ·     5 tik · TO 23.81% · sira   4.9  istanbul çekim stüdyoları
+       60 gos ·     4 tik · TO  6.67% · sira   1.9  pre ppm ne demek
+       17 gos ·     3 tik · TO 17.65% · sira   4.4  moodboard magazine
+        5 gos ·     3 tik · TO 60.00% · sira   1.2  promo filmin
+       24 gos ·     3 tik · TO 12.50% · sira   3.8  sefa yamak
+       45 gos ·     3 tik · TO  6.67% · sira   3.0  çekim stüdyosu
+       28 gos ·     2 tik · TO  7.14% · sira   4.6  emre basaran
+       44 gos ·     2 tik · TO  4.55% · sira   3.0  emre başaran kimdir
+
+  GOSTERIME GORE SAYFALAR (ilk 15)
+    22643 gos ·     4 tik · TO  0.02% · sira   1.0  https://pamistanbul.com/en/projects/cihan-simsek
+    18377 gos ·    15 tik · TO  0.08% · sira   1.2  https://pamistanbul.com/projects/damlasu-ikizoglu
+    11407 gos ·    72 tik · TO  0.63% · sira   8.5  https://pamistanbul.com/pamlab/gemini-ai-fotograf-yapma-rehberi
+     2815 gos ·    14 tik · TO  0.50% · sira   7.8  https://pamistanbul.com/pamlab/chatgpt-ile-gorsel-olusturma-dall-e-rehberi
+     1521 gos ·    69 tik · TO  4.54% · sira  10.2  https://pamistanbul.com/
+     1510 gos ·    38 tik · TO  2.52% · sira  11.4  https://pamistanbul.com/studyo
+     1436 gos ·    29 tik · TO  2.02% · sira   7.3  https://pamistanbul.com/pamlab/chatgpt-urun-fotografi-prompt-rehberi
+     1435 gos ·    13 tik · TO  0.91% · sira   4.2  https://pamistanbul.com/en/pamlab/dall-e-3-editing-inpainting-guide-2026
+     1280 gos ·    15 tik · TO  1.17% · sira   4.3  https://pamistanbul.com/promo-filmi
+     1180 gos ·     3 tik · TO  0.25% · sira   7.9  https://pamistanbul.com/video/baby-turco-seda-sayan
+     1050 gos ·     7 tik · TO  0.67% · sira   7.4  https://pamistanbul.com/en/pamlab/comfyui-beginners-guide-2026
+      807 gos ·    18 tik · TO  2.23% · sira   6.1  https://pamistanbul.com/pamlab/ucretsiz-ai-seslendirme-araclari-2026
+      662 gos ·     3 tik · TO  0.45% · sira   8.9  https://pamistanbul.com/en/pamlab/production-company-vs-agency-vs-studio
+      622 gos ·    12 tik · TO  1.93% · sira   8.8  https://pamistanbul.com/en/pamlab/stable-diffusion-free-open-source-ai-image
+      560 gos ·     5 tik · TO  0.89% · sira   3.7  http://www.pamistanbul.com/
+
+=== pamaistudio — 2026-08-24..2026-09-20
+  toplam: 319 gosterim · 0 tik · TO 0.00%
+
+  SIFIR TIKLI AGIRLIK: 319 gosterim (100.0%), 63 sorgu
+       58 gos ·     0 tik · TO  0.00% · sira  22.2  midjourney vs stable diffusion
+       40 gos ·     0 tik · TO  0.00% · sira  10.3  harika şeyler dükkanı
+       34 gos ·     0 tik · TO  0.00% · sira   9.6  pam istanbul
+       23 gos ·     0 tik · TO  0.00% · sira   7.0  pam studio
+       21 gos ·     0 tik · TO  0.00% · sira   5.9  high-efficiency & high-quality production with midjourney & stable diffusion
+       17 gos ·     0 tik · TO  0.00% · sira   7.0  kozmetik alanında ai trendleri
+       11 gos ·     0 tik · TO  0.00% · sira  17.9  stable diffusion vs midjourney
+        7 gos ·     0 tik · TO  0.00% · sira   5.3  what are the pros and cons of alternatives to hand-drawn storyboards (like animatics, photo boards, shot lists) and when should i use each
+        6 gos ·     0 tik · TO  0.00% · sira   3.8  high-efficiency & high-quality production with midjourney and stable diffusion
+        6 gos ·     0 tik · TO  0.00% · sira  13.8  is midjourney stable diffusion
+        5 gos ·     0 tik · TO  0.00% · sira  48.2  ai pam
+        5 gos ·     0 tik · TO  0.00% · sira   9.4  ajanslar için maya ai profound'dan iyi mi
+        5 gos ·     0 tik · TO  0.00% · sira   4.6  comyui da en iyi kaliteyi veren sampler
+        5 gos ·     0 tik · TO  0.00% · sira   4.4  midjourney / flux.1
+        4 gos ·     0 tik · TO  0.00% · sira  24.8  moodboard oluşturma
+
+  TIK GETIREN SORGULAR (ilk 15)
+
+  GOSTERIME GORE SAYFALAR (ilk 15)
+      450 gos ·     0 tik · TO  0.00% · sira  11.9  https://pamaistudio.com/en/lab/midjourney-vs-stable-diffusion
+      176 gos ·     3 tik · TO  1.70% · sira   8.6  https://pamaistudio.com/en
+       85 gos ·     0 tik · TO  0.00% · sira   7.0  https://pamaistudio.com/en/lab/ai-commercial-film-production
+       74 gos ·     0 tik · TO  0.00% · sira   5.0  https://pamaistudio.com/en/lab/what-is-flux-ai-vs-midjourney
+       73 gos ·     6 tik · TO  8.22% · sira   8.2  https://pamaistudio.com/
+       51 gos ·     0 tik · TO  0.00% · sira   8.6  https://pamaistudio.com/en/lab/sora-vs-kling-vs-runway-2026
+       50 gos ·     0 tik · TO  0.00% · sira   9.1  https://pamaistudio.com/en/lab/nano-banana-gemini-2-5-brand-visuals
+       49 gos ·     0 tik · TO  0.00% · sira   5.7  https://pamaistudio.com/en/lab/what-is-ai-visual-production
+       47 gos ·     0 tik · TO  0.00% · sira   8.0  https://pamaistudio.com/lab/kozmetik-marka-ai-gorsel
+       46 gos ·     0 tik · TO  0.00% · sira  10.1  https://pamaistudio.com/filmler/the-wonderful-things-shop
+       36 gos ·     0 tik · TO  0.00% · sira  11.0  https://pamaistudio.com/lab/eticaret-icin-ai-gorsel
+       35 gos ·     2 tik · TO  5.71% · sira   8.1  https://pamaistudio.com/lab/chatgpt-ile-urun-gorseli-nasil-uretilir
+       33 gos ·     1 tik · TO  3.03% · sira   8.5  https://pamaistudio.com/en/lab/what-is-comfyui-brand-production-workflow
+       32 gos ·     0 tik · TO  0.00% · sira  12.1  https://pamaistudio.com/en/lab/google-imagen-4-brand-visuals-guide
+       29 gos ·     2 tik · TO  6.90% · sira   5.3  https://pamaistudio.com/lab/trendyol-hepsiburada-ai-urun-gorseli
+
+=== untitledportraits — 2026-08-24..2026-09-20
+  toplam: 180 gosterim · 2 tik · TO 1.11%
+
+  SIFIR TIKLI AGIRLIK: 163 gosterim (90.6%), 36 sorgu
+       46 gos ·     0 tik · TO  0.00% · sira  62.3  school photography brief
+       21 gos ·     0 tik · TO  0.00% · sira  47.3  product photography brief
+       18 gos ·     0 tik · TO  0.00% · sira  11.9  photoshoot brief
+       12 gos ·     0 tik · TO  0.00% · sira   8.1  portraits varanasi
+        5 gos ·     0 tik · TO  0.00% · sira  16.8  diverse model photography without casting
+        5 gos ·     0 tik · TO  0.00% · sira  14.4  portrait varanasi
+        5 gos ·     0 tik · TO  0.00% · sira   9.8  shooting brief
+        4 gos ·     0 tik · TO  0.00% · sira  15.8  moodboardmag.ru
+        4 gos ·     0 tik · TO  0.00% · sira   9.5  shoot brief
+        3 gos ·     0 tik · TO  0.00% · sira  54.7  briefing photography
+        3 gos ·     0 tik · TO  0.00% · sira  19.0  how to write a photoshoot brief
+        3 gos ·     0 tik · TO  0.00% · sira  17.3  portraits of india
+        3 gos ·     0 tik · TO  0.00% · sira  17.0  untitled photo
+        2 gos ·     0 tik · TO  0.00% · sira   5.0  balat istanbul street photography
+        2 gos ·     0 tik · TO  0.00% · sira  47.0  how to brief a photographer
+
+  TIK GETIREN SORGULAR (ilk 15)
+        1 gos ·     1 tik · TO 100.00% · sira  10.0  evet isterim
+       16 gos ·     1 tik · TO  6.25% · sira   7.9  sefa yamak
+
+  GOSTERIME GORE SAYFALAR (ilk 15)
+      212 gos ·     1 tik · TO  0.47% · sira  33.5  https://www.untitledportraits.com/en/blog/how-to-write-a-photoshoot-brief-for-your-brand
+       51 gos ·     3 tik · TO  5.88% · sira   9.6  https://www.untitledportraits.com/tr/blog/istanbulda-fotograf-cekilecek-en-iyi-yerler
+       45 gos ·     1 tik · TO  2.22% · sira   7.4  https://www.untitledportraits.com/
+       40 gos ·     1 tik · TO  2.50% · sira  15.5  https://www.untitledportraits.com/en/series/india
+       35 gos ·     0 tik · TO  0.00% · sira  13.0  https://www.untitledportraits.com/en/blog/model-agency-casting-vs-real-people-for-brand-shoots
+       30 gos ·     1 tik · TO  3.33% · sira   7.6  https://www.untitledportraits.com/en/blog/balat-photography-guide-istanbul
+       29 gos ·     0 tik · TO  0.00% · sira   6.9  https://www.untitledportraits.com/en/blog/lookbook-vs-campaign-vs-ecommerce-photography
+       25 gos ·     0 tik · TO  0.00% · sira   7.6  https://www.untitledportraits.com/en/series/nepal
+       16 gos ·     0 tik · TO  0.00% · sira   4.7  https://www.untitledportraits.com/en/about
+       16 gos ·     0 tik · TO  0.00% · sira  20.3  https://www.untitledportraits.com/en/commercial
+       13 gos ·     0 tik · TO  0.00% · sira  43.1  https://www.untitledportraits.com/en/collection
+       11 gos ·     0 tik · TO  0.00% · sira  10.7  https://www.untitledportraits.com/en/series/anatolia
+        9 gos ·     0 tik · TO  0.00% · sira   7.0  https://www.untitledportraits.com/en/photographer-with-production-team
+        9 gos ·     0 tik · TO  0.00% · sira  21.8  https://www.untitledportraits.com/en/series/india-editions
+        9 gos ·     0 tik · TO  0.00% · sira   6.2  https://www.untitledportraits.com/tr/blog/fine-art-baski-nasil-satin-alinir
 ```
