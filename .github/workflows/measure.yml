@@ -94,22 +94,28 @@ jobs:
           done
           cat detail.txt
 
-      # Konu fırsatı — GERÇEK TALEP, tahmin edilmiş "trend" DEĞİL. Google Trends,
-      # rakip analizi ya da başka bir dış kaynak yok. Site kendi GSC verisinde,
-      # insanların zaten arayıp siteyi zaten gördüğü ama tıklamadığı sorguları
-      # sıralıyor. Yalnızca "buraya bak" listesi — hiçbir şey yazmaz, deploy
-      # etmez, indekslemez. Karar insanda kalır.
+      # Konu fırsatı — her site için HER HAFTA TAM 2 konu. Önce KANIT: site
+      # kendi GSC verisinde, insanların zaten arayıp siteyi zaten gördüğü ama
+      # tıklamadığı sorgular. Yetmezse EDİTORYAL: registry'deki
+      # business_category'den (Sefa'nın kendi yazdığı "bu site ne satıyor"
+      # cümlesi) türetilmiş alıcı sorusu şekilli başlık. Google Trends, rakip
+      # analizi ya da başka bir dış "trend" kaynağı YOK — ikisi de ya ölçülmüş
+      # ya da sitenin kendi tanımından türetilmiş, hiçbiri tahmin değil.
       #
-      # content/topic-ledger.json depoda kalıcı: aynı fikir hafta hafta "yeni
+      # Yalnızca "buraya bak" listesi — hiçbir şey yazmaz, deploy etmez,
+      # indekslemez. Karar insanda kalır; yayına giden her yazı ayrıca insan
+      # onayından geçer.
+      #
+      # content/topic-ledger.json depoda kalıcı: aynı başlık hafta hafta "yeni
       # keşif" gibi gösterilmesin diye ilk görülme tarihini tutuyor.
-      - name: Konu fırsatı (7 site)
+      - name: Konu fırsatı — 2 konu / site / hafta
         continue-on-error: true
         env:
           SEARCH_GROWTH_GSC_CREDENTIALS_JSON: ${{ secrets.SEARCH_GROWTH_GSC_CREDENTIALS_JSON }}
         run: |
           set -o pipefail
           node --experimental-strip-types src/cli.ts topics config/sites.yaml \
-            --top 10 --ledger content/topic-ledger.json --write-ledger | tee topics.txt
+            --count 2 --top 10 --ledger content/topic-ledger.json --write-ledger | tee topics.txt
 
       - name: Raporu derle
         run: |
@@ -141,11 +147,13 @@ jobs:
             cat detail.txt 2>/dev/null || echo "(kırılım üretilemedi)"
             echo '```'
             echo
-            echo '## Konu fırsatı — 7 site'
+            echo '## Konu fırsatı — 7 site, haftada 2 konu'
             echo
-            echo "Google Trends ya da bir rakip analizi DEĞİL — sitenin kendi GSC verisinde,"
-            echo "zaten görünüp tıklanmayan gerçek sorgular. Bu bir yayın listesi değil,"
-            echo "\"buraya bak\" listesi: hangisinin içeriğe dönüşeceğine insan karar verir."
+            echo "KANIT: sitenin kendi GSC verisinde zaten görünüp tıklanmayan gerçek sorgu."
+            echo "EDİTORYAL: registry business_category'sinden türetilmiş öneri (GSC'de yeterli"
+            echo "hacim yoksa). İkisi de Google Trends veya rakip analizi DEĞİL. Bu bir yayın"
+            echo "listesi değil, \"buraya bak\" listesi — insan onayı olmadan hiçbiri yazıya"
+            echo "dönüşmez, dönüşse bile PR → CI → merge zincirinden geçer."
             echo
             echo '```'
             cat topics.txt 2>/dev/null || echo "(konu fırsatı üretilemedi)"

@@ -133,6 +133,104 @@ export function topicOpportunities(
   return out.sort((a, b) => b.score - a.score).slice(0, top);
 }
 
+export interface WeeklyTopic {
+  title: string;
+  titleTr?: string;   // yalnızca site hem TR hem EN taşıyorsa ve kaynak EDİTORYAL ise dolu
+  source: "kanit" | "editoryal";
+  note: string;
+}
+
+/**
+ * "How to choose X" gibi 4 sabit AÇI şablonu. Rastgele değil, hafta
+ * numarasına göre döner — aynı site aynı haftayı iki kez görmez ama
+ * çalıştırma çalıştırma farklı şey söylemez (determinizm, "her seferinde
+ * biraz başka sayı üretmek" hatasının aynısını önlemek için).
+ *
+ * Şablonlar bilerek listicle-yem değil: "nasıl seçilir", "hangi hatalar
+ * yapılıyor", "yeni başlayan rehberi", "gerçekte ne önemli" — dördü de
+ * gerçek alıcı sorusu, kelime sayısını şişirmek için değil.
+ */
+const ANGLE_TEMPLATES: { en: (s: string) => string; tr: (s: string) => string }[] = [
+  { en: (s) => `How to choose ${s}: a practical checklist`, tr: (s) => `${s} nasıl seçilir: pratik bir kontrol listesi` },
+  { en: (s) => `${s}: common mistakes and how to avoid them`, tr: (s) => `${s}: sık yapılan hatalar ve nasıl önlenir` },
+  { en: (s) => `${s}: a beginner's guide`, tr: (s) => `${s}: yeni başlayanlar için rehber` },
+  { en: (s) => `${s} — what actually matters`, tr: (s) => `${s} — gerçekten önemli olan ne` },
+];
+
+/** "budget decision tools — 19 spending categories..." -> "budget decision tools".
+ *  Em dash / parantezden sonrasını atar; kalan konu ÖZÜDÜR, cümlenin süsü değil. */
+function subjectFromCategory(businessCategory: string): string | null {
+  const cleaned = businessCategory.split(/[—(]/)[0].trim();
+  return cleaned || null;
+}
+
+const isoWeek = (d: Date): number => {
+  const t = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+  return Math.ceil(((t.getTime() - yearStart.getTime()) / 86_400_000 + 1) / 7);
+};
+
+/**
+ * EDİTORYAL konu üretimi — GSC sinyali OLMAYAN siteler için (henüz arama
+ * hacmi yok diye "hiçbir zaman konu önerme" doğru değil, ama bunu arama
+ * verisiymiş GİBİ SUNMAK yanlış olur).
+ *
+ * Kaynağı registry'deki `business_category` — Sefa'nın kendi yazdığı,
+ * sitenin GERÇEKTEN ne sattığını anlatan cümle. Dış bir trend kaynağı,
+ * rakip taraması ya da tahmin YOK; yalnızca "bu site ne satıyorsa, o
+ * konuda alıcı sorusu şekline sokulmuş bir başlık" üretiliyor.
+ *
+ * `business_category` boşsa (registry'de yoksa) hiçbir şey üretmez —
+ * yokluğu doldurmak için uydurmaz.
+ */
+export function editorialTopics(
+  site: Pick<SiteEntry, "business_category" | "primary_language" | "secondary_languages">,
+  weekIndex: number,
+  count = 2,
+): WeeklyTopic[] {
+  const subject = subjectFromCategory(site.business_category ?? "");
+  if (!subject) return [];
+  const langs = new Set([site.primary_language, ...(site.secondary_languages ?? [])].filter(Boolean));
+  const bilingual = langs.has("tr") && langs.has("en");
+  const primaryTr = site.primary_language === "tr" && !langs.has("en");
+  const out: WeeklyTopic[] = [];
+  for (let i = 0; i < count; i++) {
+    const tmpl = ANGLE_TEMPLATES[(weekIndex + i) % ANGLE_TEMPLATES.length];
+    out.push({
+      title: primaryTr ? tmpl.tr(subject) : tmpl.en(subject),
+      titleTr: bilingual ? tmpl.tr(subject) : undefined,
+      source: "editoryal",
+      note: `registry business_category'den türetildi ("${site.business_category}") — arama verisi DEĞİL, GSC henüz yeterli hacim göstermiyor. Yayına almadan önce insan onayı gerekiyor.`,
+    });
+  }
+  return out;
+}
+
+/**
+ * Haftalık iki konu — önce KANIT (GSC gap), yetmezse EDİTORYAL ile
+ * tamamlanır. İkisi asla birbirine karıştırılmaz: her satır kaynağını
+ * taşır. Kanıt satırları çeviri UYDURMAZ — sorgu hangi dilde görüldüyse
+ * o dilde kalır; site iki dilliyse bunun notu düşülür, metin üretilmez.
+ */
+export function weeklyTopics(
+  site: Pick<SiteEntry, "business_category" | "primary_language" | "secondary_languages">,
+  opps: TopicOpportunity[],
+  weekIndex: number,
+  count = 2,
+): WeeklyTopic[] {
+  const langs = new Set([site.primary_language, ...(site.secondary_languages ?? [])].filter(Boolean));
+  const bilingual = langs.has("tr") && langs.has("en");
+  const fromEvidence: WeeklyTopic[] = opps.slice(0, count).map((o) => ({
+    title: o.query,
+    source: "kanit",
+    note: `${o.impressions} gösterim, sıra ${o.position.toFixed(1)} — GSC'de zaten görünüyor, tıklanmıyor.` +
+      (bilingual ? " Site iki dilli; ikinci dile çevirisi de düşünülebilir (burada otomatik çevrilmedi)." : ""),
+  }));
+  if (fromEvidence.length >= count) return fromEvidence;
+  return [...fromEvidence, ...editorialTopics(site, weekIndex, count - fromEvidence.length)];
+}
+
 export type Measured<T> = { state: "CONNECTED"; data: T } | { state: "NOT_CONNECTED"; reason: string };
 
 /** Adapter `null` döndüyse sonuç NOT_CONNECTED'dir — sıfır DEĞİL. Aradaki fark önemli. */
