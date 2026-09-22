@@ -229,19 +229,42 @@ async function main() {
         if (gscPre.state === "NOT_CONNECTED") { say(`  veri         : NOT_CONNECTED — ${gscPre.envVar} yok`); continue; }
         if (!prop || prop === "NOT_CONNECTED" || prop === "UNKNOWN") { say(`  veri         : NOT_CONNECTED — registry'de google_search_console_property yok`); continue; }
         try {
-          const [now, then] = await Promise.all([
+          // "toplam" SORGU kirilimindan degil, BOYUTSUZ (site-genel) cagridan
+          // alinir. Sebebi: GSC dusuk hacimli sorgulari sorgu boyutunda satir
+          // olarak hic DONDURMUYOR (bir "diger" toplami da vermiyor) — ayni
+          // esik sayfa boyutunda farkli calisiyor, o yuzden ikisinin toplami
+          // TUTMUYOR. 22.09.2026'da olculdu: pamaistudio sorgu kirilimindan
+          // toplam 319 gosterim cikiyordu, tek bir SAYFA 450 gosterim
+          // tasiyordu — sorgu toplami boyle kucuk kalinca kendiyle celisen
+          // bir rapor uretiyordu. Boyutsuz cagri GSC'nin kendi site-genel
+          // toplamidir, satir anonimlestirmesinden etkilenmez.
+          const [now, then, nowTotal, thenTotal] = await Promise.all([
             searchConsole.searchAnalytics(prop, p.current, ["query"]),
             searchConsole.searchAnalytics(prop, p.yearAgo, ["query"]),
+            searchConsole.searchAnalytics(prop, p.current, []),
+            searchConsole.searchAnalytics(prop, p.yearAgo, []),
           ]);
-          if (now === null) { say(`  veri         : NOT_CONNECTED — kimlik okunamadı`); continue; }
+          if (now === null || nowTotal === null) { say(`  veri         : NOT_CONNECTED — kimlik okunamadı`); continue; }
           const a = splitByBrand(now, patterns);
           const b = then ? splitByBrand(then, patterns) : null;
+          const totalRow = (rows: typeof nowTotal) => rows[0] ?? { clicks: 0, impressions: 0, ctr: 0, position: 0 };
+          const siteTotal = { ...totalRow(nowTotal), queries: a.all.queries };
+          const siteTotalPrev = thenTotal ? totalRow(thenTotal) : null;
           // Yuzde degisim yalnizca onceki donem SIFIR DEGILSE anlamlidir;
           // 0'dan buyumeyi "%∞" diye yazmak raporu gurultuye cevirir.
-          const delta = (cur: number, prev: number) => (b === null ? "" : prev === 0 ? (cur === 0 ? "  (=)" : "  (yeni)") : `  (${cur >= prev ? "+" : ""}${(((cur - prev) / prev) * 100).toFixed(0)}% YoY)`);
+          const delta = (cur: number, prev: number) => (prev === undefined ? "" : prev === 0 ? (cur === 0 ? "  (=)" : "  (yeni)") : `  (${cur >= prev ? "+" : ""}${(((cur - prev) / prev) * 100).toFixed(0)}% YoY)`);
           const line = (label: string, t: { clicks: number; impressions: number; position: number; queries: number }, prev?: { clicks: number }) =>
             say(`  ${label.padEnd(13)}: ${t.clicks} tık · ${t.impressions} gösterim · ort. ${t.position.toFixed(1)} · ${t.queries} sorgu${prev ? delta(t.clicks, prev.clicks) : ""}`);
-          line("toplam", a.all, b?.all);
+          line("toplam", siteTotal, siteTotalPrev ?? undefined);
+          // Marka/marka-disi ayrimi sorgu kirilimina DAYANMAK ZORUNDA (siniflandirma
+          // sorgu metnine bakiyor) ve bu yuzden dusuk hacimli kuyrugu az sayar;
+          // ikisinin toplami "toplam" satirindan KUCUK kalabilir — bu bir hata
+          // degil, GSC'nin anonimlestirme davranisinin dogal sonucu, o yuzden
+          // not olarak yaziliyor.
+          if (a.all.impressions < siteTotal.impressions) {
+            const gap = siteTotal.impressions - a.all.impressions;
+            say(`  (not: marka/marka-dışı ayrımı ${gap} gösterimlik düşük-hacimli kuyruğu kapsamıyor — GSC sorgu satırı üretmiyor)`);
+          }
           line("marka", a.brand, b?.brand);
           line("marka dışı", a.nonBrand, b?.nonBrand);
         } catch (e) {

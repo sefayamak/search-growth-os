@@ -232,3 +232,23 @@ test("kimlik yoksa gozlem durumu degistirmez — NOT_CONNECTED kalir", async () 
     assert.equal(searchConsole.status().state, "NOT_CONNECTED");
   });
 });
+
+// --- boyutsuz cagri: dogru toplam --------------------------------------
+
+test("searchAnalytics dimensions:[] ile TEK satir (site-genel toplam) doner", async () => {
+  // GSC dusuk hacimli sorgulari sorgu boyutunda hic satir olarak dondurmuyor;
+  // bu yuzden sorgu kirilimindan toplam almak eksik sayar. Boyutsuz cagri
+  // GSC'nin kendi agregasyonu — satir anonimlestirmesinden etkilenmez.
+  const f = stubFetch(({ body }) => {
+    const dims = (body as { dimensions: unknown[] }).dimensions;
+    if (dims.length === 0) return { rows: [{ clicks: 999, impressions: 50000, ctr: 0.02, position: 12.3 }] };
+    return { rows: [] };
+  });
+  try {
+    const rows = await withEnv({ SEARCH_GROWTH_GSC_CREDENTIALS_JSON: SA }, () =>
+      gsc.searchAnalytics("sc-domain:x.com", { start: "2026-01-01", end: "2026-01-07" }, []));
+    assert.equal(rows!.length, 1);
+    assert.equal(rows![0].impressions, 50000);
+    assert.equal(rows![0].query, undefined, "boyut yoksa satirin query alani olmamali");
+  } finally { f.restore(); }
+});
