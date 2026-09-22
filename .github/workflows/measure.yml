@@ -94,6 +94,23 @@ jobs:
           done
           cat detail.txt
 
+      # Konu fırsatı — GERÇEK TALEP, tahmin edilmiş "trend" DEĞİL. Google Trends,
+      # rakip analizi ya da başka bir dış kaynak yok. Site kendi GSC verisinde,
+      # insanların zaten arayıp siteyi zaten gördüğü ama tıklamadığı sorguları
+      # sıralıyor. Yalnızca "buraya bak" listesi — hiçbir şey yazmaz, deploy
+      # etmez, indekslemez. Karar insanda kalır.
+      #
+      # content/topic-ledger.json depoda kalıcı: aynı fikir hafta hafta "yeni
+      # keşif" gibi gösterilmesin diye ilk görülme tarihini tutuyor.
+      - name: Konu fırsatı (7 site)
+        continue-on-error: true
+        env:
+          SEARCH_GROWTH_GSC_CREDENTIALS_JSON: ${{ secrets.SEARCH_GROWTH_GSC_CREDENTIALS_JSON }}
+        run: |
+          set -o pipefail
+          node --experimental-strip-types src/cli.ts topics config/sites.yaml \
+            --top 10 --ledger content/topic-ledger.json --write-ledger | tee topics.txt
+
       - name: Raporu derle
         run: |
           mkdir -p reports
@@ -123,6 +140,16 @@ jobs:
             echo '```'
             cat detail.txt 2>/dev/null || echo "(kırılım üretilemedi)"
             echo '```'
+            echo
+            echo '## Konu fırsatı — 7 site'
+            echo
+            echo "Google Trends ya da bir rakip analizi DEĞİL — sitenin kendi GSC verisinde,"
+            echo "zaten görünüp tıklanmayan gerçek sorgular. Bu bir yayın listesi değil,"
+            echo "\"buraya bak\" listesi: hangisinin içeriğe dönüşeceğine insan karar verir."
+            echo
+            echo '```'
+            cat topics.txt 2>/dev/null || echo "(konu fırsatı üretilemedi)"
+            echo '```'
           } > reports/measure-latest.md
           cp reports/measure-latest.md "reports/runs/$(date -u +%Y-%m-%d)-measure.md" 2>/dev/null \
             || { mkdir -p reports/runs; cp reports/measure-latest.md "reports/runs/$(date -u +%Y-%m-%d)-measure.md"; }
@@ -139,6 +166,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add reports/measure-latest.md reports/runs/
+          [ -f content/topic-ledger.json ] && git add content/topic-ledger.json
           # Değişiklik yoksa commit etme: her hafta boş commit atmak geçmişi kirletir.
           git diff --cached --quiet || git commit -m "ölçüm: $(date -u +%Y-%m-%d) (otomatik)"
           git push
@@ -153,5 +181,7 @@ jobs:
             smoke.txt
             measure.txt
             detail.txt
+            topics.txt
+            content/topic-ledger.json
           retention-days: 30
           if-no-files-found: warn

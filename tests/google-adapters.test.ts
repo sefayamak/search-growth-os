@@ -6,6 +6,7 @@
 // bozulabilecek seyler: null yerine 0 donen bir adapter "trafik sifirlandi"
 // diye okunur, sayfalanmayan bir istek ise kuyrugu hic gostermeden keser.
 import { test } from "node:test";
+import { execFileSync } from "node:child_process";
 import assert from "node:assert/strict";
 import { generateKeyPairSync, createVerify } from "node:crypto";
 import { loadServiceAccount, signJwt, _resetTokenCache } from "../src/adapters/google-auth.ts";
@@ -251,4 +252,31 @@ test("searchAnalytics dimensions:[] ile TEK satir (site-genel toplam) doner", as
     assert.equal(rows![0].impressions, 50000);
     assert.equal(rows![0].query, undefined, "boyut yoksa satirin query alani olmamali");
   } finally { f.restore(); }
+});
+
+// --- konu firsati: gercek talep, sahte trend degil --------------------
+
+test("topicOpportunities: marka disi, sira 5-30, gosterim esigi uygular", async () => {
+  const { topicOpportunities } = await import("../src/measure.ts");
+  const rows = [
+    { query: "pam istanbul", impressions: 500, clicks: 40, ctr: 0.08, position: 2 },      // marka -> disarida
+    { query: "ai urun fotografi nasil yapilir", impressions: 300, clicks: 2, ctr: 0.006, position: 9.4 }, // aday
+    { query: "cok nadir sorgu", impressions: 5, clicks: 0, ctr: 0, position: 12 },          // esik alti -> disarida
+    { query: "cok kotu sirada", impressions: 200, clicks: 0, ctr: 0, position: 45 },        // sira disi -> disarida
+    { query: "zaten birinci sirada", impressions: 200, clicks: 50, ctr: 0.25, position: 1.2 }, // zaten kazanilmis -> disarida
+    { query: "ikinci aday", impressions: 100, clicks: 1, ctr: 0.01, position: 15 },
+  ];
+  const opps = topicOpportunities(rows, ["pam istanbul", "pamistanbul"]);
+  assert.equal(opps.length, 2);
+  assert.equal(opps[0].query, "ai urun fotografi nasil yapilir", "yuksek skor (gosterim/sira) once gelmeli");
+  assert.ok(opps.every((o) => o.position >= 5 && o.position <= 30));
+});
+
+test("cli topics: kimlik yoksa NOT_CONNECTED yazar, fikir uydurmaz", () => {
+  const out = execFileSync("node", ["--experimental-strip-types", "src/cli.ts", "topics", "config/sites.yaml", "--site", "pamistanbul"], { encoding: "utf8" });
+  assert.match(out, /NOT_CONNECTED/);
+});
+
+test("cli topics: bilinmeyen site acik hatayla cikar", () => {
+  assert.throws(() => execFileSync("node", ["--experimental-strip-types", "src/cli.ts", "topics", "config/sites.yaml", "--site", "yok-boyle-bir-site"], { encoding: "utf8" }));
 });

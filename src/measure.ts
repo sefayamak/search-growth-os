@@ -90,6 +90,49 @@ export function splitByBrand(rows: SearchAnalyticsRow[], patterns: string[]): Br
   return acc;
 }
 
+export interface TopicOpportunity {
+  query: string;
+  impressions: number;
+  clicks: number;
+  position: number;
+  score: number;
+}
+
+/**
+ * İÇERİK FIRSATI — GERÇEK TALEP, UYDURULMUŞ TREND DEĞİL.
+ *
+ * Bu fonksiyon Google Trends, rakip analizi ya da dış bir "trend" kaynağı
+ * KULLANMAZ — böyle bir bağlantı yok. Yaptığı tek şey: sitenin KENDİ Search
+ * Console verisinde, insanların ZATEN arayıp siteyi ZATEN gördüğü ama
+ * tıklamadığı sorguları öne çıkarmak. "Trend" değil "kanıtlanmış talep,
+ * karşılıksız kalmış" — aradaki fark önemli: biri tahmin, biri ölçüm.
+ *
+ * Eşikler:
+ *   - marka dışı sorgu (marka arayan zaten sana geliyor, konu değil)
+ *   - sıra 5–30 arası: 1–4 zaten kazanılmış, 30'dan uzak sıralar için
+ *     "içerik eksik" değil "otorite eksik" daha olası açıklama
+ *   - gösterim ≥ eşik: tek kişilik arama bir içerik kararına temel olmaz
+ *
+ * score = gösterim / sıra — çok gösterim + iyi sıraya yakınlık en üstte.
+ * Kesin bir formül değil, sıralama için kaba bir öncelik.
+ */
+export function topicOpportunities(
+  rows: SearchAnalyticsRow[],
+  patterns: string[],
+  opts: { minImpressions?: number; minPosition?: number; maxPosition?: number; top?: number } = {},
+): TopicOpportunity[] {
+  const { minImpressions = 20, minPosition = 5, maxPosition = 30, top = 15 } = opts;
+  const out: TopicOpportunity[] = [];
+  for (const r of rows) {
+    if (!r.query) continue;
+    if (classifyQuery(r.query, patterns) === "brand") continue;
+    if (r.impressions < minImpressions) continue;
+    if (r.position < minPosition || r.position > maxPosition) continue;
+    out.push({ query: r.query, impressions: r.impressions, clicks: r.clicks, position: r.position, score: r.impressions / r.position });
+  }
+  return out.sort((a, b) => b.score - a.score).slice(0, top);
+}
+
 export type Measured<T> = { state: "CONNECTED"; data: T } | { state: "NOT_CONNECTED"; reason: string };
 
 /** Adapter `null` döndüyse sonuç NOT_CONNECTED'dir — sıfır DEĞİL. Aradaki fark önemli. */

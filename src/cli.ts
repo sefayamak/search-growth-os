@@ -9,8 +9,10 @@
 //   portfolio [--site id] [--onboarded-only] [--sample N] [--delay ms] [--out dir]
 //                                   measure publishing cadence across the registry
 //   llmstxt [--site id] [--out dir]  inventory each site's llms.txt against the spec and the registry
+//   topics [--site id] [--top N] [--ledger path] [--write-ledger]
+//                                   real content-gap candidates from the site's own GSC queries
 import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import { crawl } from "./crawler.ts";
 import { assessPortfolio, cadenceToMarkdown } from "./cadence.ts";
 import { inspectPortfolio, llmsTxtToMarkdown } from "./llmstxt.ts";
@@ -341,6 +343,73 @@ async function main() {
       }
       return;
     }
+    /**
+     * KONU FIRSATI — gercek talep, tahmin edilmis "trend" DEGIL.
+     *
+     * Google Trends, rakip analizi ya da baska bir dis "trend" kaynagi
+     * kullanilmiyor — boyle bir baglanti yok. Site kendi Search Console
+     * verisinde, insanlarin ZATEN arayip siteyi ZATEN gordugu ama
+     * tiklamadigi sorgulari siraliyor. Ciktinin KENDISI icerik degil,
+     * "buraya bak" listesi: hangi sayfa/taslak yazilacagina, ne zaman
+     * yayinlanacagina insan karar verir. Bu komut hicbir sey yayinlamaz,
+     * deploy etmez, indekslemez.
+     *
+     * Hafta hafta ayni sorgunun tekrar tekrar "yeni kesif" gibi
+     * gosterilmesi listeyi gurultuye cevirir. Bunun icin --ledger dosyasi
+     * her sorgunun ilk gorulme tarihini tutar; sonraki haftalarda YENI /
+     * ACIK KALMIS ayrimi buradan gelir. Ledger yalniz --write-ledger
+     * verildiginde guncellenir — aksi halde salt-okunur kalir.
+     */
+    case "topics": {
+      const { periods, brandPatterns, topicOpportunities } = await import("./measure.ts");
+      const { searchConsole } = await import("./adapters/index.ts");
+      const reg = loadRegistry(args.find((a, i) => i > 0 && !a.startsWith("--") && args[i - 1] !== "--site" && args[i - 1] !== "--top" && args[i - 1] !== "--ledger") ?? "config/sites.yaml");
+      if (!reg.ok || !reg.registry) { console.error(reg.errors.join("\n")); process.exitCode = 1; return; }
+      const siteId = args[args.indexOf("--site") + 1];
+      const top = Number(args[args.indexOf("--top") + 1]) || 10;
+      const ledgerPath = opt("ledger");
+      const writeLedger = flag("write-ledger");
+      const sites = siteId && args.includes("--site") ? reg.registry.sites.filter((x) => x.id === siteId) : reg.registry.sites;
+      if (!sites.length) { console.error(`site bulunamadi: ${siteId}`); process.exitCode = 1; return; }
+      const p = periods(new Date());
+
+      type LedgerEntry = { firstSeen: string; lastSeen: string; weeksOpen: number };
+      type Ledger = Record<string, Record<string, LedgerEntry>>; // site -> normalizedQuery -> entry
+      let ledger: Ledger = {};
+      if (ledgerPath) { try { ledger = JSON.parse(readFileSync(ledgerPath, "utf8")); } catch { /* ilk calisma — dosya yok, bos ledger */ } }
+      const today = new Date().toISOString().slice(0, 10);
+
+      for (const site of sites) {
+        const prop = String(site.google_search_console_property);
+        console.log(`\n=== ${site.id} — ${p.current.start}..${p.current.end}`);
+        if (!prop || prop === "NOT_CONNECTED" || prop === "UNKNOWN") { console.log("  NOT_CONNECTED — registry'de property yok"); continue; }
+        try {
+          const rows = await searchConsole.searchAnalytics(prop, p.current, ["query"]);
+          if (!rows) { console.log("  NOT_CONNECTED — kimlik yok"); continue; }
+          const patterns = brandPatterns(site);
+          const opps = topicOpportunities(rows, patterns, { top });
+          if (!opps.length) { console.log("  bu esiklerde fikir yok (gosterim/sira sinirlarini gormek icin --top artir)"); continue; }
+
+          const siteLedger = (ledger[site.id] ??= {});
+          for (const o of opps) {
+            const key = o.query.toLocaleLowerCase("tr").trim();
+            const existing = siteLedger[key];
+            const isNew = !existing;
+            const weeksOpen = existing ? existing.weeksOpen + (existing.lastSeen === today ? 0 : 1) : 1;
+            const tag = isNew ? "YENİ" : `açık · ${weeksOpen}. hafta`;
+            console.log(`  [${tag.padEnd(14)}] ${String(o.impressions).padStart(6)} gös · sıra ${o.position.toFixed(1).padStart(5)} · skor ${o.score.toFixed(0).padStart(5)}  "${o.query}"`);
+            if (writeLedger) siteLedger[key] = { firstSeen: existing?.firstSeen ?? today, lastSeen: today, weeksOpen };
+          }
+        } catch (e) {
+          console.log(`  HATA — ${(e as Error).message}`);
+        }
+      }
+      if (ledgerPath && writeLedger) {
+        mkdirSync(dirname(ledgerPath), { recursive: true });
+        writeFileSync(ledgerPath, JSON.stringify(ledger, null, 2) + "\n");
+      }
+      return;
+    }
     // Salt-okunur duman testi. "Env dolu" ile "API cevap veriyor" ayri
     // seylerdir; servis hesabi property'ye eklenmemisse tek gorunen sey
     // budur ve sessizce sifir trafik gibi okunmamalidir.
@@ -368,7 +437,7 @@ async function main() {
       return;
     }
     default:
-      console.error("commands: crawl | audit | compliance | registry | integrations | measure | detail | smoke | portfolio | llmstxt");
+      console.error("commands: crawl | audit | compliance | registry | integrations | measure | detail | topics | smoke | portfolio | llmstxt");
       process.exitCode = 1;
   }
 }
