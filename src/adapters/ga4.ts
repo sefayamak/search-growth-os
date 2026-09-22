@@ -17,6 +17,17 @@ const API = "https://analyticsdata.googleapis.com/v1beta";
 export const AI_REFERRERS = (process.env.SEARCH_GROWTH_AI_REFERRERS ?? "chatgpt.com,perplexity.ai,copilot.microsoft.com,gemini.google.com,claude.ai,you.com,bing.com/chat")
   .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
 
+
+/**
+ * Gozlenen durum. "Kimlik var" ile "API cevap verdi" ayri seylerdir ve rapor
+ * ikisini karistirmamali: 14 satir OK yazarken baslikta UNKNOWN gormek,
+ * kendiyle celisen bir rapordur. Bu bayragi YALNIZCA gercek bir 200 yanit
+ * kaldirir; tahmin etmez.
+ */
+let observed: "CONNECTED" | "ERROR" | null = null;
+export const observedState = () => observed;
+export const _resetObserved = () => { observed = null; };
+
 function creds(): ServiceAccount | null { return loadServiceAccount(GA4_ENV); }
 const token = (sa: ServiceAccount) => accessToken(sa, GA4_SCOPES, process.env.SEARCH_GROWTH_GA4_SUBJECT || undefined);
 
@@ -46,7 +57,8 @@ async function runReport(
   const LIMIT = 10000;
   const out: Ga4Row[] = [];
   for (let offset = 0; ; offset += LIMIT) {
-    const res = await googleJson<ReportResponse>(url, tok, {
+    let res: ReportResponse;
+    try { res = await googleJson<ReportResponse>(url, tok, {
       method: "POST",
       body: {
         dateRanges: [{ startDate: range.start, endDate: range.end }],
@@ -55,7 +67,8 @@ async function runReport(
         ...(dimensionFilter ? { dimensionFilter } : {}),
         limit: LIMIT, offset,
       },
-    });
+    }); } catch (e) { observed = "ERROR"; throw e; }
+    observed = "CONNECTED";
     const rows = res.rows ?? [];
     const dims = res.dimensionHeaders?.map((h) => h.name) ?? dimensions;
     const mets = res.metricHeaders?.map((h) => h.name) ?? metrics;

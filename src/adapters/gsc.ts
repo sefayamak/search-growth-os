@@ -19,6 +19,17 @@ const API = "https://searchconsole.googleapis.com";
  *  property'lerin ikisi de ':' ve '/' iceriyor. */
 const prop = (property: string) => encodeURIComponent(property);
 
+
+/**
+ * Gozlenen durum. "Kimlik var" ile "API cevap verdi" ayri seylerdir ve rapor
+ * ikisini karistirmamali: 14 satir OK yazarken baslikta UNKNOWN gormek,
+ * kendiyle celisen bir rapordur. Bu bayragi YALNIZCA gercek bir 200 yanit
+ * kaldirir; tahmin etmez.
+ */
+let observed: "CONNECTED" | "ERROR" | null = null;
+export const observedState = () => observed;
+export const _resetObserved = () => { observed = null; };
+
 function creds(): ServiceAccount | null {
   return loadServiceAccount(GSC_ENV);
 }
@@ -62,7 +73,10 @@ export async function searchAnalytics(
       // son gunler dususmus gibi gorunurdu.
       type: "web",
     };
-    const res = await googleJson<{ rows?: ApiRow[] }>(url, tok, { method: "POST", body });
+    let res: { rows?: ApiRow[] };
+    try { res = await googleJson<{ rows?: ApiRow[] }>(url, tok, { method: "POST", body }); }
+    catch (e) { observed = "ERROR"; throw e; }
+    observed = "CONNECTED";
     const rows = res.rows ?? [];
     for (const r of rows) {
       const row: SearchAnalyticsRow = { clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position };

@@ -206,45 +206,114 @@ async function main() {
       console.log(`dönemler  : ${p.current.label} ${p.current.start}..${p.current.end}`);
       console.log(`            ${p.previous.label} ${p.previous.start}..${p.previous.end}`);
       console.log(`            ${p.yearAgo.label} ${p.yearAgo.start}..${p.yearAgo.end}`);
-      const gsc = searchConsole.status(), an = ga4.status();
-      console.log(`\nSearch Console : ${gsc.state} — ${gsc.note}`);
-      console.log(`GA4            : ${an.state} — ${an.note}\n`);
+      // Durum satirlari EN SONA yaziliyor. Onceki hali cagrilardan once
+      // basiyordu, dolayisiyla 14 satir OK olcen bir kosuda bile "UNKNOWN"
+      // diyordu — kendiyle celisen bir rapor. Site ciktisi tamponlanir.
+      const buf: string[] = [];
+      const say = (l: string) => buf.push(l);
+      const gscPre = searchConsole.status();
       for (const site of reg.registry.sites) {
         const prop = String(site.google_search_console_property);
         const ga = String(site.ga4_property);
-        console.log(`${site.id}`);
-        console.log(`  GSC property : ${prop}`);
-        console.log(`  GA4 property : ${ga}`);
+        say(`${site.id}`);
+        say(`  GSC property : ${prop}`);
+        say(`  GA4 property : ${ga}`);
         const patterns = brandPatterns(site);
-        console.log(`  marka deseni : ${patterns.join(" · ") || "(yok — brand_entities boş)"}`);
+        say(`  marka deseni : ${patterns.join(" · ") || "(yok — brand_entities boş)"}`);
 
         // Gercek olcum. Iki sebep ayri ayri raporlanir ve BIRBIRINE
         // karistirilmaz: kimligin olmamasi (portfoyun tamami icin tek bir
         // eksik) ile property'nin registry'de bilinmemesi (o siteye ozel)
         // farkli islerdir; ikisini "NOT_CONNECTED" diye tek torbaya koymak,
         // hangisini duzeltecegini gizler.
-        if (gsc.state === "NOT_CONNECTED") { console.log(`  veri         : NOT_CONNECTED — ${gsc.envVar} yok`); continue; }
-        if (!prop || prop === "NOT_CONNECTED" || prop === "UNKNOWN") { console.log(`  veri         : NOT_CONNECTED — registry'de google_search_console_property yok`); continue; }
+        if (gscPre.state === "NOT_CONNECTED") { say(`  veri         : NOT_CONNECTED — ${gscPre.envVar} yok`); continue; }
+        if (!prop || prop === "NOT_CONNECTED" || prop === "UNKNOWN") { say(`  veri         : NOT_CONNECTED — registry'de google_search_console_property yok`); continue; }
         try {
           const [now, then] = await Promise.all([
             searchConsole.searchAnalytics(prop, p.current, ["query"]),
             searchConsole.searchAnalytics(prop, p.yearAgo, ["query"]),
           ]);
-          if (now === null) { console.log(`  veri         : NOT_CONNECTED — kimlik okunamadı`); continue; }
+          if (now === null) { say(`  veri         : NOT_CONNECTED — kimlik okunamadı`); continue; }
           const a = splitByBrand(now, patterns);
           const b = then ? splitByBrand(then, patterns) : null;
           // Yuzde degisim yalnizca onceki donem SIFIR DEGILSE anlamlidir;
           // 0'dan buyumeyi "%∞" diye yazmak raporu gurultuye cevirir.
           const delta = (cur: number, prev: number) => (b === null ? "" : prev === 0 ? (cur === 0 ? "  (=)" : "  (yeni)") : `  (${cur >= prev ? "+" : ""}${(((cur - prev) / prev) * 100).toFixed(0)}% YoY)`);
           const line = (label: string, t: { clicks: number; impressions: number; position: number; queries: number }, prev?: { clicks: number }) =>
-            console.log(`  ${label.padEnd(13)}: ${t.clicks} tık · ${t.impressions} gösterim · ort. ${t.position.toFixed(1)} · ${t.queries} sorgu${prev ? delta(t.clicks, prev.clicks) : ""}`);
+            say(`  ${label.padEnd(13)}: ${t.clicks} tık · ${t.impressions} gösterim · ort. ${t.position.toFixed(1)} · ${t.queries} sorgu${prev ? delta(t.clicks, prev.clicks) : ""}`);
           line("toplam", a.all, b?.all);
           line("marka", a.brand, b?.brand);
           line("marka dışı", a.nonBrand, b?.nonBrand);
         } catch (e) {
           // Yetki hatasi "veri yok" gibi gosterilmez: servis hesabi
           // property'ye eklenmemisse duzeltilecek sey budur.
-          console.log(`  veri         : HATA — ${(e as Error).message}`);
+          say(`  veri         : HATA — ${(e as Error).message}`);
+        }
+      }
+      // Artik gercek: canli cagrilar yapildi, durum gozleme dayaniyor.
+      const gsc = searchConsole.status(), an = ga4.status();
+      console.log(`\nSearch Console : ${gsc.state} — ${gsc.note}`);
+      console.log(`GA4            : ${an.state} — ${an.note}`);
+      if (gscPre.state === "NOT_CONNECTED") console.log("(kimlik yok — asagidaki her satir NOT_CONNECTED'dir, sifir DEGIL)");
+      console.log("");
+      for (const l of buf) console.log(l);
+      return;
+    }
+    /**
+     * Kirilim — "cok gosterim, az tik" sorusunu ISIMLENDIRIR.
+     *
+     * Toplam bir sayi sorunun varligini gosterir, sebebini gostermez.
+     * pamistanbul 2026-09-22'de 58.071 gosterim ve 204 tik olctu: agirlikli
+     * ortalama sira 3,5 iken TO %0,35. O siradan %10-25 beklenir. Aradaki
+     * farki ancak hangi SORGU ve hangi SAYFA'nin gosterimi tasidigini gorerek
+     * anlarsin.
+     *
+     * En degerli bolum "sifir tikli agirlik": cok gosterim alip hic tiklanmayan
+     * satirlar. Ortalamayi bozan, genelde birkac tanesidir.
+     */
+    case "detail": {
+      const { periods } = await import("./measure.ts");
+      const { searchConsole } = await import("./adapters/index.ts");
+      const reg = loadRegistry(args.find((a, i) => i > 0 && !a.startsWith("--") && args[i - 1] !== "--site" && args[i - 1] !== "--top") ?? "config/sites.yaml");
+      if (!reg.ok || !reg.registry) { console.error(reg.errors.join("\n")); process.exitCode = 1; return; }
+      const siteId = args[args.indexOf("--site") + 1];
+      const top = Number(args[args.indexOf("--top") + 1]) || 15;
+      const sites = siteId && args.includes("--site")
+        ? reg.registry.sites.filter((x) => x.id === siteId)
+        : reg.registry.sites;
+      if (!sites.length) { console.error(`site bulunamadi: ${siteId}`); process.exitCode = 1; return; }
+      const p = periods(new Date());
+
+      for (const site of sites) {
+        const prop = String(site.google_search_console_property);
+        console.log(`\n=== ${site.id} — ${p.current.start}..${p.current.end}`);
+        if (!prop || prop === "NOT_CONNECTED" || prop === "UNKNOWN") { console.log("  NOT_CONNECTED — registry'de property yok"); continue; }
+        try {
+          const [byQuery, byPage] = await Promise.all([
+            searchConsole.searchAnalytics(prop, p.current, ["query"]),
+            searchConsole.searchAnalytics(prop, p.current, ["page"]),
+          ]);
+          if (!byQuery || !byPage) { console.log("  NOT_CONNECTED — kimlik yok"); continue; }
+
+          const fmt = (label: string, r: { clicks: number; impressions: number; position: number }) =>
+            `  ${String(r.impressions).padStart(7)} gos · ${String(r.clicks).padStart(5)} tik · TO ${(r.impressions ? (r.clicks / r.impressions) * 100 : 0).toFixed(2).padStart(5)}% · sira ${r.position.toFixed(1).padStart(5)}  ${label}`;
+
+          const tot = byQuery.reduce((a, r) => ({ c: a.c + r.clicks, i: a.i + r.impressions }), { c: 0, i: 0 });
+          console.log(`  toplam: ${tot.i} gosterim · ${tot.c} tik · TO ${(tot.i ? (tot.c / tot.i) * 100 : 0).toFixed(2)}%`);
+
+          // Sifir tikli agirlik: ortalamayi bozan satirlar. Payda TUM gosterim.
+          const zero = byQuery.filter((r) => r.clicks === 0).sort((a, b) => b.impressions - a.impressions);
+          const zeroImp = zero.reduce((a, r) => a + r.impressions, 0);
+          console.log(`\n  SIFIR TIKLI AGIRLIK: ${zeroImp} gosterim (${tot.i ? ((zeroImp / tot.i) * 100).toFixed(1) : "0"}%), ${zero.length} sorgu`);
+          for (const r of zero.slice(0, top)) console.log(fmt(r.query ?? "(bos)", r));
+
+          console.log(`\n  TIK GETIREN SORGULAR (ilk ${top})`);
+          for (const r of [...byQuery].sort((a, b) => b.clicks - a.clicks).slice(0, top).filter((r) => r.clicks > 0)) console.log(fmt(r.query ?? "(bos)", r));
+
+          console.log(`\n  GOSTERIME GORE SAYFALAR (ilk ${top})`);
+          for (const r of [...byPage].sort((a, b) => b.impressions - a.impressions).slice(0, top)) console.log(fmt(r.page ?? "(bos)", r));
+        } catch (e) {
+          console.log(`  HATA — ${(e as Error).message}`);
         }
       }
       return;
@@ -276,7 +345,7 @@ async function main() {
       return;
     }
     default:
-      console.error("commands: crawl | audit | compliance | registry | integrations | measure | smoke | portfolio | llmstxt");
+      console.error("commands: crawl | audit | compliance | registry | integrations | measure | detail | smoke | portfolio | llmstxt");
       process.exitCode = 1;
   }
 }
