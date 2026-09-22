@@ -189,3 +189,46 @@ test("smokeTest kimlik yokken sebep bildirir, patlamaz", async () => {
     assert.equal((await ga4.smokeTest("properties/1")).ok, false);
   });
 });
+
+// --- gozlenen durum: rapor kendiyle celismesin -----------------------------
+
+test("durum GOZLEME dayanir: cagri oncesi UNKNOWN, basarili cagri sonrasi CONNECTED", async () => {
+  // 14 satir OK olcen bir kosuda baslikta UNKNOWN yazmak, raporu okunmaz yapar.
+  // Eski panelin "Vadesi Geçen Alacak 0 TL" hatasi tam olarak buydu.
+  gsc._resetObserved();
+  withEnv({ SEARCH_GROWTH_GSC_CREDENTIALS_JSON: SA }, () => {
+    assert.equal(searchConsole.status().state, "UNKNOWN", "henuz canli cagri yok");
+  });
+  const f = stubFetch(() => ({ rows: [] }));
+  try {
+    await withEnvAsync({ SEARCH_GROWTH_GSC_CREDENTIALS_JSON: SA }, async () => {
+      await gsc.searchAnalytics("sc-domain:x.com", { start: "2026-01-01", end: "2026-01-07" }, ["date"]);
+      assert.equal(searchConsole.status().state, "CONNECTED");
+    });
+  } finally { f.restore(); gsc._resetObserved(); }
+});
+
+test("basarisiz cagri durumu ERROR yapar — CONNECTED'de birakmaz", async () => {
+  gsc._resetObserved();
+  const real = globalThis.fetch;
+  globalThis.fetch = (async (url: string | URL) => {
+    if (String(url).includes("oauth2.googleapis.com/token")) {
+      return new Response(JSON.stringify({ access_token: "tok", expires_in: 3600 }), { status: 200 });
+    }
+    return new Response("forbidden", { status: 403 });
+  }) as typeof fetch;
+  try {
+    await withEnvAsync({ SEARCH_GROWTH_GSC_CREDENTIALS_JSON: SA }, async () => {
+      await assert.rejects(() => gsc.searchAnalytics("sc-domain:x.com", { start: "2026-01-01", end: "2026-01-07" }, ["date"]));
+      assert.equal(searchConsole.status().state, "ERROR");
+    });
+  } finally { globalThis.fetch = real; _resetTokenCache(); gsc._resetObserved(); }
+});
+
+test("kimlik yoksa gozlem durumu degistirmez — NOT_CONNECTED kalir", async () => {
+  gsc._resetObserved();
+  await withEnvAsync({ SEARCH_GROWTH_GSC_CREDENTIALS_JSON: undefined }, async () => {
+    await gsc.searchAnalytics("sc-domain:x.com", { start: "2026-01-01", end: "2026-01-07" }, ["date"]);
+    assert.equal(searchConsole.status().state, "NOT_CONNECTED");
+  });
+});

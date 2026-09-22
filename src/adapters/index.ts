@@ -63,27 +63,26 @@ const status = (name: string, envVar: string, extra = ""): AdapterStatus => {
 // yukaridaki "UNKNOWN" not'u "client not implemented" diyor ve artik GSC/GA4
 // icin DOGRU DEGIL. Burada UNKNOWN'in anlami "kimlik var, canli cagri henuz
 // denenmedi" — denemenin yolu smokeTest(). Kimlik yoksa yine NOT_CONNECTED.
-const liveStatus = (name: string, envVar: string): AdapterStatus => {
+const liveStatus = (name: string, envVar: string, observed: "CONNECTED" | "ERROR" | null): AdapterStatus => {
   const present = !!process.env[envVar];
-  return {
-    name, envVar,
-    state: present ? "UNKNOWN" : "NOT_CONNECTED",
-    note: present
-      ? "credential present; client implemented — run smokeTest() to confirm the property grant"
-      : `set ${envVar} (see docs/integrations/)`,
-  };
+  if (!present) return { name, envVar, state: "NOT_CONNECTED", note: `set ${envVar} (see docs/integrations/)` };
+  // Gozlem varsa tahmin etmeyiz. Bir rapor 14 satir OK yazip baslikta UNKNOWN
+  // diyemez; kendiyle celisen rapor okunmayi biraktiran seydir.
+  if (observed === "CONNECTED") return { name, envVar, state: "CONNECTED", note: "live call succeeded in this run" };
+  if (observed === "ERROR") return { name, envVar, state: "ERROR", note: "credential present; a live call failed — see the smoke test for the reason" };
+  return { name, envVar, state: "UNKNOWN", note: "credential present; no live call attempted yet in this run" };
 };
 
 // GSC ve GA4 artik gercek istemci; digerleri hala durust stub. Sozlesme ikisinde
 // de ayni: kimlik yoksa null, sayi uydurma yok.
 export const searchConsole: SearchConsoleAdapter = {
-  status: () => liveStatus("Google Search Console", gscClient.GSC_ENV),
+  status: () => liveStatus("Google Search Console", gscClient.GSC_ENV, gscClient.observedState()),
   searchAnalytics: gscClient.searchAnalytics,
   urlInspection: gscClient.urlInspection,
   sitemaps: gscClient.sitemaps,
 };
 export const ga4: Ga4Adapter = {
-  status: () => liveStatus("Google Analytics 4", ga4Client.GA4_ENV),
+  status: () => liveStatus("Google Analytics 4", ga4Client.GA4_ENV, ga4Client.observedState()),
   landingPages: ga4Client.landingPages,
   organicAcquisition: ga4Client.organicAcquisition,
   aiReferrals: ga4Client.aiReferrals,

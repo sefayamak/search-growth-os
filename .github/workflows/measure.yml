@@ -78,6 +78,22 @@ jobs:
           set -o pipefail
           node --experimental-strip-types src/cli.ts measure config/sites.yaml | tee measure.txt
 
+      # Gelir siteleri icin kirilim. Toplam sayi sorunun VARLIGINI gosterir,
+      # sebebini gostermez: 58.071 gosterim / 204 tik, agirlikli sira 3,5 iken
+      # TO %0,35 — o siradan %10-25 beklenir. Hangi sorgu ve sayfanin gosterimi
+      # tasidigi gorulmeden bu fark aciklanamaz.
+      - name: Kirilim (gelir siteleri)
+        continue-on-error: true
+        env:
+          SEARCH_GROWTH_GSC_CREDENTIALS_JSON: ${{ secrets.SEARCH_GROWTH_GSC_CREDENTIALS_JSON }}
+        run: |
+          set -o pipefail
+          : > detail.txt
+          for s in pamistanbul pamaistudio untitledportraits; do
+            node --experimental-strip-types src/cli.ts detail config/sites.yaml --site "$s" --top 15 >> detail.txt
+          done
+          cat detail.txt
+
       - name: Raporu derle
         run: |
           mkdir -p reports
@@ -98,6 +114,14 @@ jobs:
             echo
             echo '```'
             cat measure.txt
+            echo '```'
+            echo
+            echo '## Kırılım — gelir siteleri'
+            echo
+            echo "En değerli bölüm **sıfır tıklı ağırlık**: çok gösterim alıp hiç tıklanmayan sorgular."
+            echo
+            echo '```'
+            cat detail.txt 2>/dev/null || echo "(kırılım üretilemedi)"
             echo '```'
           } > reports/measure-latest.md
           cp reports/measure-latest.md "reports/runs/$(date -u +%Y-%m-%d)-measure.md" 2>/dev/null \
@@ -128,5 +152,6 @@ jobs:
             reports/measure-latest.md
             smoke.txt
             measure.txt
+            detail.txt
           retention-days: 30
           if-no-files-found: warn

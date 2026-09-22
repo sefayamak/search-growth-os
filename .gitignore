@@ -1,6 +1,14 @@
 .env
 .env.*
 !.env.example
+# reports/runs/ TAMAMEN yok sayilamaz: olcum isi oraya tarihli anlik goruntu
+# yaziyor ve onlar commit'lenmeli (bkz. PR #8). Ama ayni klasor yerel denetim
+# kosularinin cikti coplugunu da tutuyor — tek bir `git add -A` 120 dosyayi
+# birden icine aliyor. O yuzden yalnizca denetim/tarama ciktilari yok sayilir;
+# `<tarih>-measure.md` anlik goruntuleri takip edilmeye devam eder.
+reports/runs/*.audit.json
+reports/runs/*.audit.md
+reports/runs/*.crawl.json
 node_modules/
 *.log
 evals/results/
