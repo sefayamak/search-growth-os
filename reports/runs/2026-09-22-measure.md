@@ -1,6 +1,6 @@
 # Ölçüm — 2026-09-22
 
-Üreten: `.github/workflows/measure.yml` · run 35707000243 · commit 40f516f5f5deb5bda9f21d21e5b6797309a00d84
+Üreten: `.github/workflows/measure.yml` · run 35708336085 · commit 9edd8bc94ca40e53df426317cf63c392cd51e6c5
 
 NOT_CONNECTED yazan satır ölçülemedi demektir, sıfır demek DEĞİLDİR.
 
@@ -232,46 +232,59 @@ En değerli bölüm **sıfır tıklı ağırlık**: çok gösterim alıp hiç t�
         9 gos ·     0 tik · TO  0.00% · sira   6.2  https://www.untitledportraits.com/tr/blog/fine-art-baski-nasil-satin-alinir
 ```
 
-## Konu fırsatı — 7 site
+## Konu fırsatı — 7 site, haftada 2 konu
 
-Google Trends ya da bir rakip analizi DEĞİL — sitenin kendi GSC verisinde,
-zaten görünüp tıklanmayan gerçek sorgular. Bu bir yayın listesi değil,
-"buraya bak" listesi: hangisinin içeriğe dönüşeceğine insan karar verir.
+KANIT: sitenin kendi GSC verisinde zaten görünüp tıklanmayan gerçek sorgu.
+EDİTORYAL: registry business_category'sinden türetilmiş öneri (GSC'de yeterli
+hacim yoksa). İkisi de Google Trends veya rakip analizi DEĞİL. Bu bir yayın
+listesi değil, "buraya bak" listesi — insan onayı olmadan hiçbiri yazıya
+dönüşmez, dönüşse bile PR → CI → merge zincirinden geçer.
 
 ```
 
 === pamistanbul — 2026-08-24..2026-09-20
-  [YENİ          ]   3418 gös · sıra   9.4 · skor   363  "gemini ile fotoğraf yapma"
-  [YENİ          ]   1502 gös · sıra   8.2 · skor   184  "gemini fotoğraf yapma"
-  [YENİ          ]    594 gös · sıra   7.5 · skor    79  "kikis"
-  [YENİ          ]    374 gös · sıra   7.9 · skor    48  "gemini ai foto"
-  [YENİ          ]    301 gös · sıra   9.5 · skor    32  "seda sayan reklam"
-  [YENİ          ]    254 gös · sıra   9.2 · skor    28  "chatgpt görsel oluşturma"
-  [YENİ          ]    210 gös · sıra  10.0 · skor    21  "prodüksiyon"
-  [YENİ          ]    152 gös · sıra   7.5 · skor    20  "comfyui nedir"
-  [YENİ          ]    142 gös · sıra   7.3 · skor    19  "seda sayan ın oynadığı reklam"
-  [YENİ          ]    114 gös · sıra   6.1 · skor    19  "kikis corner"
+  [KANIT     · açık · 1. hafta] gemini ile fotoğraf yapma
+                              3418 gösterim, sıra 9.4 — GSC'de zaten görünüyor, tıklanmıyor. Site iki dilli; ikinci dile çevirisi de düşünülebilir (burada otomatik çevrilmedi).
+  [KANIT     · açık · 1. hafta] gemini fotoğraf yapma
+                              1502 gösterim, sıra 8.2 — GSC'de zaten görünüyor, tıklanmıyor. Site iki dilli; ikinci dile çevirisi de düşünülebilir (burada otomatik çevrilmedi).
 
 === pamaistudio — 2026-08-24..2026-09-20
-  [YENİ          ]     40 gös · sıra  10.3 · skor     4  "harika şeyler dükkanı"
-  [YENİ          ]     21 gös · sıra   5.9 · skor     4  "high-efficiency & high-quality production with midjourney & stable diffusion"
-  [YENİ          ]     23 gös · sıra   7.0 · skor     3  "pam studio"
-  [YENİ          ]     58 gös · sıra  22.2 · skor     3  "midjourney vs stable diffusion"
+  [KANIT     · açık · 1. hafta] harika şeyler dükkanı
+                              40 gösterim, sıra 10.3 — GSC'de zaten görünüyor, tıklanmıyor. Site iki dilli; ikinci dile çevirisi de düşünülebilir (burada otomatik çevrilmedi).
+  [KANIT     · açık · 1. hafta] high-efficiency & high-quality production with midjourney & stable diffusion
+                              21 gösterim, sıra 5.9 — GSC'de zaten görünüyor, tıklanmıyor. Site iki dilli; ikinci dile çevirisi de düşünülebilir (burada otomatik çevrilmedi).
 
 === spryhand — 2026-08-24..2026-09-20
-  [YENİ          ]    121 gös · sıra  22.7 · skor     5  "rental property spreadsheet"
-  [YENİ          ]     64 gös · sıra  19.6 · skor     3  "rental property excel spreadsheet"
-  [YENİ          ]     32 gös · sıra  19.2 · skor     2  "rent spreadsheet"
+  [KANIT     · açık · 1. hafta] rental property spreadsheet
+                              121 gösterim, sıra 22.7 — GSC'de zaten görünüyor, tıklanmıyor.
+  [KANIT     · açık · 1. hafta] rental property excel spreadsheet
+                              64 gösterim, sıra 19.6 — GSC'de zaten görünüyor, tıklanmıyor.
 
 === decideplan — 2026-08-24..2026-09-20
-  bu esiklerde fikir yok (gosterim/sira sinirlarini gormek icin --top artir)
+  [EDITORYAL · YENİ          ] budget decision tools — what actually matters
+                              registry business_category'den türetildi ("budget decision tools — 19 spending categories with benchmark ranges") — arama verisi DEĞİL, GSC henüz yeterli hacim göstermiyor. Yayına almadan önce insan onayı gerekiyor.
+  [EDITORYAL · YENİ          ] How to choose budget decision tools: a practical checklist
+                              registry business_category'den türetildi ("budget decision tools — 19 spending categories with benchmark ranges") — arama verisi DEĞİL, GSC henüz yeterli hacim göstermiyor. Yayına almadan önce insan onayı gerekiyor.
 
 === rightlisted — 2026-08-24..2026-09-20
-  bu esiklerde fikir yok (gosterim/sira sinirlarini gormek icin --top artir)
+  [EDITORYAL · YENİ          ] Etsy and Amazon listing grader and keyword tools — what actually matters
+                              registry business_category'den türetildi ("Etsy and Amazon listing grader and keyword tools") — arama verisi DEĞİL, GSC henüz yeterli hacim göstermiyor. Yayına almadan önce insan onayı gerekiyor.
+  [EDITORYAL · YENİ          ] How to choose Etsy and Amazon listing grader and keyword tools: a practical checklist
+                              registry business_category'den türetildi ("Etsy and Amazon listing grader and keyword tools") — arama verisi DEĞİL, GSC henüz yeterli hacim göstermiyor. Yayına almadan önce insan onayı gerekiyor.
 
 === untitledportraits — 2026-08-24..2026-09-20
-  bu esiklerde fikir yok (gosterim/sira sinirlarini gormek icin --top artir)
+  [EDITORYAL · YENİ          ] fashion, commercial and portrait photography — what actually matters
+                              TR: fashion, commercial and portrait photography — gerçekten önemli olan ne
+                              registry business_category'den türetildi ("fashion, commercial and portrait photography (Sefa Yamak)") — arama verisi DEĞİL, GSC henüz yeterli hacim göstermiyor. Yayına almadan önce insan onayı gerekiyor.
+  [EDITORYAL · YENİ          ] How to choose fashion, commercial and portrait photography: a practical checklist
+                              TR: fashion, commercial and portrait photography nasıl seçilir: pratik bir kontrol listesi
+                              registry business_category'den türetildi ("fashion, commercial and portrait photography (Sefa Yamak)") — arama verisi DEĞİL, GSC henüz yeterli hacim göstermiyor. Yayına almadan önce insan onayı gerekiyor.
 
 === myhappymade — 2026-08-24..2026-09-20
-  bu esiklerde fikir yok (gosterim/sira sinirlarini gormek icin --top artir)
+  [EDITORYAL · YENİ          ] handmade crochet bags — what actually matters
+                              TR: handmade crochet bags — gerçekten önemli olan ne
+                              registry business_category'den türetildi ("handmade crochet bags (Etsy shop)") — arama verisi DEĞİL, GSC henüz yeterli hacim göstermiyor. Yayına almadan önce insan onayı gerekiyor.
+  [EDITORYAL · YENİ          ] How to choose handmade crochet bags: a practical checklist
+                              TR: handmade crochet bags nasıl seçilir: pratik bir kontrol listesi
+                              registry business_category'den türetildi ("handmade crochet bags (Etsy shop)") — arama verisi DEĞİL, GSC henüz yeterli hacim göstermiyor. Yayına almadan önce insan onayı gerekiyor.
 ```
