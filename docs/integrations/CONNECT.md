@@ -1,3 +1,7 @@
+> **Kurulum için: [KURULUM.md](KURULUM.md).** Anahtar GitHub Secret'ta durur,
+> haftalık iş `reports/measure-latest.md` dosyasını üretir; rakamlara bakmak
+> için kimsenin tarayıcısına ya da anahtara erişmesi gerekmez.
+
 # Connecting Search Console, GA4 and Bing — exact steps
 
 Read-only everywhere. Search Growth OS never needs write access to any search or

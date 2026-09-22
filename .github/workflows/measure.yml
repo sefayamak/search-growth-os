@@ -1,0 +1,132 @@
+# Search Growth OS — sahipli veri ölçümü (GSC + GA4, salt-okunur)
+#
+# NİYE BU VAR: ölçüm her seferinde birinin bilgisayarına, tarayıcı oturumuna ve
+# elle rapor indirmesine bağlıysa, pratikte hiç yapılmaz. Bu iş kimlik bilgisini
+# GitHub Secret'ta tutar, haftada bir kendi kendine koşar ve sonucu depoya bir
+# rapor dosyası olarak yazar. Böylece rakamlara bakmak isteyen herkes —insan ya
+# da ajan— dosyayı okur; kimsenin anahtara erişmesi gerekmez.
+#
+# GİZLİLİK SÖZLEŞMESİ (değiştirilemez):
+#   - Anahtar YALNIZCA `secrets.*` üzerinden env'e geçer. Komut satırına
+#     yazılmaz (ps çıktısında görünürdü), dosyaya dökülmez, `echo`lanmaz.
+#   - Üretilen rapor ve step summary yalnız SAYI içerir; istemci hata
+#     mesajlarını da anahtar taşımayacak şekilde yazdı (bkz. google-auth.ts).
+#   - Bu iş fork PR'larda koşmaz: `pull_request` tetikleyicisi yok, çünkü fork
+#     bir PR'ı secret'a erişemez ve erişebilseydi sızdırma yolu olurdu.
+#
+# YAZMA YOK: GSC ve GA4 kapsamları salt-okunur (`webmasters.readonly`,
+# `analytics.readonly`). Sitemap gönderme, URL kaldırma, Indexing API yok.
+#
+# KİMLİK YOKSA: iş yeşil kalır ve raporda NOT_CONNECTED yazar. Sahte sayı
+# üretmez. "Ölçemedim" ile "ölçtüm, sıfır çıktı" bu projede asla karışmaz.
+
+name: Ölçüm (GSC + GA4)
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit_report:
+        description: "Raporu depoya yaz (kapatırsan yalnız artifact üretir)"
+        type: boolean
+        default: true
+  schedule:
+    # 06:40 UTC Pazartesi (09:40 Europe/Istanbul) — içerik ve teknik
+    # kontrollerden sonra: önce "ne yayınladık", sonra "ne sonuç verdi".
+    - cron: "40 6 * * 1"
+
+permissions:
+  contents: write # yalnız reports/ altına rapor yazmak için
+
+concurrency:
+  group: measure
+  cancel-in-progress: false
+
+jobs:
+  measure:
+    name: sahipli veri ölçümü
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: "24"
+
+      - name: Registry gate
+        run: node --experimental-strip-types src/cli.ts registry config/sites.yaml
+
+      # Bağlantı durumu ÖNCE raporlanır. "Env dolu" ile "API cevap veriyor" ayrı
+      # şeylerdir: servis hesabı property'ye eklenmemişse 403 gelir ve bu, sıfır
+      # trafik gibi okunmamalıdır. Duman testi bunu ayırır ve işi düşürmez —
+      # amacı engellemek değil, sebebi isimlendirmek.
+      - name: Duman testi (salt-okunur)
+        id: smoke
+        continue-on-error: true
+        env:
+          SEARCH_GROWTH_GSC_CREDENTIALS_JSON: ${{ secrets.SEARCH_GROWTH_GSC_CREDENTIALS_JSON }}
+          SEARCH_GROWTH_GA4_CREDENTIALS_JSON: ${{ secrets.SEARCH_GROWTH_GA4_CREDENTIALS_JSON }}
+        run: |
+          set -o pipefail
+          node --experimental-strip-types src/cli.ts smoke config/sites.yaml | tee smoke.txt
+
+      - name: Ölçüm
+        env:
+          SEARCH_GROWTH_GSC_CREDENTIALS_JSON: ${{ secrets.SEARCH_GROWTH_GSC_CREDENTIALS_JSON }}
+          SEARCH_GROWTH_GA4_CREDENTIALS_JSON: ${{ secrets.SEARCH_GROWTH_GA4_CREDENTIALS_JSON }}
+        run: |
+          set -o pipefail
+          node --experimental-strip-types src/cli.ts measure config/sites.yaml | tee measure.txt
+
+      - name: Raporu derle
+        run: |
+          mkdir -p reports
+          {
+            echo "# Ölçüm — $(date -u +%Y-%m-%d)"
+            echo
+            echo "Üreten: \`.github/workflows/measure.yml\` · run ${{ github.run_id }} · commit ${{ github.sha }}"
+            echo
+            echo "NOT_CONNECTED yazan satır ölçülemedi demektir, sıfır demek DEĞİLDİR."
+            echo
+            echo '## Bağlantı durumu'
+            echo
+            echo '```'
+            cat smoke.txt 2>/dev/null || echo "(duman testi çıktısı yok)"
+            echo '```'
+            echo
+            echo '## Ölçüm'
+            echo
+            echo '```'
+            cat measure.txt
+            echo '```'
+          } > reports/measure-latest.md
+          cp reports/measure-latest.md "reports/runs/$(date -u +%Y-%m-%d)-measure.md" 2>/dev/null \
+            || { mkdir -p reports/runs; cp reports/measure-latest.md "reports/runs/$(date -u +%Y-%m-%d)-measure.md"; }
+
+      - name: Özet
+        if: always()
+        run: cat reports/measure-latest.md >> "$GITHUB_STEP_SUMMARY" || echo "Rapor üretilemedi — adım loglarına bak." >> "$GITHUB_STEP_SUMMARY"
+
+      # Raporu depoya yazmak, bir sonraki oturumun rakamlara ulaşmasının en basit
+      # yolu: artifact indirmek gerekmez, dosya orada durur.
+      - name: Raporu depoya yaz
+        if: github.event_name == 'schedule' || inputs.commit_report
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add reports/measure-latest.md reports/runs/
+          # Değişiklik yoksa commit etme: her hafta boş commit atmak geçmişi kirletir.
+          git diff --cached --quiet || git commit -m "ölçüm: $(date -u +%Y-%m-%d) (otomatik)"
+          git push
+
+      - name: Artifact
+        if: always()
+        uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5.0
+        with:
+          name: measure-${{ github.run_id }}
+          path: |
+            reports/measure-latest.md
+            smoke.txt
+            measure.txt
+          retention-days: 30
+          if-no-files-found: warn
