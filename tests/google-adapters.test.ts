@@ -272,11 +272,66 @@ test("topicOpportunities: marka disi, sira 5-30, gosterim esigi uygular", async 
   assert.ok(opps.every((o) => o.position >= 5 && o.position <= 30));
 });
 
-test("cli topics: kimlik yoksa NOT_CONNECTED yazar, fikir uydurmaz", () => {
+test("cli topics: kimlik yoksa KANIT uydurmaz, yalnız EDİTORYAL (business_category) düşer", () => {
   const out = execFileSync("node", ["--experimental-strip-types", "src/cli.ts", "topics", "config/sites.yaml", "--site", "pamistanbul"], { encoding: "utf8" });
-  assert.match(out, /NOT_CONNECTED/);
+  assert.ok(!/KANIT/.test(out), "kimlik yokken arama verisi uydurulmamalı");
+  assert.match(out, /EDITORYAL/);
 });
 
 test("cli topics: bilinmeyen site acik hatayla cikar", () => {
   assert.throws(() => execFileSync("node", ["--experimental-strip-types", "src/cli.ts", "topics", "config/sites.yaml", "--site", "yok-boyle-bir-site"], { encoding: "utf8" }));
+});
+
+// --- haftalik 2 konu: kanit + editoryal, hicbiri uydurma trend degil ----
+
+test("weeklyTopics: KANIT once, EDİTORYAL yalniz eksik kalani doldurur", async () => {
+  const { weeklyTopics } = await import("../src/measure.ts");
+  const site = { business_category: "budget decision tools — 19 spending categories", primary_language: "en", secondary_languages: [] as string[] };
+  const opps = [{ query: "how to budget for X", impressions: 100, clicks: 1, position: 10, score: 10 }];
+  const topics = weeklyTopics(site, opps, 5, 2);
+  assert.equal(topics.length, 2);
+  assert.equal(topics[0].source, "kanit");
+  assert.equal(topics[0].title, "how to budget for X");
+  assert.equal(topics[1].source, "editoryal");
+  assert.ok(topics[1].title.includes("budget decision tools"));
+});
+
+test("weeklyTopics: KANIT 2 doluysa EDİTORYAL hiç devreye girmez", async () => {
+  const { weeklyTopics } = await import("../src/measure.ts");
+  const site = { business_category: "x", primary_language: "en", secondary_languages: [] as string[] };
+  const opps = [
+    { query: "a", impressions: 100, clicks: 1, position: 10, score: 10 },
+    { query: "b", impressions: 90, clicks: 1, position: 11, score: 9 },
+  ];
+  const topics = weeklyTopics(site, opps, 1, 2);
+  assert.ok(topics.every((t) => t.source === "kanit"));
+});
+
+test("editorialTopics: iki dilli site EN + TR başlık üretir, tek dilli tek başlık", async () => {
+  const { editorialTopics } = await import("../src/measure.ts");
+  const bilingual = editorialTopics({ business_category: "handmade crochet bags (Etsy shop)", primary_language: "en", secondary_languages: ["tr"] }, 0, 1);
+  assert.equal(bilingual.length, 1);
+  assert.ok(bilingual[0].titleTr, "iki dilli sitede TR başlık da olmalı");
+  const monolingual = editorialTopics({ business_category: "x", primary_language: "en", secondary_languages: [] }, 0, 1);
+  assert.equal(monolingual[0].titleTr, undefined, "tek dilli sitede TR başlık uydurulmamalı");
+});
+
+test("editorialTopics: business_category boşsa HİÇBİR ŞEY üretmez — uydurmaz", async () => {
+  const { editorialTopics } = await import("../src/measure.ts");
+  assert.deepEqual(editorialTopics({ business_category: "", primary_language: "en", secondary_languages: [] }, 0, 2), []);
+});
+
+test("editorialTopics: hafta indeksine göre açı şablonu döner, sabit kalmaz", async () => {
+  const { editorialTopics } = await import("../src/measure.ts");
+  const site = { business_category: "widget repair", primary_language: "en", secondary_languages: [] as string[] };
+  const week1 = editorialTopics(site, 1, 1)[0].title;
+  const week2 = editorialTopics(site, 2, 1)[0].title;
+  assert.notEqual(week1, week2, "farklı hafta indeksi farklı açı üretmeli — her hafta aynı öneri gelmemeli");
+});
+
+test("cli topics: her site için tam 2 satır, kimlik yokken bile (editoryal düşer)", () => {
+  const out = execFileSync("node", ["--experimental-strip-types", "src/cli.ts", "topics", "config/sites.yaml", "--site", "decideplan"], { encoding: "utf8" });
+  const lines = out.split("\n").filter((l) => l.includes("EDITORYAL") || l.includes("KANIT"));
+  assert.equal(lines.length, 2, "kimlik yokken bile business_category'den 2 editoryal öneri düşmeli");
+  assert.ok(!out.includes("KANIT"), "kimlik yokken KANIT etiketi hiç çıkmamalı");
 });
