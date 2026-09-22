@@ -36,7 +36,7 @@ sites:
     primary_conversion_events:
       - lead_form_submit                   # referenced in repo commit history; must be confirmed in GA4 before use as a KPI
     google_search_console_property: "sc-domain:pamistanbul.com"  # owner-confirmed 2026-09-20: domain property (covers apex + www + any subdomain)
-    ga4_property: UNKNOWN                  # measurement ID G-EYY9Z20XJ4 is in the repo (1604 refs); the numeric property behind it is NOT yet confirmed. Candidate: 426911036 ("Sefa Yamak - GA4") — must be verified against the data stream before use
+    ga4_property: "426911036"              # CONFIRMED 2026-09-22: property "Sefa Yamak - GA4" (account 76122862) data stream "Pam İstanbul Web Sitesi" (http://www.pamistanbul.com) carries Measurement ID G-EYY9Z20XJ4 — matches the 1604 in-repo refs exactly.
     bing_webmaster_property: NOT_CONNECTED   # no BingSiteAuth.xml and no msvalidate.01 meta in the repo
     cdn_log_source: NOT_CONNECTED
     indexnow_status: enabled               # FACT: 3 key files at root; one (af3b9d12…) holds the wrong key, so submissions signed with it fail verification
@@ -78,7 +78,7 @@ sites:
     content_sections: []
     primary_business_objectives: []
     primary_conversion_events: []
-    google_search_console_property: NOT_CONNECTED
+    google_search_console_property: "sc-domain:pamaistudio.com"  # CONFIRMED 2026-09-22: verified in GSC UI, service account added as Restricted
     ga4_property: "537055021"       # FACT: GA4 property id, account Sefa Yamak (76122862). Credentials not yet issued, so no data is readable yet.
     bing_webmaster_property: NOT_CONNECTED
     cdn_log_source: NOT_CONNECTED
@@ -112,7 +112,7 @@ sites:
     content_sections: [blog, guides]
     primary_business_objectives: []
     primary_conversion_events: []
-    google_search_console_property: NOT_CONNECTED
+    google_search_console_property: "sc-domain:spryhand.com"  # CONFIRMED 2026-09-22: verified in GSC UI, service account added as Restricted
     ga4_property: "551083665"       # FACT: GA4 property id, account Spry Hand (405598086). Credentials not yet issued, so no data is readable yet.
     bing_webmaster_property: NOT_CONNECTED
     cdn_log_source: NOT_CONNECTED
@@ -146,7 +146,7 @@ sites:
     content_sections: [blog]
     primary_business_objectives: []
     primary_conversion_events: []
-    google_search_console_property: NOT_CONNECTED
+    google_search_console_property: "sc-domain:decideplan.com"  # CONFIRMED 2026-09-22: verified in GSC UI, service account added as Restricted
     ga4_property: "550748133"       # FACT: GA4 property id, account Sefa Yamak (76122862). Credentials not yet issued, so no data is readable yet.
     bing_webmaster_property: NOT_CONNECTED
     cdn_log_source: NOT_CONNECTED
@@ -180,7 +180,7 @@ sites:
     content_sections: [blog]
     primary_business_objectives: []
     primary_conversion_events: []
-    google_search_console_property: NOT_CONNECTED
+    google_search_console_property: "sc-domain:rightlisted.com"  # CONFIRMED 2026-09-22: verified in GSC UI, service account added as Restricted
     ga4_property: "550073067"       # FACT: GA4 property id, account Sefa Yamak (76122862). Credentials not yet issued, so no data is readable yet.
     bing_webmaster_property: NOT_CONNECTED
     cdn_log_source: NOT_CONNECTED
@@ -214,7 +214,7 @@ sites:
     content_sections: [blog]
     primary_business_objectives: []
     primary_conversion_events: []
-    google_search_console_property: NOT_CONNECTED
+    google_search_console_property: "sc-domain:untitledportraits.com"  # CONFIRMED 2026-09-22: verified in GSC UI, service account added as Restricted
     ga4_property: "543604651"       # FACT: GA4 property id, account Sefa Yamak (76122862). Credentials not yet issued, so no data is readable yet.
     bing_webmaster_property: NOT_CONNECTED
     cdn_log_source: NOT_CONNECTED
@@ -248,7 +248,7 @@ sites:
     content_sections: [blog]
     primary_business_objectives: []
     primary_conversion_events: []
-    google_search_console_property: NOT_CONNECTED
+    google_search_console_property: "sc-domain:myhappymade.com"  # CONFIRMED 2026-09-22: verified in GSC UI, service account added as Restricted
     ga4_property: "540424289"       # FACT: GA4 property id, account Sefa Yamak (76122862). Credentials not yet issued, so no data is readable yet.
     bing_webmaster_property: NOT_CONNECTED
     cdn_log_source: NOT_CONNECTED
