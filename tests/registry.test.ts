@@ -61,9 +61,10 @@ test("live registry holds the whole portfolio, and every site states how it was 
     assert.ok(ga4 === "NOT_CONNECTED" || ga4 === "UNKNOWN" || /^\d{9,12}$/.test(ga4), `${s.id}: ga4_property "${ga4}"`);
     assert.doesNotMatch(ga4, /^G-/, `${s.id}: measurement ID is not a property ID`);
   }
-  // The pilot's GA4 property is not yet confirmed, so it must not claim one.
+  // The pilot's GA4 property was confirmed 2026-09-22 against the G-EYY9Z20XJ4 data
+  // stream, so it must now be that real numeric id, not the UNKNOWN sentinel.
   const pilot = sites.find((s) => s.id === "pamistanbul")!;
-  assert.equal(pilot.ga4_property, "UNKNOWN");
+  assert.equal(pilot.ga4_property, "426911036");
   // A Search Console property is either a sentinel or a real property string in one of
   // Google's two forms. A bare hostname is not a property and would silently return nothing.
   for (const s of sites) {
