@@ -68,6 +68,11 @@ export const SPECIALIST_FIELD_LIMITS = { title: 120, summary: 500, impact: 300, 
 export const MAX_SPECIALIST_UNKNOWNS = 5;
 export const MAX_SPECIALIST_CONFLICTS = 5;
 
+/** Her bulgunun ZORUNLU alanlari (BrainFinding + brain-agent-result.schema.json ile ayni; site_id basta). Istem bu listeden uretilir. */
+export const FINDING_REQUIRED_FIELDS = [
+  "site_id", "finding_id", "title", "category", "evidence_ids", "evidence_label", "confidence", "summary", "impact", "recommended_action", "actionability", "risk", "verification_plan",
+] as const;
+
 /** Dogrulama tani ayrintisi (Phase 2C.4). YALNIZ sinirli, guvenli alanlar: ham tamamlama/istem/sir YOK. */
 export const MAX_VIOLATION_DETAILS = 10;
 export const MAX_DETAIL_PATH_CHARS = 160;

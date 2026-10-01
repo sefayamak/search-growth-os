@@ -895,3 +895,95 @@ test("C4-workflow) Ozet adimi guvenli iz ozetini yazar ve anahtar/model gormez; 
   assert.ok(!/ANTHROPIC|secrets\.|vars\./.test(ozet), "Ozet anahtar/model gormez");
   assert.equal([...wfText.matchAll(/secrets\./g)].length, 1);
 });
+
+// --- Phase 2C.5: bulgu duzeyi site_id ZORUNLU (canli pilot 5: 4 bulgunun hicbiri site_id yazmadi) ----------------------------
+
+import { FINDING_REQUIRED_FIELDS } from "../src/brain/index.ts";
+
+const sysPrompt = (siteId: string, role: "specialist" | "chief" | "compliance" = "specialist") =>
+  runtimeSystemPrompt(PROFILES.get(role === "chief" ? "chief-search-strategist" : role === "compliance" ? "search-policy-compliance-officer" : SPEC)!, role, siteId);
+const withoutField = (f: Record<string, unknown>, k: string) => { const c = { ...f }; delete c[k]; return c; };
+
+test("C5-1..4) uzman istemi: her bulguda site_id ZORUNLU, kisalik icin atlanmaz, kanonik id aynen, domain/marka yasak", () => {
+  const sp = sysPrompt("pamistanbul");
+  assert.match(sp, /## FINDING REQUIRED FIELDS/);
+  assert.match(sp, /Every finding MUST contain "site_id": "pamistanbul"/);
+  assert.match(sp, /mandatory even though the same site_id also exists at the top level/);
+  assert.match(sp, /Do not omit repeated required fields for brevity/);
+  assert.match(sp, /Do not omit it to reduce repetition/);
+  assert.match(sp, /Do not infer it from evidence/);
+  assert.match(sp, /Do not replace it with a domain or brand name/);
+  assert.match(sp, /Copy the exact canonical runtime site_id \("pamistanbul"\) into every finding/);
+  // Phase 2C.2 kisalik kurallari zorunlu alanlari kapsamaz (acikca belirtilir)
+  assert.match(sp, /brevity rules never apply to required schema fields/);
+  assert.match(sp, /apply to free text only, never to required schema fields/);
+  // site_id bulgu sablonunda ILK alan ve literal
+  const tpl = sp.slice(sp.indexOf('"findings": [{'));
+  assert.ok(tpl.indexOf('"site_id": "pamistanbul"') < tpl.indexOf('"finding_id"'), "bulgu sablonunda site_id basta");
+  assert.ok(sp.indexOf("FINDING REQUIRED FIELDS") > 0 && sp.indexOf("FINDING REQUIRED FIELDS") < sp.indexOf("OUTPUT SIZE LIMITS"), "zorunlu alan blogu kisalik kurallarindan ONCE");
+});
+
+test("C5-alan listesi) zorunlu alan listesi GERCEK sozlesmeyle ayni (sema + istem + dogrulayici); site_id basta; hayali alan yok", () => {
+  const sch = JSON.parse(read("schemas/brain-agent-result.schema.json")).oneOf[0].properties.findings.items;
+  assert.deepEqual([...FINDING_REQUIRED_FIELDS].sort(), [...sch.required].sort(), "sema zorunlu alanlari ile ayni");
+  assert.deepEqual(Object.keys(sch.properties).sort(), [...sch.required].sort(), "semada zorunlu olmayan/hayali alan yok");
+  assert.equal(FINDING_REQUIRED_FIELDS[0], "site_id");
+  const sp = sysPrompt("pamistanbul");
+  assert.ok(sp.includes(`(in this order): ${FINDING_REQUIRED_FIELDS.join(", ")}.`));
+  // her zorunlu alan eksikse dogrulayici reddeder (eksik alan sessizce tamamlanmaz)
+  for (const k of FINDING_REQUIRED_FIELDS) {
+    const out = validateFindingsResult(specRaw([withoutField(specFinding(1), k)]), specCtx);
+    assert.equal(out.ok, false, `${k} eksik -> reddedilmeli`);
+  }
+  // chief istemi de ayni zorunlu bulgu yapisini gosterir; uyum istemi (inceleme sozlesmesi) bulgu listesi tasimaz
+  assert.ok(sysPrompt("pamistanbul", "chief").includes("FINDING REQUIRED FIELDS"));
+  assert.ok(!sysPrompt("pamistanbul", "compliance").includes("FINDING REQUIRED FIELDS"));
+});
+
+test("C5-5) gecerli cikti: ust duzey site_id + 4 bulgu, her birinde site_id=pamistanbul -> kabul", () => {
+  const out = specCheck([1, 2, 3, 4].map((n) => specFinding(n)));
+  assert.equal(out.ok, true);
+  assert.deepEqual(out.result!.findings.map((f) => f.site_id), ["pamistanbul", "pamistanbul", "pamistanbul", "pamistanbul"]);
+  assert.deepEqual(out.details, []);
+});
+
+test("C5-6..10) bulgu site_id eksik/domain, ust duzey eksik: HEPSI reddedilir; otomatik doldurma/kopyalama yok", () => {
+  const four = (mutate: (i: number, f: Record<string, unknown>) => Record<string, unknown>) => [1, 2, 3, 4].map((n, i) => mutate(i, specFinding(n)));
+  const m0 = validateFindingsResult(specRaw(four((i, f) => (i === 0 ? withoutField(f, "site_id") : f))), specCtx);
+  assert.ok(!m0.ok && m0.violations.includes("WRONG_SITE") && m0.details![0].path === "$.findings[0].site_id" && m0.details![0].observed === "<missing>");
+  const m3 = validateFindingsResult(specRaw(four((i, f) => (i === 3 ? withoutField(f, "site_id") : f))), specCtx);
+  assert.ok(!m3.ok && m3.violations.includes("WRONG_SITE") && m3.details![0].path === "$.findings[3].site_id");
+  assert.equal(m3.result, undefined, "ust duzeyden kopyalanarak 'duzeltilmis' sonuc yok");
+  const dom = specCheck([specFinding(1, { site_id: "pamistanbul.com" })]);
+  assert.equal(dom.ok, false); assert.ok(dom.violations.includes("FOREIGN_SITE_FINDING"));
+  // pilot 5 sekli: ust duzey dogru, 4 bulgu eksik
+  const pilot5 = validateFindingsResult(specRaw([1, 2, 3, 4].map((n) => withoutField(specFinding(n), "site_id"))), specCtx);
+  assert.ok(!pilot5.ok); assert.deepEqual(pilot5.violations, ["WRONG_SITE"]);
+  assert.deepEqual(pilot5.details!.map((d) => d.path), [0, 1, 2, 3].map((i) => `$.findings[${i}].site_id`));
+  // ust duzey eksik ama bulgular dogru
+  const raw = specRaw([specFinding(1), specFinding(2)]); delete raw.site_id;
+  const top = validateFindingsResult(raw, specCtx);
+  assert.ok(!top.ok && top.violations.includes("WRONG_SITE") && top.details![0].path === "$.site_id");
+});
+
+test("C5-11/12) baska site (decideplan): her bulgu sablonu kendi id'sini tasir; PAM sabiti yok; kimlik calisma zamanindan", () => {
+  const other = sysPrompt("decideplan");
+  assert.match(other, /Every finding MUST contain "site_id": "decideplan"/);
+  assert.match(other, /exact canonical runtime site_id \("decideplan"\)/);
+  assert.ok(!other.includes("pamistanbul"));
+  for (const id of REG.sites.map((s) => s.id)) assert.ok(sysPrompt(id).includes(`Every finding MUST contain "site_id": "${id}"`), id);
+  assert.ok(!/["']pamistanbul["']/.test(read("src/brain/agent-loader.ts")), "agent-loader'da PAM sabiti yok");
+});
+
+test("C5-13..17) kesilme, 6000 tavani, 5 bulgu, alan limitleri ve dogrulayici anlami degismedi", async () => {
+  assert.deepEqual({ ...OUTPUT_TOKEN_CAPS }, { specialist: 6000, chief: 3000, compliance: 1500 });
+  assert.equal(MAX_FINDINGS_PER_SPECIALIST, 5);
+  assert.deepEqual({ ...SPECIALIST_FIELD_LIMITS }, { title: 120, summary: 500, impact: 300, recommended_action: 300, verification_plan: 300, risk: 120, category: 60 });
+  assert.ok(specCheck([1, 2, 3, 4, 5, 6].map((n) => specFinding(n))).violations.includes("TOO_MANY_FINDINGS"));
+  assert.ok(specCheck([specFinding(1, { title: "x".repeat(121) })]).violations.includes("FIELD_TOO_LONG"));
+  assert.equal(specCheck([specFinding(1)], { site_id: "pamistanbul.com" }).ok, false, "alias yok");
+  const b = bundleOf([GSC]);
+  const fetchFn: FetchLike = async () => ({ status: 200, text: async () => JSON.stringify({ content: [{ type: "text", text: "{" }], stop_reason: "max_tokens", usage: { input_tokens: 1, output_tokens: 6000 } }) });
+  const r = await runBrain({ siteId: "pamistanbul", site: SITE, bundle: b.bundle!, evidenceBytes: b.evidence_bytes, config: CONFIGURED as Extract<AnthropicConfig, { state: "CONFIGURED" }>, profiles: PROFILES, fetchFn, now });
+  assert.equal(r.agent_trace[0].error_code, "MODEL_OUTPUT_TRUNCATED");
+});
