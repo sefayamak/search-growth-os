@@ -50,3 +50,32 @@ karar için metin değil `verdict` kullanılır.
 
 Actions'ta kalıcı ledger yok. Koruma: varsayılan 20, `HARD_LIMIT` 100, `concurrency: index-probe`, 403/429'da durma
 (çıkış kodu 1). Yerel `quota-ledger.json` davranışı aynen duruyor. Bu fazda `schedule` yok.
+
+## Canonical ilişkileri (Phase 1.5b-küçük)
+
+Her probe sonucu `canonical_relations` taşır (`src/canonical-relations.ts`, saf fonksiyon, her iki strateji için). Girdi **yalnız üç URL
+alanıdır**: denetlenen URL, `googleCanonical`, `userCanonical`. `coverageState` metni (tr-TR yerelleştirilmiş: "Yönlendirmeli sayfa",
+"Gönderildi ve dizine eklendi") karar için KULLANILMAZ; testle zorlanır.
+
+| Alan | Değer |
+|---|---|
+| `inspected_vs_google` | SAME / DIFFERENT / UNKNOWN |
+| `user_vs_google` | SAME / DIFFERENT / UNKNOWN |
+| `user_vs_inspected` | SAME / DIFFERENT / UNKNOWN |
+| `user_cross_domain` | true / false / UNKNOWN (userCanonical hostname ≠ denetlenen hostname) |
+| `google_cross_domain` | true / false / UNKNOWN |
+| `review_required` | tetikleyici gözlendiyse true |
+| `review_status` | `REVIEW_REQUIRED` · `NO_DIVERGENCE_OBSERVED` · `UNKNOWN` |
+| `reasons` | `GOOGLE_CANONICAL_DIFFERS_FROM_INSPECTED`, `USER_CANONICAL_DIFFERS_FROM_GOOGLE`, `USER_CANONICAL_CROSS_DOMAIN`, `GOOGLE_CANONICAL_CROSS_DOMAIN` |
+
+- Eşitlik: parse + fragment atma. Sondaki `/`, scheme, query ve path harf duyarlılığı **korunur**; hiçbir şey tahminle birleştirilmez.
+- "Cross-domain" tam hostname farkıdır: **`www.x.com` ile `x.com` FARKLI sayılır** (true).
+- Eksik/geçersiz alan = UNKNOWN; UNKNOWN asla SAME/DIFFERENT değildir ve "sorun yok" anlamına gelmez.
+- `REVIEW_REQUIRED` bir SEO hatası DEĞİLDİR: Google'ın yanıtındaki alanların karşılaştırması (FACT) ve insan incelemesi adayıdır (CANDIDATE).
+  Raporda `ERROR` ile karıştırılmaz; "## Canonical candidates" bölümü yalnız `REVIEW_REQUIRED` satırlarını listeler, yoksa hiç yazılmaz.
+  Segment tablosu ve JSON `canonical_candidate_count` taşır.
+
+Canlı iki örnek (run 36827031582, 2026-10-01) fixture olarak testte (`tests/fixtures/index-probe/canonical-live-2026-10-01.json`):
+(A) `pamistanbul.com/en/video/bath-loofah-lifestyle`: userCanonical `pamaistudio.com/...` (başka domain), Google denetlenen URL'yi canonical seçmiş;
+(B) `www.pamistanbul.com/pamlab/ucretsiz-ai-gorsel-uretme-araclari-2026.html`: Google canonical kendisi (www + .html), userCanonical temiz apex URL.
+İkisi de `REVIEW_REQUIRED` adayıdır; kaynak sayfaların düzeltilmesi bu sistemin işi değildir.

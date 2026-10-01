@@ -17,6 +17,7 @@
 import type { SiteEntry } from "./registry.ts";
 import { normalizeUrl, type UrlInspectionSummary, type IndexVerdict } from "./url-inventory.ts";
 import type { Segment } from "./index-candidates.ts";
+import { classifyCanonicalRelations, type CanonicalRelations } from "./canonical-relations.ts";
 
 export const PROBE_SITE_ID = "pamistanbul";
 export const DEFAULT_LIMIT = 20;
@@ -98,8 +99,10 @@ export interface ProbeResult {
   attempted: number;
   limit: number;
   stopped: StopReason;
-  results: { url: string; summary: UrlInspectionSummary; segment?: Segment }[];
+  results: { url: string; summary: UrlInspectionSummary; segment?: Segment; canonical_relations?: CanonicalRelations }[];
   skipped: { url: string; reason: string }[];
+  /** REVIEW_REQUIRED canonical iliskisi gozlenen URL sayisi. Bir HATA sayisi degil: insan incelemesi adayi. */
+  canonical_candidate_count?: number;
   /** Yalniz segmentli stratejide dolu. Eski (gsc) cikti bu alanlar olmadan ayni kalir. */
   strategy?: "gsc" | "segmented";
   segments?: SegmentReportRow[];
@@ -114,6 +117,7 @@ export interface SegmentReportRow {
   probed: number;
   /** INDEXED / NOT_INDEXED / NEUTRAL / UNKNOWN (Google'in karari) ve ERROR (cagri hatasi). */
   verdicts: Record<string, number>;
+  canonical_candidate_count?: number;
 }
 
 /** Segmentli stratejide secim ozeti (runProbe'a CLI'dan gelir). */
@@ -184,6 +188,10 @@ export async function runProbe(o: ProbeOptions): Promise<ProbeResult> {
       }
     }
   }
+  // Canonical iliskileri: yalniz URL alanlarindan (coverageState metni kullanilmaz).
+  for (const r of res.results) r.canonical_relations = classifyCanonicalRelations(r.url, r.summary.google_canonical, r.summary.user_canonical);
+  res.canonical_candidate_count = res.results.filter((r) => r.canonical_relations?.review_required).length;
+
   const examined = res.results.length;
   // Durdurulduysa kalan adaylar NOT_INSPECTED'dir; "sorunsuz" diye okunmamali.
   res.coverage_notice = segmented
@@ -201,7 +209,7 @@ export async function runProbe(o: ProbeOptions): Promise<ProbeResult> {
       const mine = res.results.filter((r) => r.segment === segment);
       const verdicts: Record<string, number> = {};
       for (const r of mine) { const k = r.summary.state === "ERROR" ? "ERROR" : r.summary.index_verdict; verdicts[k] = (verdicts[k] ?? 0) + 1; }
-      return { segment, ...info, probed: mine.length, verdicts };
+      return { segment, ...info, probed: mine.length, verdicts, canonical_candidate_count: mine.filter((r) => r.canonical_relations?.review_required).length };
     });
   } else if (segmented) res.strategy = "segmented";
   else res.strategy = "gsc";
@@ -253,10 +261,10 @@ export function probeToMarkdown(p: ProbeResult, sitemaps: ReturnType<typeof summ
   if (p.segments) {
     L.push("## Segmentler", "",
       "Segment adları iddia taşır: **SITEMAP_NOT_OBSERVED_IN_GSC_WINDOW** = sitemap evreninde var, son 28 günlük GSC page dataset'inde gözlenmedi. Bu bir HATA değildir; daha az gözlenmiş, daha yüksek inceleme öncelikli aday havuzudur. **HOST_VARIANT_RISK** = GSC'de üretim origin'inden farklı scheme/host ile görünen URL; canonical/redirect hatası İDDİA ETMEZ (sayfalar fetch edilmedi).", "",
-      "| segment | havuz | kota | denetlenen | dağılım |", "|---|---|---|---|---|");
+      "| segment | havuz | kota | denetlenen | dağılım | canonical adayı |", "|---|---|---|---|---|---|");
     for (const r of p.segments) {
       const dist = Object.entries(r.verdicts).map(([k, v]) => `${k} ${v}`).join(", ") || "—";
-      L.push(`| ${r.segment} | ${r.state === "COMPUTED" ? r.pool : `UNKNOWN (${r.reason})`} | ${r.quota} | ${r.probed} | ${dist} |`);
+      L.push(`| ${r.segment} | ${r.state === "COMPUTED" ? r.pool : `UNKNOWN (${r.reason})`} | ${r.quota} | ${r.probed} | ${dist} | ${r.canonical_candidate_count ?? 0} |`);
     }
     L.push("");
   }
@@ -264,6 +272,16 @@ export function probeToMarkdown(p: ProbeResult, sitemaps: ReturnType<typeof summ
   for (const r of p.results) {
     const s = r.summary;
     L.push(`| ${r.url} | ${p.segments ? `${r.segment ?? "—"} | ` : ""}${s.state}${s.error ? ` (${s.error})` : ""} | ${s.index_verdict} | ${s.coverage_state} | ${s.google_canonical} |`);
+  }
+  const cands = p.results.filter((r) => r.canonical_relations?.review_required);
+  if (cands.length) {
+    L.push("", "## Canonical candidates", "",
+      "**CANDIDATE / REVIEW_REQUIRED** — hata değildir, SEO hatası olarak etiketlenmez; insan incelemesi gerektirir. Satırlar Google'ın URL Inspection yanıtındaki üç URL alanının (denetlenen URL, googleCanonical, userCanonical) karşılaştırmasıdır (FACT). `cross-domain` tam hostname farkıdır: `www` ile apex FARKLI sayılır. coverageState metni karar için kullanılmaz.", "",
+      "| URL | segment | inspected↔google | user↔google | user↔inspected | user cross-domain | google cross-domain | Google canonical | user canonical | nedenler |", "|---|---|---|---|---|---|---|---|---|---|");
+    for (const r of cands) {
+      const c = r.canonical_relations!;
+      L.push(`| ${r.url} | ${r.segment ?? "—"} | ${c.inspected_vs_google} | ${c.user_vs_google} | ${c.user_vs_inspected} | ${c.user_cross_domain} | ${c.google_cross_domain} | ${r.summary.google_canonical} | ${r.summary.user_canonical} | ${c.reasons.join(", ")} |`);
+    }
   }
   L.push("", "## Sitemap'ler (GSC)", "");
   if (sitemaps.state === "NOT_CONNECTED") L.push("NOT_CONNECTED");
