@@ -98,7 +98,11 @@ export async function urlInspection(property: string, url: string): Promise<Reco
   const res = await googleJson<{ inspectionResult?: Record<string, unknown> }>(
     `${API}/v1/urlInspection/index:inspect`,
     tok,
+    // retries=0: URL Inspection kotasi dar. Bir 429'u ustel geri cekilmeyle tekrar
+    // denemek, kota zaten dolmusken kotayi daha da yakar; durumu cagiran (index-probe)
+    // ERROR olarak raporlar ve kosuyu durdurur.
     { method: "POST", body: { inspectionUrl: url, siteUrl: property, languageCode: "tr-TR" } },
+    0, 0,
   );
   return res.inspectionResult ?? null;
 }

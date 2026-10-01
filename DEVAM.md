@@ -12,6 +12,47 @@ sistemle bir ilgisi yok (o yalnız siteleri yayına alıyor).
 
 ---
 
+## GÜNCEL DURUM — 1 Ekim 2026 (bu bölüm, aşağıdaki 20 Eylül notlarından önceliklidir)
+
+20 Eylül'den sonra değişenler. Aşağıdaki bölümler **tarihsel kayıt** olarak kaldı; çelişen yerde bu bölüm doğrudur.
+
+| Eski not (20 Eylül) | Bugün (doğrulandı) |
+|---|---|
+| "GSC/GA4 bağlı değil, UNKNOWN kalır" (bölüm 6) | **Bağlı.** `reports/measure-latest.md` (28 Eylül): 7/7 GSC OK, 7/7 GA4 OK. Service account + Search Console + GA4 erişimi tamamlandı |
+| "65 test" | **174 test**, `npm run typecheck` temiz |
+| "iki workflow var" | Beş: `measure.yml` (haftalık GSC+GA4), `tests.yml` (her PR'da test), `index-probe.yml` (yalnız elle), `portfolio-check.yml`, `search-audit.yml` |
+| "Sıradaki adım: 3 PR'ı merge et" (pamistanbul-site #89/#90, pamaistudio#40) | Bu depodan **doğrulanamadı**; o repolar bu oturumun kapsamı dışı. Sefa'nın teyidi gerekir |
+| 18 skill | 18 skill (README'deki "15" eskiydi, düzeltildi) |
+
+**Bu depodaki PR #1–#12 kapalı/merge edilmiş; açık PR yok** (Phase 1 PR'ı hariç). Eski `claude/*` branch'ler duruyor, silinmedi.
+
+### Web Growth OS birleştirmesi (Issue #13)
+
+`search-growth-os` canonical sistemdir. `sefayamak/site-health-monitor` ayrı bir günlük rutin
+(Clarity + GSC) olarak **çalışmaya devam eder**; Phase 1'de ona dokunulmadı.
+
+Phase 1'de eklenenler (hepsi salt-okunur; sınır sözleşmesi: `docs/integrations/site-health-monitor.md`):
+
+- `import-health <dizin>` — shm snapshot'ını **yerel dizinden** okur ve doğrular. "Veri yok ≠ sıfır",
+  çift-tarih/idempotency, site izolasyonu. Ağ, git ya da token gerekmez.
+- URL envanteri tipi + şeması (`schemas/url-inventory.schema.json`).
+- `inspect-index` — **yalnız pamistanbul**, URL Inspection **ÖRNEKLEMİ** (tam coverage değil), düşük
+  varsayılan limit (20, sert tavan 100), 403/429 = ERROR, eksik alan = UNKNOWN. Google Indexing API'nin yazma ucu kod tabanında yok.
+- `opportunity_source: "gsc_evidence" | "editorial"` ayrı alan. `EDITORIAL` bir evidence label **değildir**;
+  evidence sözlüğü altı etiketle sabit.
+
+Verilmiş kararlar (tekrar tartışılmaz): `pamistanbul` **`pilot_onboarding` olarak kalır**, Phase 1 kabul
+edilene kadar `active` yapılmaz. Eski sistemler kapatılmaz/temizlenmez; mevcut workflow'lar değişmedi.
+
+**Bilinen veri sorunu (FACT):** 28 Eylül'de shm, Clarity'ye 7 sitenin 7'sinde erişemedi (ağ izni) ve
+history'ye sıfır satır yazdı; pamistanbul ve spryhand için aynı güne iki **farklı** satır var. İçe aktarıcı
+bunları `UNKNOWN` sayar. Clarity serisi, shm'nin ağ izni düzelene kadar güvenilmezdir.
+
+**Phase 2'ye kalanlar:** Clarity client'ı, shm OAuth yolunun emekliliği, Lighthouse/CWV, deploy geçmişi,
+içerik taslağı → PR hattı, dashboard.
+
+---
+
 ## 0. Yeni oturum: ilk beş dakika
 
 **YAPMA.** Bunlar zaten yapıldı ve tekrarı saatler yer:
@@ -31,7 +72,7 @@ sistemle bir ilgisi yok (o yalnız siteleri yayına alıyor).
 cd search-growth-os && git pull && npm test
 ```
 
-65 test yeşil gelmeli. Sonra bölüm 2'deki tek adıma geç.
+174 test yeşil gelmeli (20 Eylül'de 65 idi). Sonra bölüm 2'deki tek adıma geç.
 
 Bir şeyin hâlâ geçerli olup olmadığından şüphelenirsen ölçümü tekrarla —
 ama önce bu dosyadaki sayıya bak; çoğu soru orada cevaplı.
@@ -108,7 +149,7 @@ node --experimental-strip-types src/cli.ts portfolio     # içerik ritmi, 7 site
 node --experimental-strip-types src/cli.ts llmstxt       # llms.txt envanteri
 node --experimental-strip-types src/cli.ts audit --site pamistanbul --full
 node --experimental-strip-types src/cli.ts registry config/sites.yaml
-npm test                                                  # 65 test
+npm test                                                  # 174 test
 ```
 
 Bağımlılık yok, sadece Node 24.

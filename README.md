@@ -25,24 +25,24 @@ today. No production website has been modified.
 ```
 .claude-plugin/plugin.json   manifest (claude plugin validate .)
 agents/                      9 expert agents (chief-search-strategist orchestrates)
-skills/                      15 workflows (full-site-audit … strategic-deep-review)
+skills/                      18 workflows (full-site-audit … strategic-deep-review)
 hooks/                       PreToolUse compliance gate on Write/Edit
 monitors/                    alerts.log tail (empty until scheduled audits exist)
 policies/                    compliance, evidence labels, high-risk, change mgmt, quality gates, sources
 schemas/                     site registry, audit report, AI-visibility record, experiment, opportunity
 config/sites.example.yaml    registry example (copy to sites.yaml, git-ignored)
-src/                         zero-dependency engine: crawler, html, robots, sitemap, audit, compliance, report, registry, adapters, cli
+src/                         zero-dependency engine: crawler, html, robots, sitemap, audit, compliance, report, registry, adapters (GSC, GA4, site-health import), url-inventory, index-probe, cli
 tests/                       node:test suite + fixture site + fixture server
 evals/                       10 plugin eval cases (claude plugin eval .)
 templates/                   executive report, traffic drop, answer map, gap matrix, page brief, entity graph, PR body
-docs/                        architecture, operating model, integration guides
+docs/                        architecture, operating model, integration guides (incl. site-health-monitor boundary)
 reports/                     changelog, learning log, dry-run template; runs/ is scratch
 ```
 
 ## Run
 
 ```bash
-npm test                                   # 26 tests, spins a local fixture site
+npm test                                   # node:test suite, spins a local fixture site (174 tests on 2026-10-01)
 npm run cli -- audit --site pamistanbul    # registry-gated, read-only, sample crawl
 npm run cli -- audit --site pamistanbul --full   # FULL_BASELINE: every eligible sitemap URL
 npm run cli -- audit https://example.com   # ad-hoc URL (bypasses the registry gate)
@@ -50,6 +50,8 @@ npm run cli -- crawl https://example.com --max-pages 20 --delay 1000
 npm run cli -- compliance path/to/file     # exit 0 PASS · 1 FLAG · 2 REJECT
 npm run cli -- registry config/sites.example.yaml
 npm run cli -- integrations
+npm run cli -- import-health <snapshotDir>          # validate a site-health-monitor snapshot DIRECTORY (local, no network); --write merges per site
+npm run cli -- inspect-index config/sites.yaml --site pamistanbul   # read-only URL Inspection SAMPLE, not full coverage; pamistanbul only
 claude plugin validate .
 claude plugin eval . --no-publish
 claude --plugin-dir .                      # load locally
