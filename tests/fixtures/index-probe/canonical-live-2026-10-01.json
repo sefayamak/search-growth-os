@@ -1,5 +1,5 @@
 {
-  "_provenance": "Iki GERCEK canli URL Inspection yaniti: workflow run 36827031582 (main 9a10fa9, strategy=segmented, limit=10), artifact ham JSON'undan. Degerler 2026-10-01'de proje sahibi tarafindan dogrulandi; coverageState tr-TR yerellestirilmis gelir ve bu fixture'da yalnizca 'karar metne bagli degil' testi icin tasinir. lastCrawlTime bu fixture'a tasinmadi.",
+  "_provenance": "Gercek canli URL Inspection yanitlari. `cases` (A, B): workflow run 36827031582 artifact ham JSON'u (main 9a10fa9, strategy=segmented, limit=10), ayni degerler run 36828755651'de de goruldu. `convergence_cases` (C, D): run 36828755651 (main 9e7b701) log ciktisi ve artifact JSON'u; degerler proje sahibi tarafindan dogrulandi. coverageState tr-TR yerellestirilmis gelir ve yalnizca 'karar metne bagli degil' testi icin tasinir. lastCrawlTime fixture'a tasinmadi.",
   "cases": [
     {
       "name": "A: user canonical baska domain (pamaistudio), Google denetlenen URL'yi canonical sectigi icin INDEXED",
@@ -21,7 +21,8 @@
         "user_vs_inspected": "DIFFERENT",
         "user_cross_domain": true,
         "google_cross_domain": false,
-        "review_required": true
+        "review_required": true,
+        "canonical_pattern": "DECLARED_GOOGLE_CONFLICT"
       }
     },
     {
@@ -44,7 +45,58 @@
         "user_vs_inspected": "DIFFERENT",
         "user_cross_domain": true,
         "google_cross_domain": false,
-        "review_required": true
+        "review_required": true,
+        "canonical_pattern": "DECLARED_GOOGLE_CONFLICT"
+      }
+    }
+  ],
+  "convergence_cases": [
+    {
+      "name": "C: www varyanti; Google canonical ve sayfanin bildirdigi canonical ayni hedefte (apex)",
+      "inspected": "https://www.pamistanbul.com/en/pamlab/flux-ai-image-model-guide-2026",
+      "inspectionResult": {
+        "indexStatusResult": {
+          "verdict": "NEUTRAL",
+          "coverageState": "Yönlendirmeli sayfa",
+          "indexingState": "INDEXING_ALLOWED",
+          "pageFetchState": "SUCCESSFUL",
+          "robotsTxtState": "ALLOWED",
+          "googleCanonical": "https://pamistanbul.com/en/pamlab/flux-ai-image-model-guide-2026",
+          "userCanonical": "https://pamistanbul.com/en/pamlab/flux-ai-image-model-guide-2026"
+        }
+      },
+      "expected": {
+        "inspected_vs_google": "DIFFERENT",
+        "user_vs_google": "SAME",
+        "user_vs_inspected": "DIFFERENT",
+        "user_cross_domain": true,
+        "google_cross_domain": true,
+        "review_required": true,
+        "canonical_pattern": "GOOGLE_USER_CONVERGE_ON_OTHER_URL"
+      }
+    },
+    {
+      "name": "D: http + www kok URL; Google canonical ve sayfanin bildirdigi canonical ayni hedefte (apex kok)",
+      "inspected": "http://www.pamistanbul.com/",
+      "inspectionResult": {
+        "indexStatusResult": {
+          "verdict": "NEUTRAL",
+          "coverageState": "Yönlendirmeli sayfa",
+          "indexingState": "INDEXING_ALLOWED",
+          "pageFetchState": "SUCCESSFUL",
+          "robotsTxtState": "ALLOWED",
+          "googleCanonical": "https://pamistanbul.com/",
+          "userCanonical": "https://pamistanbul.com/"
+        }
+      },
+      "expected": {
+        "inspected_vs_google": "DIFFERENT",
+        "user_vs_google": "SAME",
+        "user_vs_inspected": "DIFFERENT",
+        "user_cross_domain": true,
+        "google_cross_domain": true,
+        "review_required": true,
+        "canonical_pattern": "GOOGLE_USER_CONVERGE_ON_OTHER_URL"
       }
     }
   ]

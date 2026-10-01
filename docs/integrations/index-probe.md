@@ -79,3 +79,29 @@ Canlı iki örnek (run 36827031582, 2026-10-01) fixture olarak testte (`tests/fi
 (A) `pamistanbul.com/en/video/bath-loofah-lifestyle`: userCanonical `pamaistudio.com/...` (başka domain), Google denetlenen URL'yi canonical seçmiş;
 (B) `www.pamistanbul.com/pamlab/ucretsiz-ai-gorsel-uretme-araclari-2026.html`: Google canonical kendisi (www + .html), userCanonical temiz apex URL.
 İkisi de `REVIEW_REQUIRED` adayıdır; kaynak sayfaların düzeltilmesi bu sistemin işi değildir.
+
+### `canonical_pattern` (Phase 1.5b ikinci dilim)
+
+Mevcut ilişki FACT'leri ve `review_required` / `review_status` anlamı **değişmedi**. Üzerlerine türetilmiş bir alan eklendi; yalnız iki ilişkiden
+(`inspected_vs_google`, `user_vs_google`) çıkar. Hostname / `*_cross_domain` kararın yerine geçmez, ek FACT olarak kalır (`www` ≠ apex).
+
+| `canonical_pattern` | Koşul | Anlamı |
+|---|---|---|
+| `DECLARED_GOOGLE_CONFLICT` | `user_vs_google = DIFFERENT` (öncelikli) | sayfanın bildirdiği canonical ile Google'ın seçtiği uyuşmuyor. CANDIDATE / REVIEW_REQUIRED, insan incelemesi adayı; otomatik SEO hatası değil |
+| `GOOGLE_USER_CONVERGE_ON_OTHER_URL` | `inspected_vs_google = DIFFERENT` ve `user_vs_google = SAME` | denetlenen URL başka bir varyant, Google ve sayfa aynı hedefte uzlaşıyor. Canonical çatışması değil; INFO / OBSERVED_CONVERGENCE. Doğru HTTP redirect/canonical uygulaması olduğu **iddia edilmez** (sayfa fetch edilmedi) |
+| `INSPECTED_USER_GOOGLE_ALIGNED` | `inspected_vs_google = SAME` ve `user_vs_google = SAME` | denetlenen URL, bildirilen canonical ve Google canonical aynı URL üzerinde hizalı |
+| `INCOMPLETE` | gerekli alan UNKNOWN | güvenilir desen çıkarılamıyor |
+
+Ad netleştirmesi: `canonical_pattern` içinde `NO_DIVERGENCE_OBSERVED` YOKTUR. Bu değer yalnız `review_status` alanındadır ve daha geniştir (bildirilen canonical
+eksikken de olabilir: ör. `inspected_vs_google = SAME`, user canonical UNKNOWN → `review_status = NO_DIVERGENCE_OBSERVED`, `canonical_pattern = INCOMPLETE`).
+
+`review_required` geriye uyumluluğu: `GOOGLE_USER_CONVERGE_ON_OTHER_URL` satırları mevcut `reasons` nedeniyle `review_required = true` / `review_status = REVIEW_REQUIRED`
+taşıyabilir (canlıda doğrulanmış davranış, değiştirilmedi). Bu flag, deseni `DECLARED_GOOGLE_CONFLICT`, SEO hatası ya da canonical çatışması yapmaz.
+
+Rapor: `## Canonical candidates` iki alt gruba ayrılır — **Declared vs Google conflicts** ve **Google/user convergence on another URL**. `review_required` olup deseni
+`INCOMPLETE` olan satırlar kaybolmasın diye (varsa) üçüncü bir **Incomplete canonical data** alt grubu yazılır. Sayımlar: `canonical_candidate_count`
+(geriye uyumlu, `review_required` sayısı), `canonical_conflict_count`, `canonical_convergence_count` (JSON toplam + segment satırı; segment tablosunda `conflict` ve
+`convergence` sütunları). `review_required` semantiğini daraltıp daraltmamak ayrı bir karardır.
+
+Canlı dört vaka (run 36827031582 ve 36828755651): `bath-loofah-lifestyle` ve `www…ucretsiz-ai-gorsel-uretme-araclari-2026.html` = `DECLARED_GOOGLE_CONFLICT`;
+`www…flux-ai-image-model-guide-2026` ve `http://www.pamistanbul.com/` = `GOOGLE_USER_CONVERGE_ON_OTHER_URL`.

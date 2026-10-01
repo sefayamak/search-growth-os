@@ -103,6 +103,10 @@ export interface ProbeResult {
   skipped: { url: string; reason: string }[];
   /** REVIEW_REQUIRED canonical iliskisi gozlenen URL sayisi. Bir HATA sayisi degil: insan incelemesi adayi. */
   canonical_candidate_count?: number;
+  /** canonical_pattern = DECLARED_GOOGLE_CONFLICT sayisi (insan incelemesi adayi, hata degil). */
+  canonical_conflict_count?: number;
+  /** canonical_pattern = GOOGLE_USER_CONVERGE_ON_OTHER_URL sayisi (gozlenen uzlasma, celiski degil). */
+  canonical_convergence_count?: number;
   /** Yalniz segmentli stratejide dolu. Eski (gsc) cikti bu alanlar olmadan ayni kalir. */
   strategy?: "gsc" | "segmented";
   segments?: SegmentReportRow[];
@@ -118,6 +122,8 @@ export interface SegmentReportRow {
   /** INDEXED / NOT_INDEXED / NEUTRAL / UNKNOWN (Google'in karari) ve ERROR (cagri hatasi). */
   verdicts: Record<string, number>;
   canonical_candidate_count?: number;
+  canonical_conflict_count?: number;
+  canonical_convergence_count?: number;
 }
 
 /** Segmentli stratejide secim ozeti (runProbe'a CLI'dan gelir). */
@@ -191,6 +197,8 @@ export async function runProbe(o: ProbeOptions): Promise<ProbeResult> {
   // Canonical iliskileri: yalniz URL alanlarindan (coverageState metni kullanilmaz).
   for (const r of res.results) r.canonical_relations = classifyCanonicalRelations(r.url, r.summary.google_canonical, r.summary.user_canonical);
   res.canonical_candidate_count = res.results.filter((r) => r.canonical_relations?.review_required).length;
+  res.canonical_conflict_count = res.results.filter((r) => r.canonical_relations?.canonical_pattern === "DECLARED_GOOGLE_CONFLICT").length;
+  res.canonical_convergence_count = res.results.filter((r) => r.canonical_relations?.canonical_pattern === "GOOGLE_USER_CONVERGE_ON_OTHER_URL").length;
 
   const examined = res.results.length;
   // Durdurulduysa kalan adaylar NOT_INSPECTED'dir; "sorunsuz" diye okunmamali.
@@ -209,7 +217,9 @@ export async function runProbe(o: ProbeOptions): Promise<ProbeResult> {
       const mine = res.results.filter((r) => r.segment === segment);
       const verdicts: Record<string, number> = {};
       for (const r of mine) { const k = r.summary.state === "ERROR" ? "ERROR" : r.summary.index_verdict; verdicts[k] = (verdicts[k] ?? 0) + 1; }
-      return { segment, ...info, probed: mine.length, verdicts, canonical_candidate_count: mine.filter((r) => r.canonical_relations?.review_required).length };
+      return { segment, ...info, probed: mine.length, verdicts, canonical_candidate_count: mine.filter((r) => r.canonical_relations?.review_required).length,
+        canonical_conflict_count: mine.filter((r) => r.canonical_relations?.canonical_pattern === "DECLARED_GOOGLE_CONFLICT").length,
+        canonical_convergence_count: mine.filter((r) => r.canonical_relations?.canonical_pattern === "GOOGLE_USER_CONVERGE_ON_OTHER_URL").length };
     });
   } else if (segmented) res.strategy = "segmented";
   else res.strategy = "gsc";
@@ -261,10 +271,10 @@ export function probeToMarkdown(p: ProbeResult, sitemaps: ReturnType<typeof summ
   if (p.segments) {
     L.push("## Segmentler", "",
       "Segment adları iddia taşır: **SITEMAP_NOT_OBSERVED_IN_GSC_WINDOW** = sitemap evreninde var, son 28 günlük GSC page dataset'inde gözlenmedi. Bu bir HATA değildir; daha az gözlenmiş, daha yüksek inceleme öncelikli aday havuzudur. **HOST_VARIANT_RISK** = GSC'de üretim origin'inden farklı scheme/host ile görünen URL; canonical/redirect hatası İDDİA ETMEZ (sayfalar fetch edilmedi).", "",
-      "| segment | havuz | kota | denetlenen | dağılım | canonical adayı |", "|---|---|---|---|---|---|");
+      "| segment | havuz | kota | denetlenen | dağılım | canonical adayı | conflict | convergence |", "|---|---|---|---|---|---|---|---|");
     for (const r of p.segments) {
       const dist = Object.entries(r.verdicts).map(([k, v]) => `${k} ${v}`).join(", ") || "—";
-      L.push(`| ${r.segment} | ${r.state === "COMPUTED" ? r.pool : `UNKNOWN (${r.reason})`} | ${r.quota} | ${r.probed} | ${dist} | ${r.canonical_candidate_count ?? 0} |`);
+      L.push(`| ${r.segment} | ${r.state === "COMPUTED" ? r.pool : `UNKNOWN (${r.reason})`} | ${r.quota} | ${r.probed} | ${dist} | ${r.canonical_candidate_count ?? 0} | ${r.canonical_conflict_count ?? 0} | ${r.canonical_convergence_count ?? 0} |`);
     }
     L.push("");
   }
@@ -275,13 +285,24 @@ export function probeToMarkdown(p: ProbeResult, sitemaps: ReturnType<typeof summ
   }
   const cands = p.results.filter((r) => r.canonical_relations?.review_required);
   if (cands.length) {
-    L.push("", "## Canonical candidates", "",
-      "**CANDIDATE / REVIEW_REQUIRED** — hata değildir, SEO hatası olarak etiketlenmez; insan incelemesi gerektirir. Satırlar Google'ın URL Inspection yanıtındaki üç URL alanının (denetlenen URL, googleCanonical, userCanonical) karşılaştırmasıdır (FACT). `cross-domain` tam hostname farkıdır: `www` ile apex FARKLI sayılır. coverageState metni karar için kullanılmaz.", "",
-      "| URL | segment | inspected↔google | user↔google | user↔inspected | user cross-domain | google cross-domain | Google canonical | user canonical | nedenler |", "|---|---|---|---|---|---|---|---|---|---|");
-    for (const r of cands) {
+    const HEAD = ["| URL | segment | inspected↔google | user↔google | user↔inspected | user cross-domain | google cross-domain | Google canonical | user canonical | nedenler |", "|---|---|---|---|---|---|---|---|---|---|"];
+    const row = (r: (typeof cands)[number]) => {
       const c = r.canonical_relations!;
-      L.push(`| ${r.url} | ${r.segment ?? "—"} | ${c.inspected_vs_google} | ${c.user_vs_google} | ${c.user_vs_inspected} | ${c.user_cross_domain} | ${c.google_cross_domain} | ${r.summary.google_canonical} | ${r.summary.user_canonical} | ${c.reasons.join(", ")} |`);
-    }
+      return `| ${r.url} | ${r.segment ?? "—"} | ${c.inspected_vs_google} | ${c.user_vs_google} | ${c.user_vs_inspected} | ${c.user_cross_domain} | ${c.google_cross_domain} | ${r.summary.google_canonical} | ${r.summary.user_canonical} | ${c.reasons.join(", ")} |`;
+    };
+    const of = (pattern: string) => cands.filter((r) => r.canonical_relations!.canonical_pattern === pattern);
+    const conflicts = of("DECLARED_GOOGLE_CONFLICT"), converge = of("GOOGLE_USER_CONVERGE_ON_OTHER_URL");
+    const incomplete = cands.filter((r) => !["DECLARED_GOOGLE_CONFLICT", "GOOGLE_USER_CONVERGE_ON_OTHER_URL"].includes(r.canonical_relations!.canonical_pattern));
+    L.push("", "## Canonical candidates", "",
+      "Satırlar Google'ın URL Inspection yanıtındaki üç URL alanının (denetlenen URL, googleCanonical, userCanonical) karşılaştırmasıdır (FACT). Hata değildir, SEO hatası olarak etiketlenmez, düzeltme önerisi içermez. `cross-domain` tam hostname farkıdır: `www` ile apex FARKLI sayılır. coverageState metni karar için kullanılmaz. Gruplama `canonical_pattern` ile yapılır.", "",
+      `### Declared vs Google conflicts (${conflicts.length})`, "",
+      "**CANDIDATE / REVIEW_REQUIRED** — sayfanın bildirdiği canonical ile Google'ın seçtiği canonical uyuşmuyor (`DECLARED_GOOGLE_CONFLICT`). İnsan incelemesi adayıdır; otomatik SEO hatası değildir.", "",
+      ...(conflicts.length ? [...HEAD, ...conflicts.map(row)] : ["Yok."]), "",
+      `### Google/user convergence on another URL (${converge.length})`, "",
+      "**INFO / OBSERVED_CONVERGENCE** — Google canonical ile bildirilen canonical aynı hedefte uzlaşıyor; denetlenen URL başka bir URL'nin varyantıdır (FACT). Bu `canonical_pattern`, declared-vs-Google conflict DEĞİLDİR. Mevcut `review_required` alanı geriye uyumluluk amacıyla `true` kalabilir; bu flag'in varlığı bu pattern'i SEO hatası veya canonical conflict yapmaz. Doğru HTTP redirect/canonical uygulaması henüz fetch ile doğrulanmamıştır. Desen: `GOOGLE_USER_CONVERGE_ON_OTHER_URL`.", "",
+      ...(converge.length ? [...HEAD, ...converge.map(row)] : ["Yok."]));
+    if (incomplete.length) L.push("", `### Incomplete canonical data (${incomplete.length})`, "",
+      "**CANDIDATE / REVIEW_REQUIRED** — bir tetikleyici gözlendi ama gerekli alan eksik olduğu için güvenilir bir desen çıkarılamadı (`INCOMPLETE`). Eksik alan UNKNOWN'dur, tahmin edilmedi.", "", ...HEAD, ...incomplete.map(row));
   }
   L.push("", "## Sitemap'ler (GSC)", "");
   if (sitemaps.state === "NOT_CONNECTED") L.push("NOT_CONNECTED");
