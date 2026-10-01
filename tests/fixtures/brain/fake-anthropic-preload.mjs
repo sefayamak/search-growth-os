@@ -28,7 +28,7 @@ globalThis.fetch = async (url, init) => {
     systemHasEvidence: ids.some((i) => body.system.includes(i)),
   }) + "\n");
   // Varsayilan durma nedeni end_turn; FAKE_MODE "truncated-*" / "unknown-stop" modlari bunu degistirir.
-  const stop = MODE === "truncated-malformed" || MODE === "truncated-valid" ? "max_tokens" : MODE === "unknown-stop" ? "brand_new_reason" : "end_turn";
+  const stop = MODE === "truncated-malformed" || MODE === "truncated-valid" || (MODE === "chief-truncated" && role === "chief") || (MODE === "compliance-truncated" && role === "compliance") ? "max_tokens" : MODE === "unknown-stop" ? "brand_new_reason" : "end_turn";
   const reply = (status, text) => ({ status, text: async () => (status === 200 ? JSON.stringify({ content: [{ type: "text", text }], stop_reason: stop, usage: { input_tokens: 111, output_tokens: 22 } }) : "{}") });
   if (MODE === "429") return reply(429, "");
   if (MODE === "500") return reply(500, "");
@@ -44,12 +44,15 @@ globalThis.fetch = async (url, init) => {
   }
   if (role === "chief") {
     if (MODE === "chief-malformed") return reply(200, `${RAW_MARK} chief bozuk`);
+    if (MODE === "chief-truncated") return reply(200, `${RAW_MARK} {"schema":"sgos.brain.agent-result.v1","findings":[`);
     // Mevcut orkestrator kurali: MONITOR dışı (degisiklik oneren) bulgu uyum incelemesine girer. "ok" = MONITOR (uyum yok).
     const draft = MODE === "ok-draft" || MODE === "ok-draft-reject";
-    const actionability = draft ? "DRAFT_PR_CANDIDATE" : MODE === "ok-human" ? "HUMAN_REVIEW" : "MONITOR";
+    const actionability = draft ? "DRAFT_PR_CANDIDATE" : MODE === "ok-human" || MODE === "compliance-truncated" || MODE === "compliance-malformed" ? "HUMAN_REVIEW" : "MONITOR";
     return reply(200, result(agent, [findingBase(agent, ids.slice(0, 1), { actionability })]));
   }
   // compliance
+  if (MODE === "compliance-truncated") return reply(200, `${RAW_MARK} {"schema":"sgos.brain.agent-result.v1","reviews":[`);
+  if (MODE === "compliance-malformed") return reply(200, `${RAW_MARK} sk-ant-LEAKLEAKLEAK1234567890 uyum bozuk`);
   const fids = [...user.matchAll(/"finding_id":"([^"]+)"/g)].map((m) => m[1]);
   const verdict = MODE === "ok-draft-reject" ? "REJECT" : "PASS";
   return reply(200, JSON.stringify({ schema: "sgos.brain.agent-result.v1", agent_id: agent, site_id: "pamistanbul", reviews: fids.map((id) => ({ finding_id: id, verdict, reason: "Politika ile celismiyor." })) }));

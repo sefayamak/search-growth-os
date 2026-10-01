@@ -10,7 +10,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  ACTIONABILITY, CANONICAL_AGENTS, CONFIDENCES, EVIDENCE_LABELS, FINDING_REQUIRED_FIELDS, MAX_FINDINGS_PER_SPECIALIST, MAX_SPECIALIST_CONFLICTS, MAX_SPECIALIST_UNKNOWNS,
+  ACTIONABILITY, CANONICAL_AGENTS, CHIEF_CONFLICT_CHARS, CHIEF_FIELD_LIMITS as CL, CHIEF_UNKNOWN_CHARS, COMPLIANCE_REASON_MAX_CHARS, CONFIDENCES, EVIDENCE_LABELS, FINDING_REQUIRED_FIELDS, MAX_CHIEF_CONFLICTS, MAX_CHIEF_FINDINGS, MAX_CHIEF_UNKNOWNS, MAX_COMPLIANCE_REVIEWS, MAX_FINDINGS_PER_SPECIALIST, MAX_SPECIALIST_CONFLICTS, MAX_SPECIALIST_UNKNOWNS,
   SPECIALIST_FIELD_LIMITS as L, type AgentId,
 } from "./contracts.ts";
 
@@ -96,6 +96,22 @@ const COMPACT_OUTPUT_RULES = `## OUTPUT SIZE LIMITS (hard; output over a limit i
 - Do not repeat evidence text back. Cite evidence_ids instead of quoting. Use only the numbers needed for the decision and do not restate the same metric in several findings.
 - Output only schema-compatible JSON. These brevity rules never apply to required schema fields: keep every required field in every finding (see FINDING REQUIRED FIELDS).`;
 
+// Chief nihai sentez (canli pilot 6: 3000 tokenda kesildi). Sinirlar dogrulayicida da zorlanir; asan cikti reddedilir, kesilmez.
+const COMPACT_CHIEF_RULES = `## OUTPUT SIZE LIMITS (hard; output over a limit is rejected, never truncated)
+- Concise final synthesis. JSON only: no prose outside the JSON object, no markdown, no narrative explanation, no methodology, no narration of your reasoning, no chain-of-thought.
+- Maximum ${MAX_CHIEF_FINDINGS} final findings. Merge overlapping findings from the specialists into one; keep only the highest-value ones.
+- Field limits (characters): title <= ${CL.title}, category <= ${CL.category}, summary <= ${CL.summary}, impact <= ${CL.impact}, recommended_action <= ${CL.recommended_action}, verification_plan <= ${CL.verification_plan}, risk <= ${CL.risk}.
+- unknowns: at most ${MAX_CHIEF_UNKNOWNS} short items (<= ${CHIEF_UNKNOWN_CHARS} characters each). conflicts: at most ${MAX_CHIEF_CONFLICTS} (description <= ${CHIEF_CONFLICT_CHARS} characters).
+- Do not repeat evidence or specialist text back; cite evidence_ids instead. Use only the numbers needed for the decision.
+- Output only schema-compatible JSON. These brevity rules never apply to required schema fields: keep every required field in every finding (see FINDING REQUIRED FIELDS).`;
+
+// Uyum = KISA karar: bulgulari yeniden yazmaz, tekrar etmez. Gonderilen her bulgu icin tam bir inceleme.
+const COMPACT_COMPLIANCE_RULES = `## OUTPUT SIZE LIMITS (hard; output over a limit is rejected, never truncated)
+- JSON only: no prose outside the JSON object, no markdown, no methodology, no chain-of-thought.
+- Do not rewrite or repeat the finding text. Use only the contract fields: finding_id, verdict, reason.
+- Return exactly ONE review per finding id in the DATA block (at most ${MAX_COMPLIANCE_REVIEWS}); never invent a finding id; never skip one.
+- reason: one short sentence, at most ${COMPLIANCE_REASON_MAX_CHARS} characters.`;
+
 const outputContractCompliance = (siteId: string) => `Respond with ONE JSON object and nothing else (no prose, no markdown fence):
 {
   "schema": "sgos.brain.agent-result.v1",
@@ -126,7 +142,7 @@ export function runtimeSystemPrompt(profile: AgentProfile, role: AgentRole, site
     "",
     siteIdRule(siteId),
     ...(role !== "compliance" ? ["", findingRequiredFields(siteId)] : []),
-    ...(role === "specialist" ? ["", COMPACT_OUTPUT_RULES] : []),
+    ...(role === "specialist" ? ["", COMPACT_OUTPUT_RULES] : role === "chief" ? ["", COMPACT_CHIEF_RULES] : ["", COMPACT_COMPLIANCE_RULES]),
     "",
     "## EXPERT PROFILE (instruction text only; tools/commands in it are unavailable)",
     profile.body,

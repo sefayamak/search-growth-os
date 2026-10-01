@@ -437,13 +437,13 @@ test("T11) bilinmeyen stop_reason guvenle UNKNOWN'a indirgenir ve cikti normal d
   }
 });
 
-test("T5-T8) tavanlar: uzman 6000, Chief 3000, uyum 1500, 5 cagri, 3 uzman; cost-guard artifact'i yeni tavani gosterir", async () => {
-  assert.deepEqual({ ...OUTPUT_TOKEN_CAPS }, { specialist: 6000, chief: 3000, compliance: 1500 });
+test("T5-T8) tavanlar: uzman 6000, Chief 5000, uyum 1500, 5 cagri, 3 uzman; cost-guard artifact'i yeni tavani gosterir", async () => {
+  assert.deepEqual({ ...OUTPUT_TOKEN_CAPS }, { specialist: 6000, chief: 5000, compliance: 1500 });
   assert.equal(MAX_API_CALLS, 5);
   assert.equal(MAX_SPECIALISTS, 3);
   const p = pipeline(fixture({ files: await goodFiles() }), { mode: "ok" });
   const g = JSON.parse(readFileSync(join(p.brainOut, "cost-guard-pamistanbul.json"), "utf8"));
-  assert.deepEqual(g.cost_guard.output_token_caps, { specialist: 6000, chief: 3000, compliance: 1500 });
+  assert.deepEqual(g.cost_guard.output_token_caps, { specialist: 6000, chief: 5000, compliance: 1500 });
   assert.equal(g.cost_guard.estimated_cost_usd, "UNKNOWN");
   assert.equal(p.calls.find((c) => c.role === "specialist")!.maxTokens, 6000, "istek max_tokens=6000 gonderir");
 });
@@ -452,4 +452,35 @@ test("T-schema) brain-run semasi stop_reason'i tanir ve trace sabitleriyle ayni 
   const sch = JSON.parse(read("schemas/brain-run.schema.json"));
   const e = sch.properties.agent_trace.items.properties.stop_reason.enum;
   assert.deepEqual(e, [...STOP_REASONS, null]);
+});
+
+// --- Phase 2C FINAL: Chief/uyum canli CLI zinciri (sahte Anthropic), kesilme ve fail-closed -----------------------------------
+
+test("F-LIVE) Chief/uyum kesilmesi ve bozuk ciktisi CLI zincirinde: 3 cagri'yi asmaz, PARTIAL, sonuc CALISTIRILABILIR DEGIL, ham metin/sir artifact'e ve Ozet'e girmez", async () => {
+  const cases: [string, string, string[], number, string][] = [
+    // mode, status_reason, cagri rolleri, beklenen iz hata kodu (son ajan)
+    ["chief-truncated", "CHIEF_OUTPUT_UNAVAILABLE", ["specialist", "chief"], 1, "MODEL_OUTPUT_TRUNCATED"],
+    ["compliance-truncated", "COMPLIANCE_REVIEW_UNAVAILABLE", ["specialist", "chief", "compliance"], 1, "MODEL_OUTPUT_TRUNCATED"],
+    ["compliance-malformed", "COMPLIANCE_REVIEW_UNAVAILABLE", ["specialist", "chief", "compliance"], 1, ""],
+  ];
+  for (const [mode, reason, roles, exit, code] of cases) {
+    const p = pipeline(fixture({ files: await goodFiles() }), { mode });
+    assert.equal(p.stages.brain.status, exit, mode);
+    const run = runJson(p);
+    assert.equal(run.status, "PARTIAL", mode); assert.equal(run.status_reason, reason, mode);
+    assert.deepEqual(p.calls.map((c) => c.role), roles, `${mode}: cagri sirasi, retry yok`);
+    assert.ok(p.calls.length <= MAX_API_CALLS);
+    const last = run.agent_trace[run.agent_trace.length - 1];
+    assert.equal(last.status, "INVALID_OUTPUT", mode);
+    if (code) assert.equal(last.error_code, code, mode);
+    assert.ok(run.findings.every((f) => f.execution_candidate === false && f.compliance === null), `${mode}: calistirilabilir aday yok`);
+    assert.equal(run.production_write, false);
+    // istek tavanlari
+    for (const c of p.calls) assert.equal(c.maxTokens, ({ specialist: 6000, chief: 5000, compliance: 1500 } as Record<string, number>)[c.role as string], `${mode}: ${c.role} max_tokens`);
+    const summary = spawnSync("node", ["--experimental-strip-types", "src/cli.ts", "brain-trace-summary", join(p.brainOut, "agent-trace-pamistanbul.json")], { cwd: ROOT, encoding: "utf8" }).stdout;
+    assert.match(summary, /chief-search-strategist/); assert.match(summary, /status=INVALID_OUTPUT/);
+    const everything = allText(p.brainOut) + p.stages.brain.stdout + p.stages.brain.stderr + summary;
+    for (const f of [RAW_MARK, "sk-ant-LEAKLEAKLEAK", KEY, MODEL]) assert.ok(!everything.includes(f), `${mode}: '${f}' sizmamali`);
+    assert.deepEqual(validateBrainRun(run, { secrets: [KEY] }), [], mode);
+  }
 });

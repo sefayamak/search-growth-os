@@ -164,7 +164,7 @@ export async function runBrain(opts: BrainOptions): Promise<BrainRun> {
   const chief = await callAgent("chief-search-strategist", "chief", { evidence, specialist_results: specialistResults }, chiefIds, OUTPUT_TOKEN_CAPS.chief);
   let chiefResult: AgentResult | null = null;
   if (chief.t.status !== "ERROR" && chief.parsed !== null) {
-    const v = validateFindingsResult(chief.parsed, { agentId: "chief-search-strategist", siteId: opts.siteId, allowed: byId, secrets });
+    const v = validateFindingsResult(chief.parsed, { agentId: "chief-search-strategist", siteId: opts.siteId, allowed: byId, secrets, role: "chief" });
     if (v.ok) { chiefResult = v.result!; chief.t.status = "OK"; chief.t.output_finding_ids = chiefResult.findings.map((f) => f.finding_id); }
     else { chief.t.status = "INVALID_OUTPUT"; chief.t.violations = v.violations; chief.t.violation_details = v.details ?? []; }
   }

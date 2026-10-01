@@ -19,7 +19,7 @@ sistemle bir ilgisi yok (o yalnız siteleri yayına alıyor).
 | Eski not (20 Eylül) | Bugün (doğrulandı) |
 |---|---|
 | "GSC/GA4 bağlı değil, UNKNOWN kalır" (bölüm 6) | **Bağlı.** `reports/measure-latest.md` (28 Eylül): 7/7 GSC OK, 7/7 GA4 OK. Service account + Search Console + GA4 erişimi tamamlandı |
-| "65 test" | **393 test**, `npm run typecheck` temiz |
+| "65 test" | **408 test**, `npm run typecheck` temiz |
 | "iki workflow var" | Beş: `measure.yml` (haftalık GSC+GA4), `tests.yml` (her PR'da test), `index-probe.yml` (yalnız elle), `portfolio-check.yml`, `search-audit.yml` |
 | "Sıradaki adım: 3 PR'ı merge et" (pamistanbul-site #89/#90, pamaistudio#40) | Bu depodan **doğrulanamadı**; o repolar bu oturumun kapsamı dışı. Sefa'nın teyidi gerekir |
 | 18 skill | 18 skill (README'deki "15" eskiydi, düzeltildi) |
@@ -108,7 +108,7 @@ içerik taslağı → PR hattı, dashboard.
 cd search-growth-os && git pull && npm test
 ```
 
-393 test yeşil gelmeli (20 Eylül'de 65 idi). Sonra bölüm 2'deki tek adıma geç.
+408 test yeşil gelmeli (20 Eylül'de 65 idi). Sonra bölüm 2'deki tek adıma geç.
 
 Bir şeyin hâlâ geçerli olup olmadığından şüphelenirsen ölçümü tekrarla —
 ama önce bu dosyadaki sayıya bak; çoğu soru orada cevaplı.
@@ -185,7 +185,7 @@ node --experimental-strip-types src/cli.ts portfolio     # içerik ritmi, 7 site
 node --experimental-strip-types src/cli.ts llmstxt       # llms.txt envanteri
 node --experimental-strip-types src/cli.ts audit --site pamistanbul --full
 node --experimental-strip-types src/cli.ts registry config/sites.yaml
-npm test                                                  # 393 test
+npm test                                                  # 408 test
 ```
 
 Bağımlılık yok, sadece Node 24.
