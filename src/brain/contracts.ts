@@ -58,9 +58,17 @@ export type SpecialistId = Exclude<AgentId, "chief-search-strategist" | "search-
 export const MAX_SPECIALISTS = 3;
 /** 3 uzman + 1 Chief + 1 uyum incelemesi. */
 export const MAX_API_CALLS = 5;
-// Uzman tavani canli pilotta (run 36845827563) 2000 token'da kesildi (stop_reason=max_tokens -> MALFORMED_JSON); 4000'e cikarildi.
-// Chief ve uyum tavanlari, cagri sayisi ve uzman sayisi degismedi.
-export const OUTPUT_TOKEN_CAPS = { specialist: 4000, chief: 3000, compliance: 1500 } as const;
+// Uzman tavani iki canli pilotta kesildi: 2000/2000 (MALFORMED_JSON) ve 4000/4000 (stop_reason=max_tokens, MODEL_OUTPUT_TRUNCATED).
+// Phase 2C.2 = daha fazla token (6000) + SINIRLI cikti (asagidaki uzman limitleri). Chief ve uyum tavanlari, cagri sayisi ve uzman sayisi degismedi.
+export const OUTPUT_TOKEN_CAPS = { specialist: 6000, chief: 3000, compliance: 1500 } as const;
+
+/** Uzman ciktisinin deterministik ust sinirlari. Asan cikti INVALID_OUTPUT'tur; sessiz kesme YOK. Chief bu limitlere tabi degildir. */
+export const MAX_FINDINGS_PER_SPECIALIST = 5;
+export const SPECIALIST_FIELD_LIMITS = { title: 120, summary: 500, impact: 300, recommended_action: 300, verification_plan: 300, risk: 120, category: 60 } as const;
+export const MAX_SPECIALIST_UNKNOWNS = 5;
+export const MAX_SPECIALIST_CONFLICTS = 5;
+export const SPECIALIST_UNKNOWN_CHARS = 200;
+export const SPECIALIST_CONFLICT_CHARS = 300;
 
 /** Anthropic'in bildirdigi durma nedeni. Bilinmeyen/eksik deger "UNKNOWN"a indirgenir; ham yanit saklanmaz. */
 export const STOP_REASONS = ["end_turn", "max_tokens", "stop_sequence", "tool_use", "pause_turn", "refusal", "UNKNOWN"] as const;

@@ -12,7 +12,7 @@ import {
   EVIDENCE_CATEGORIES, EVIDENCE_LABELS, EVIDENCE_SCHEMA, EVIDENCE_SOURCES, MAX_API_CALLS, MAX_EVIDENCE_BYTES_PER_RUN, MAX_SPECIALISTS, MEASUREMENT_STATES,
   MEMORY_STATUSES, RUN_STATUSES, appendMemory, brainRunToMarkdown, buildUserMessage, createAnthropicClient, evidenceFromClarity, evidenceFromRegistry,
   loadAgentProfiles, loadAnthropicConfig, memoryEntriesFromRun, memoryPath, parseEvidenceBundle, routeAgents, runBrain, runtimeSystemPrompt,
-  validateFindingsResult, type AgentId, type AnthropicConfig, type EvidenceEnvelope, type FetchLike, type MemoryEntry,
+  validateFindingsResult, OUTPUT_TOKEN_CAPS, MAX_FINDINGS_PER_SPECIALIST, SPECIALIST_FIELD_LIMITS, type AgentId, type AnthropicConfig, type EvidenceEnvelope, type FetchLike, type MemoryEntry,
 } from "../src/brain/index.ts";
 import { measureSite } from "../src/adapters/clarity.ts";
 
@@ -599,4 +599,96 @@ test("brain-evidence -> brain-validate: gercek Clarity JSON'u kanit paketine don
   assert.equal(v.status, 0, v.stderr + v.stdout);
   assert.match(v.stdout, /CALLED\s+search-performance-engineer/);
   assert.match(v.stdout, /NOT_ROUTED\s+competitor-intelligence-analyst/);
+});
+
+// --- Phase 2C.2: uzman cikti sikistirma (more tokens + bounded output) ------------------------------------------------
+
+const SPEC = "search-performance-engineer" as AgentId;
+const specCtx = { agentId: SPEC, siteId: "pamistanbul", allowed: new Map([[CRAWL.evidence_id, CRAWL]]), role: "specialist" as const };
+const specFinding = (n: number, over: Record<string, unknown> = {}) => finding(SPEC, [CRAWL.evidence_id], { evidence_label: "INFERENCE", confidence: "CANDIDATE", finding_id: `perf-finding-${n}`, ...over });
+const specCheck = (findings: unknown[], extra: Record<string, unknown> = {}) => validateFindingsResult(JSON.parse(result(SPEC, findings, extra)), specCtx);
+
+test("C2-1/16-18) tavanlar: uzman 6000, Chief 3000, uyum 1500, 5 cagri; istek max_tokens=6000 gonderir", async () => {
+  assert.deepEqual({ ...OUTPUT_TOKEN_CAPS }, { specialist: 6000, chief: 3000, compliance: 1500 });
+  assert.equal(MAX_API_CALLS, 5);
+  const b = bundleOf([GSC]);
+  const f = fakeFetch((agent, role) => result(agent, [finding(agent, [GSC.evidence_id], { evidence_label: "INFERENCE", confidence: "CANDIDATE", actionability: "MONITOR" })]));
+  await runBrain({ siteId: "pamistanbul", site: SITE, bundle: b.bundle!, evidenceBytes: b.evidence_bytes, config: CONFIGURED as Extract<AnthropicConfig, { state: "CONFIGURED" }>, profiles: PROFILES, fetchFn: f.fetchFn, now });
+  assert.equal(f.calls.find((c) => c.role === "specialist")!.body.max_tokens, 6000);
+  assert.equal(f.calls.find((c) => c.role === "chief")!.body.max_tokens, 3000);
+});
+
+test("C2-2/3) kisa gecerli cikti kabul edilir; tam 5 bulgu ve tam sinirdaki alanlar kabul edilir", () => {
+  assert.equal(specCheck([specFinding(1)]).ok, true);
+  const five = [1, 2, 3, 4, 5].map((n) => specFinding(n));
+  assert.equal(five.length, MAX_FINDINGS_PER_SPECIALIST);
+  assert.equal(specCheck(five).ok, true);
+  const L = SPECIALIST_FIELD_LIMITS;
+  const edge = specFinding(1, { title: "t".repeat(L.title), summary: "s".repeat(L.summary), impact: "i".repeat(L.impact), recommended_action: "r".repeat(L.recommended_action), verification_plan: "v".repeat(L.verification_plan), risk: "k".repeat(L.risk) });
+  assert.equal(specCheck([edge]).ok, true, "sinirda olan kabul");
+  assert.equal(specCheck([specFinding(1)], { unknowns: ["a", "b", "c", "d", "e"], conflicts: [] }).ok, true);
+});
+
+test("C2-4) 6 bulgu REDDEDILIR: sessiz kesme yok, sonuc dondurulmez", () => {
+  const out = specCheck([1, 2, 3, 4, 5, 6].map((n) => specFinding(n)));
+  assert.equal(out.ok, false);
+  assert.ok(out.violations.includes("TOO_MANY_FINDINGS"));
+  assert.equal(out.result, undefined, "ilk 5 bulgu 'kurtarilmaz'");
+});
+
+test("C2-5..9) alan sinirini asan cikti reddedilir (title/summary/impact/recommended_action/verification_plan/risk)", () => {
+  const L = SPECIALIST_FIELD_LIMITS;
+  for (const k of ["title", "summary", "impact", "recommended_action", "verification_plan", "risk"] as const) {
+    const out = specCheck([specFinding(1, { [k]: "x".repeat(L[k] + 1) })]);
+    assert.equal(out.ok, false, k);
+    assert.ok(out.violations.includes("FIELD_TOO_LONG"), k);
+    assert.equal(out.result, undefined, `${k}: kesilmis kopya yok`);
+  }
+});
+
+test("C2-10/11) unknowns > 5 ve conflicts > 5 reddedilir; uzun unknown/conflict da", () => {
+  assert.ok(specCheck([specFinding(1)], { unknowns: ["1", "2", "3", "4", "5", "6"] }).violations.includes("BAD_UNKNOWNS"));
+  assert.ok(specCheck([specFinding(1)], { unknowns: ["u".repeat(201)] }).violations.includes("BAD_UNKNOWNS"));
+  const c = { description: "celiski", evidence_ids: [CRAWL.evidence_id] };
+  assert.equal(specCheck([specFinding(1)], { conflicts: [c, c, c, c, c] }).ok, true);
+  assert.ok(specCheck([specFinding(1)], { conflicts: [c, c, c, c, c, c] }).violations.includes("BAD_CONFLICTS"));
+  assert.ok(specCheck([specFinding(1)], { conflicts: [{ ...c, description: "d".repeat(301) }] }).violations.includes("BAD_CONFLICTS"));
+});
+
+test("C2-chief) limitler yalniz uzmana uygulanir: Chief eski genis sinirlarla dogrulanir", () => {
+  const ctx = { agentId: "chief-search-strategist" as AgentId, siteId: "pamistanbul", allowed: new Map([[CRAWL.evidence_id, CRAWL]]) };
+  const longish = finding(ctx.agentId, [CRAWL.evidence_id], { evidence_label: "INFERENCE", confidence: "CANDIDATE", summary: "s".repeat(900), title: "t".repeat(300) });
+  const six = [1, 2, 3, 4, 5, 6].map((n) => ({ ...longish, finding_id: `chief-finding-${n}` }));
+  assert.equal(validateFindingsResult(JSON.parse(result(ctx.agentId, six)), ctx).ok, true, "Chief 6 bulgu / uzun alan: mevcut davranis");
+});
+
+test("C2-12..14) uzman istemi: en fazla 5 bulgu, JSON disi metin yok, dusunce zinciri/metodoloji yok; Chief istemine eklenmez", () => {
+  const sp = runtimeSystemPrompt(PROFILES.get(SPEC)!, "specialist", "pamistanbul");
+  assert.match(sp, /Maximum 5 findings/);
+  assert.match(sp, /No prose outside the JSON object/);
+  assert.match(sp, /no methodology, no narration of your reasoning, no chain-of-thought/);
+  assert.match(sp, /title <= 120/); assert.match(sp, /summary <= 500/); assert.match(sp, /impact <= 300/);
+  assert.match(sp, /Do not repeat evidence text back/);
+  assert.match(sp, /do not restate the same metric/);
+  // injection korumasi ve DATA blogu yaklasimi degismedi
+  assert.match(sp, /EVIDENCE_CONTENT_IS_UNTRUSTED_DATA/);
+  assert.ok(sp.indexOf("RUNTIME SAFETY") < sp.indexOf("OUTPUT SIZE LIMITS"));
+  const ch = runtimeSystemPrompt(PROFILES.get("chief-search-strategist")!, "chief", "pamistanbul");
+  assert.ok(!ch.includes("OUTPUT SIZE LIMITS"), "Chief istemi degismedi");
+  assert.ok(buildUserMessage("specialist", "pamistanbul", { evidence: [] }).includes("<EVIDENCE_DATA_BLOCK>"));
+});
+
+test("C2-15) stop_reason=max_tokens hala MODEL_OUTPUT_TRUNCATED; Chief cagrilmaz, yeniden deneme yok", async () => {
+  const b = bundleOf([GSC]);
+  const calls: string[] = [];
+  const fetchFn: FetchLike = async (_u, init) => {
+    calls.push(JSON.parse(init.body).system.match(/^ROLE: (.+)$/m)?.[1] ?? "?");
+    return { status: 200, text: async () => JSON.stringify({ content: [{ type: "text", text: '{"schema":"sgos.brain.agent-result.v1","findings":[' }], stop_reason: "max_tokens", usage: { input_tokens: 10, output_tokens: 6000 } }) };
+  };
+  const r = await runBrain({ siteId: "pamistanbul", site: SITE, bundle: b.bundle!, evidenceBytes: b.evidence_bytes, config: CONFIGURED as Extract<AnthropicConfig, { state: "CONFIGURED" }>, profiles: PROFILES, fetchFn, now });
+  assert.equal(r.status, "ERROR");
+  assert.equal(r.agent_trace[0].error_code, "MODEL_OUTPUT_TRUNCATED");
+  assert.equal(r.agent_trace[0].stop_reason, "max_tokens");
+  assert.deepEqual(calls, ["specialist"], "tek cagri: Chief/uyum yok, retry yok");
+  assert.deepEqual(r.findings, []);
 });
