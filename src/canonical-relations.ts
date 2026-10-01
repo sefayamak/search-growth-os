@@ -33,14 +33,14 @@ export type ReviewReason =
  *  - GOOGLE_USER_CONVERGE_ON_OTHER_URL: denetlenen URL baska bir varyant, ama Google ve sayfa AYNI hedefte
  *    uzlasiyor. Bu bir canonical CATISMASI degildir; dogru HTTP redirect/canonical uygulamasi oldugu
  *    iddiasi da DEGILDIR (sayfa fetch edilmedi).
- *  - NO_DIVERGENCE_OBSERVED: denetlenen == Google == bildirilen. (Not: `review_status` icindeki ayni adli
- *    deger daha genistir; bildirilen canonical eksikken de olabilir. Bu desen siki: eksikse INCOMPLETE.)
+ *  - INSPECTED_USER_GOOGLE_ALIGNED: denetlenen == Google == bildirilen (ucu ayni URL). Siki: bildirilen canonical
+ *    eksikse INCOMPLETE olur. (`review_status = NO_DIVERGENCE_OBSERVED` farkli ve daha genis bir alandir; ad bilerek ayri.)
  *  - INCOMPLETE: gerekli alan UNKNOWN, guvenilir desen cikarilamiyor.
  */
 export type CanonicalPattern =
   | "DECLARED_GOOGLE_CONFLICT"
   | "GOOGLE_USER_CONVERGE_ON_OTHER_URL"
-  | "NO_DIVERGENCE_OBSERVED"
+  | "INSPECTED_USER_GOOGLE_ALIGNED"
   | "INCOMPLETE";
 
 export interface CanonicalRelations {
@@ -63,7 +63,7 @@ export interface CanonicalRelations {
 export function derivePattern(inspected_vs_google: Rel, user_vs_google: Rel): CanonicalPattern {
   if (user_vs_google === "DIFFERENT") return "DECLARED_GOOGLE_CONFLICT";
   if (inspected_vs_google === "DIFFERENT" && user_vs_google === "SAME") return "GOOGLE_USER_CONVERGE_ON_OTHER_URL";
-  if (inspected_vs_google === "SAME" && user_vs_google === "SAME") return "NO_DIVERGENCE_OBSERVED";
+  if (inspected_vs_google === "SAME" && user_vs_google === "SAME") return "INSPECTED_USER_GOOGLE_ALIGNED";
   return "INCOMPLETE";
 }
 

@@ -89,11 +89,14 @@ Mevcut ilişki FACT'leri ve `review_required` / `review_status` anlamı **deği�
 |---|---|---|
 | `DECLARED_GOOGLE_CONFLICT` | `user_vs_google = DIFFERENT` (öncelikli) | sayfanın bildirdiği canonical ile Google'ın seçtiği uyuşmuyor. CANDIDATE / REVIEW_REQUIRED, insan incelemesi adayı; otomatik SEO hatası değil |
 | `GOOGLE_USER_CONVERGE_ON_OTHER_URL` | `inspected_vs_google = DIFFERENT` ve `user_vs_google = SAME` | denetlenen URL başka bir varyant, Google ve sayfa aynı hedefte uzlaşıyor. Canonical çatışması değil; INFO / OBSERVED_CONVERGENCE. Doğru HTTP redirect/canonical uygulaması olduğu **iddia edilmez** (sayfa fetch edilmedi) |
-| `NO_DIVERGENCE_OBSERVED` | `inspected_vs_google = SAME` ve `user_vs_google = SAME` | denetlenen == Google == bildirilen |
+| `INSPECTED_USER_GOOGLE_ALIGNED` | `inspected_vs_google = SAME` ve `user_vs_google = SAME` | denetlenen URL, bildirilen canonical ve Google canonical aynı URL üzerinde hizalı |
 | `INCOMPLETE` | gerekli alan UNKNOWN | güvenilir desen çıkarılamıyor |
 
-Dikkat — ad çakışması: `review_status = NO_DIVERGENCE_OBSERVED` daha geniştir (bildirilen canonical eksikken de olabilir); `canonical_pattern = NO_DIVERGENCE_OBSERVED`
-siki ve user canonical bilinmesini ister, eksikse `INCOMPLETE` olur.
+Ad netleştirmesi: `canonical_pattern` içinde `NO_DIVERGENCE_OBSERVED` YOKTUR. Bu değer yalnız `review_status` alanındadır ve daha geniştir (bildirilen canonical
+eksikken de olabilir: ör. `inspected_vs_google = SAME`, user canonical UNKNOWN → `review_status = NO_DIVERGENCE_OBSERVED`, `canonical_pattern = INCOMPLETE`).
+
+`review_required` geriye uyumluluğu: `GOOGLE_USER_CONVERGE_ON_OTHER_URL` satırları mevcut `reasons` nedeniyle `review_required = true` / `review_status = REVIEW_REQUIRED`
+taşıyabilir (canlıda doğrulanmış davranış, değiştirilmedi). Bu flag, deseni `DECLARED_GOOGLE_CONFLICT`, SEO hatası ya da canonical çatışması yapmaz.
 
 Rapor: `## Canonical candidates` iki alt gruba ayrılır — **Declared vs Google conflicts** ve **Google/user convergence on another URL**. `review_required` olup deseni
 `INCOMPLETE` olan satırlar kaybolmasın diye (varsa) üçüncü bir **Incomplete canonical data** alt grubu yazılır. Sayımlar: `canonical_candidate_count`

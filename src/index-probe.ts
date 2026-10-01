@@ -299,7 +299,7 @@ export function probeToMarkdown(p: ProbeResult, sitemaps: ReturnType<typeof summ
       "**CANDIDATE / REVIEW_REQUIRED** — sayfanın bildirdiği canonical ile Google'ın seçtiği canonical uyuşmuyor (`DECLARED_GOOGLE_CONFLICT`). İnsan incelemesi adayıdır; otomatik SEO hatası değildir.", "",
       ...(conflicts.length ? [...HEAD, ...conflicts.map(row)] : ["Yok."]), "",
       `### Google/user convergence on another URL (${converge.length})`, "",
-      "**INFO / OBSERVED_CONVERGENCE** — Google canonical ile bildirilen canonical aynı hedefte uzlaşıyor. Bu, denetlenen URL'nin başka bir URL varyantı olduğuna dair FACT'tir; doğru HTTP redirect/canonical uygulaması olduğu henüz doğrulanmamıştır. Desen: `GOOGLE_USER_CONVERGE_ON_OTHER_URL`.", "",
+      "**INFO / OBSERVED_CONVERGENCE** — Google canonical ile bildirilen canonical aynı hedefte uzlaşıyor; denetlenen URL başka bir URL'nin varyantıdır (FACT). Bu `canonical_pattern`, declared-vs-Google conflict DEĞİLDİR. Mevcut `review_required` alanı geriye uyumluluk amacıyla `true` kalabilir; bu flag'in varlığı bu pattern'i SEO hatası veya canonical conflict yapmaz. Doğru HTTP redirect/canonical uygulaması henüz fetch ile doğrulanmamıştır. Desen: `GOOGLE_USER_CONVERGE_ON_OTHER_URL`.", "",
       ...(converge.length ? [...HEAD, ...converge.map(row)] : ["Yok."]));
     if (incomplete.length) L.push("", `### Incomplete canonical data (${incomplete.length})`, "",
       "**CANDIDATE / REVIEW_REQUIRED** — bir tetikleyici gözlendi ama gerekli alan eksik olduğu için güvenilir bir desen çıkarılamadı (`INCOMPLETE`). Eksik alan UNKNOWN'dur, tahmin edilmedi.", "", ...HEAD, ...incomplete.map(row));
