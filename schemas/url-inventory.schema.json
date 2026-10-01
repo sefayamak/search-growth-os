@@ -1,0 +1,300 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "search-growth-os/url-inventory",
+  "title": "One URL of one site. Every field may be UNKNOWN; UNKNOWN is never 0, false or empty.",
+  "type": "object",
+  "required": [
+    "site",
+    "url",
+    "sources",
+    "in_sitemap",
+    "http_status",
+    "final_url",
+    "indexable",
+    "canonical",
+    "variant_of",
+    "hreflang_count",
+    "title",
+    "meta_description",
+    "json_ld_types",
+    "last_crawled_at",
+    "inspection",
+    "derived_fields"
+  ],
+  "properties": {
+    "site": {
+      "type": "string"
+    },
+    "url": {
+      "type": "string"
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "sitemap",
+          "crawl",
+          "inspection"
+        ]
+      }
+    },
+    "in_sitemap": {
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "const": "UNKNOWN"
+        }
+      ]
+    },
+    "http_status": {
+      "oneOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "const": "UNKNOWN"
+        }
+      ]
+    },
+    "final_url": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "const": "UNKNOWN"
+        }
+      ]
+    },
+    "indexable": {
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "const": "UNKNOWN"
+        }
+      ],
+      "description": "DERIVED (INFERENCE): HTTP 200 and no noindex. Not Google's answer; see inspection."
+    },
+    "canonical": {
+      "oneOf": [
+        {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        {
+          "const": "UNKNOWN"
+        }
+      ]
+    },
+    "variant_of": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Set only from the page's own rel=canonical and only when the target is in the inventory. URLs are never merged by guessing."
+    },
+    "hreflang_count": {
+      "oneOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "const": "UNKNOWN"
+        }
+      ]
+    },
+    "title": {
+      "oneOf": [
+        {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        {
+          "const": "UNKNOWN"
+        }
+      ]
+    },
+    "meta_description": {
+      "oneOf": [
+        {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        {
+          "const": "UNKNOWN"
+        }
+      ]
+    },
+    "json_ld_types": {
+      "oneOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        {
+          "const": "UNKNOWN"
+        }
+      ]
+    },
+    "last_crawled_at": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "const": "UNKNOWN"
+        }
+      ]
+    },
+    "inspection": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/inspection"
+        }
+      ],
+      "description": "null = never inspected."
+    },
+    "derived_fields": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "inspection": {
+      "type": "object",
+      "required": [
+        "state",
+        "index_verdict",
+        "coverage_state",
+        "indexing_state",
+        "page_fetch_state",
+        "robots_txt_state",
+        "google_canonical",
+        "user_canonical",
+        "last_crawl_time",
+        "label",
+        "confidence"
+      ],
+      "properties": {
+        "state": {
+          "enum": [
+            "INSPECTED",
+            "NOT_INSPECTED",
+            "ERROR",
+            "UNKNOWN"
+          ]
+        },
+        "index_verdict": {
+          "enum": [
+            "INDEXED",
+            "NOT_INDEXED",
+            "NEUTRAL",
+            "UNKNOWN"
+          ],
+          "description": "INDEXED/NOT_INDEXED only when Google's own response said so. A 403/429 or a response without indexStatusResult is never NOT_INDEXED."
+        },
+        "coverage_state": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "const": "UNKNOWN"
+            }
+          ]
+        },
+        "indexing_state": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "const": "UNKNOWN"
+            }
+          ]
+        },
+        "page_fetch_state": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "const": "UNKNOWN"
+            }
+          ]
+        },
+        "robots_txt_state": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "const": "UNKNOWN"
+            }
+          ]
+        },
+        "google_canonical": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "const": "UNKNOWN"
+            }
+          ]
+        },
+        "user_canonical": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "const": "UNKNOWN"
+            }
+          ]
+        },
+        "last_crawl_time": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "const": "UNKNOWN"
+            }
+          ]
+        },
+        "error": {
+          "type": "string"
+        },
+        "label": {
+          "const": "FACT"
+        },
+        "confidence": {
+          "enum": [
+            "CONFIRMED",
+            "UNKNOWN"
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

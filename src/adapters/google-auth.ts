@@ -90,15 +90,15 @@ export function _resetTokenCache(): void { cache.clear(); }
 
 /** Google API'lerine yetkili JSON istegi. 429/5xx uzerinde ustel geri cekilme:
  *  GSC gunluk kotasi dar ve tek bir 429 tum olcumu NOT_CONNECTED'a dusururdu. */
-export async function googleJson<T>(url: string, token: string, init?: { method?: string; body?: unknown }, attempt = 0): Promise<T> {
+export async function googleJson<T>(url: string, token: string, init?: { method?: string; body?: unknown }, attempt = 0, retries = 3): Promise<T> {
   const res = await fetch(url, {
     method: init?.method ?? "GET",
     headers: { authorization: `Bearer ${token}`, ...(init?.body ? { "content-type": "application/json" } : {}) },
     ...(init?.body ? { body: JSON.stringify(init.body) } : {}),
   });
-  if ((res.status === 429 || res.status >= 500) && attempt < 3) {
+  if ((res.status === 429 || res.status >= 500) && attempt < retries) {
     await new Promise((r) => setTimeout(r, 2 ** attempt * 1000));
-    return googleJson<T>(url, token, init, attempt + 1);
+    return googleJson<T>(url, token, init, attempt + 1, retries);
   }
   if (!res.ok) {
     const body = (await res.text().catch(() => "")).slice(0, 300);

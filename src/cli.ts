@@ -11,7 +11,12 @@
 //   llmstxt [--site id] [--out dir]  inventory each site's llms.txt against the spec and the registry
 //   topics [--site id] [--count N=2] [--top N] [--ledger path] [--write-ledger]
 //                                   2 weekly topics per site: GSC gap first, business_category fallback
-import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
+//   import-health <snapshotDir> [--registry path] [--site id] [--write]
+//                                   validate a site-health-monitor snapshot DIRECTORY (local path, no network);
+//                                   "no data" never becomes zero; --write merges into sites/<id>/health-import.json
+//   inspect-index [registry] --site pamistanbul [--limit N] [--urls file] [--delay ms] [--write]
+//                                   read-only URL Inspection SAMPLE for pamistanbul only (NOT full coverage)
+import { mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { crawl } from "./crawler.ts";
 import { assessPortfolio, cadenceToMarkdown } from "./cadence.ts";
@@ -21,6 +26,7 @@ import { buildReport, reportToMarkdown } from "./report.ts";
 import { checkCompliance, kindFromPath } from "./compliance.ts";
 import { loadRegistry, onboardedSites } from "./registry.ts";
 import { allStatuses } from "./adapters/index.ts";
+import type { QuotaLedger } from "./index-probe.ts";
 
 const args = process.argv.slice(2);
 const cmd = args[0];
@@ -422,6 +428,86 @@ async function main() {
       }
       return;
     }
+    // Snapshot importu: yerel DIZIN okur, ag ve token gerektirmez. Dizinin nereden
+    // geldigi (git clone, artifact, elle kopya) bu komutun bilgisi degildir.
+    case "import-health": {
+      const { importSnapshot, importReportToMarkdown, mergeRecords, readSiteStore, writeSiteStore } = await import("./adapters/site-health-import.ts");
+      const dir = args[1];
+      if (!dir || dir.startsWith("--")) { console.error("kullanim: import-health <snapshotDir> [--registry path] [--site id] [--write]"); process.exitCode = 1; return; }
+      if (!existsSync(dir)) { console.error(`snapshot dizini yok: ${dir}`); process.exitCode = 1; return; }
+      const reg = loadRegistry(opt("registry", "config/sites.yaml"));
+      if (!reg.ok || !reg.registry) { console.error(reg.errors.join("\n")); process.exitCode = 1; return; }
+      const only = opt("site");
+      if (only && !reg.registry.sites.some((x) => x.id === only)) { console.error(`site bulunamadi: ${only}`); process.exitCode = 1; return; }
+      const res = importSnapshot(dir, reg.registry, only);
+      const merges: Record<string, ReturnType<typeof mergeRecords>> = {};
+      for (const [site, recs] of Object.entries(res.bySite)) {
+        const m = mergeRecords(readSiteStore(".", site), recs);
+        merges[site] = m;
+        if (flag("write")) writeSiteStore(".", site, m.merged);
+      }
+      console.log(importReportToMarkdown(res, merges));
+      if (!flag("write")) console.log("(--write verilmedi: hicbir dosya yazilmadi)");
+      return;
+    }
+    // pamistanbul'a KILITLI, salt-okunur URL Inspection ORNEKLEMI. Tam coverage degildir.
+    case "inspect-index": {
+      const ip = await import("./index-probe.ts");
+      const { searchConsole } = await import("./adapters/index.ts");
+      const { periods } = await import("./measure.ts");
+      const { buildInventory } = await import("./url-inventory.ts");
+      const siteId = opt("site", ip.PROBE_SITE_ID);
+      try { ip.assertProbeSite(siteId); } catch (e) { console.error((e as Error).message); process.exitCode = 1; return; }
+      const regPath = args[1] && !args[1].startsWith("--") ? args[1] : "config/sites.yaml";
+      const reg = loadRegistry(regPath);
+      if (!reg.ok || !reg.registry) { console.error(reg.errors.join("\n")); process.exitCode = 1; return; }
+      const site = reg.registry.sites.find((x) => x.id === siteId);
+      if (!site) { console.error(`site bulunamadi: ${siteId}`); process.exitCode = 1; return; }
+      if (site.onboarding_status === "registered_not_onboarded") { console.error(`${siteId} onboard edilmemis`); process.exitCode = 1; return; }
+      const prop = String(site.google_search_console_property);
+      const hasProp = !!prop && prop !== "NOT_CONNECTED" && prop !== "UNKNOWN";
+      const connected = hasProp && searchConsole.status().state !== "NOT_CONNECTED";
+      const today = new Date().toISOString().slice(0, 10);
+      const dir = join("sites", siteId, "index-baseline");
+      const ledgerFile = join(dir, "quota-ledger.json");
+      let ledger: QuotaLedger = {};
+      try { ledger = JSON.parse(readFileSync(ledgerFile, "utf8")); } catch { /* ilk calisma */ }
+      const { limit, clampedFrom } = ip.resolveLimit(opt("limit") ? Number(opt("limit")) : undefined, ip.usedOn(ledger, today));
+      if (clampedFrom !== undefined) console.error(`not: limit ${clampedFrom} -> ${limit} (sert tavan ${ip.HARD_LIMIT}/gun, bugun kullanilan ${ip.usedOn(ledger, today)})`);
+
+      let urls: string[] = []; let source = "yok";
+      const urlsFile = opt("urls");
+      try {
+        if (urlsFile) {
+          urls = readFileSync(urlsFile, "utf8").split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#"));
+          source = `dosya: ${urlsFile}`;
+        } else if (connected) {
+          const rows = await searchConsole.searchAnalytics(prop, periods(new Date()).current, ["page"]);
+          urls = (rows ?? []).filter((r) => r.page).sort((a, b) => b.impressions - a.impressions).map((r) => r.page as string);
+          source = "GSC sayfa listesi, son 28 gün, gösterime göre";
+        }
+      } catch (e) { console.error(`aday URL listesi alinamadi: ${(e as Error).message}`); process.exitCode = 1; return; }
+
+      const probe = await ip.runProbe({
+        site, urls, candidateSource: source, limit, connected,
+        delayMs: opt("delay") ? Number(opt("delay")) : ip.DEFAULT_DELAY_MS,
+        inspect: (u) => searchConsole.urlInspection(prop, u),
+      });
+      let sitemaps: ReturnType<typeof ip.summarizeSitemaps> | { state: "ERROR"; error: string } = ip.summarizeSitemaps(null);
+      if (connected) { try { sitemaps = ip.summarizeSitemaps(await searchConsole.sitemaps(prop)); } catch (e) { sitemaps = { state: "ERROR", error: (e as Error).message.slice(0, 160) }; } }
+
+      const md = ip.probeToMarkdown(probe, sitemaps, today);
+      console.log(md);
+      if (flag("write")) {
+        mkdirSync(dir, { recursive: true });
+        const inventory = buildInventory({ site: siteId, sitemapEntries: null, inspections: Object.fromEntries(probe.results.map((r) => [r.url, r.summary])) });
+        writeFileSync(join(dir, `${today}-index-probe.json`), JSON.stringify({ probe, sitemaps, url_inventory: inventory.records }, null, 2) + "\n");
+        writeFileSync(join(dir, `${today}-index-probe.md`), md);
+        writeFileSync(ledgerFile, JSON.stringify(ip.recordUsage(ledger, today, probe.attempted), null, 2) + "\n");
+      }
+      if (probe.stopped === "rate_limited_429" || probe.stopped === "forbidden_403" || probe.stopped === "consecutive_errors") process.exitCode = 1;
+      return;
+    }
     // Salt-okunur duman testi. "Env dolu" ile "API cevap veriyor" ayri
     // seylerdir; servis hesabi property'ye eklenmemisse tek gorunen sey
     // budur ve sessizce sifir trafik gibi okunmamalidir.
@@ -449,7 +535,7 @@ async function main() {
       return;
     }
     default:
-      console.error("commands: crawl | audit | compliance | registry | integrations | measure | detail | topics | smoke | portfolio | llmstxt");
+      console.error("commands: crawl | audit | compliance | registry | integrations | measure | detail | topics | smoke | portfolio | llmstxt | import-health | inspect-index");
       process.exitCode = 1;
   }
 }

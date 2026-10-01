@@ -20,6 +20,7 @@
     "label": { "enum": ["INFERENCE", "HYPOTHESIS", "RECOMMENDATION"] },
     "requires_human_approval": { "type": "boolean" },
     "high_risk_category": { "type": "string", "description": "From policies/high-risk-changes.md when applicable." },
-    "proposed_experiment_id": { "type": "string" }
+    "proposed_experiment_id": { "type": "string" },
+    "opportunity_source": { "enum": ["gsc_evidence", "editorial"], "description": "Provenance of the idea, NOT an evidence label. `editorial` = no search signal backs it (derived from the site's own business_category); `gsc_evidence` = the site's own Search Console showed it. Optional so existing records stay valid." }
   }
 }

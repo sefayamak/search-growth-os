@@ -6,7 +6,9 @@ discover → verify (evidence) → prioritize → fix (PR) → test (gates) → 
 
 Standalone by design. This repository has no runtime dependency on any CRM,
 database, Supabase project, migration, deployment target, environment or Vercel
-project. It installs, tests and runs from a clean clone with nothing but Node.
+project, **nor on the separate `site-health-monitor` repository**: that routine
+keeps running on its own and its output enters only through the local-directory
+adapter above (see `docs/integrations/site-health-monitor.md`). It installs, tests and runs from a clean clone with nothing but Node.
 A future CRM integration, should one ever be wanted, goes through an explicit
 adapter boundary under `src/adapters/`; it does not exist today and must not be
 assumed by any code here.
@@ -18,13 +20,17 @@ assumed by any code here.
 | Content cadence | `src/cadence.ts`, CLI `portfolio` | measures days since last publish per site; rejects build-stamped `lastmod`; reports UNKNOWN rather than guessing |
 | Crawl + audit engine | `src/crawler.ts`, `html.ts`, `robots.ts`, `sitemap.ts`, `audit.ts`, `report.ts` | deterministic, zero dependencies, honest user agent, robots-aware, hard caps, sample and full-baseline modes |
 | Compliance gate | `src/compliance.ts`, `hooks/compliance-gate.ts` (PreToolUse on Write/Edit), CLI `compliance` | REJECT / FLAG / PASS with policy references |
-| First-party adapters | `src/adapters/index.ts` | Search Console, GA4, Bing, IndexNow, logs, GitHub, third-party. Interfaces with honest stubs; a missing credential returns null, never zero |
+| First-party adapters | `src/adapters/index.ts` | Search Console and GA4 are live clients (service account, read-only); Bing, IndexNow, logs, GitHub, third-party remain honest stubs. A missing credential returns null, never zero |
+| Health-snapshot import | `src/adapters/site-health-import.ts` | reads a **local directory** produced by the separate site-health-monitor routine; "no data" is never zero; idempotent, per-site. See `docs/integrations/site-health-monitor.md` |
+| URL inventory | `src/url-inventory.ts`, `schemas/url-inventory.schema.json` | one record per URL, every field may be `UNKNOWN`; URLs are never merged by guessing |
+| Index probe | `src/index-probe.ts`, CLI `inspect-index` | pamistanbul-locked, read-only URL Inspection **sample** (not full coverage) with a quota guard; 403/429 are `ERROR`, never "not indexed" |
 | Agents | `agents/*.md` | nine narrow specialists, orchestrated by `chief-search-strategist` |
 | Skills | `skills/*/SKILL.md` | eighteen workflows, each with inputs, evidence requirements, procedure, output and stop conditions |
 | Schemas | `schemas/*.json` | audit report, AI-visibility record, experiment, opportunity, competitor candidate, site registry |
 | Per-site artifacts | `sites/<id>/` | baselines, experiments, reports, competitors, entity facts. Never shared between sites |
 | Evals | `evals/*/prompt.md` + graders | `claude plugin eval .` |
 | Remote runner | `.github/workflows/search-audit.yml`, `portfolio-check.yml` | read-only crawl and weekly portfolio cadence check on a GitHub runner, no secrets |
+| Remote runner (owned data) | `.github/workflows/measure.yml`, `tests.yml`, `index-probe.yml` | weekly GSC+GA4 measurement; tests on every PR; a manual-only, read-only index sample for pamistanbul |
 | Binaries | `bin/summarize.ts` | compact greppable summary of an audit JSON |
 | Reports | `reports/` | changelog, learning log, dry-run template; `reports/runs/` is git-ignored scratch |
 | Monitors | `monitors/monitors.json` | alerts log tail (empty until scheduled audits write to it) |

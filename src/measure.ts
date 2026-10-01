@@ -9,6 +9,7 @@
 // `people_entities`; yani her site kendi desenini config'te taşır.
 import type { SearchAnalyticsRow } from "./adapters/index.ts";
 import type { SiteEntry } from "./registry.ts";
+import type { OpportunitySource } from "./types.ts";
 
 export interface Period { label: string; start: string; end: string }
 
@@ -137,6 +138,9 @@ export interface WeeklyTopic {
   title: string;
   titleTr?: string;   // yalnızca site hem TR hem EN taşıyorsa ve kaynak EDİTORYAL ise dolu
   source: "kanit" | "editoryal";
+  /** Provenance in the shared vocabulary (types.ts). `source` stays as the Turkish display
+   *  value the CLI prints; this is the field new code and schemas should read. */
+  opportunity_source: OpportunitySource;
   note: string;
 }
 
@@ -201,6 +205,7 @@ export function editorialTopics(
       title: primaryTr ? tmpl.tr(subject) : tmpl.en(subject),
       titleTr: bilingual ? tmpl.tr(subject) : undefined,
       source: "editoryal",
+      opportunity_source: "editorial",
       note: `registry business_category'den türetildi ("${site.business_category}") — arama verisi DEĞİL, GSC henüz yeterli hacim göstermiyor. Yayına almadan önce insan onayı gerekiyor.`,
     });
   }
@@ -224,6 +229,7 @@ export function weeklyTopics(
   const fromEvidence: WeeklyTopic[] = opps.slice(0, count).map((o) => ({
     title: o.query,
     source: "kanit",
+    opportunity_source: "gsc_evidence",
     note: `${o.impressions} gösterim, sıra ${o.position.toFixed(1)} — GSC'de zaten görünüyor, tıklanmıyor.` +
       (bilingual ? " Site iki dilli; ikinci dile çevirisi de düşünülebilir (burada otomatik çevrilmedi)." : ""),
   }));

@@ -17,3 +17,11 @@ Rules:
 - A HYPOTHESIS without a proposed test is not allowed in a report.
 - Missing data is `NOT_CONNECTED` or `UNKNOWN`, never an estimate presented as a number.
 - Third-party numbers carry provider + retrieval date and are FACT *about the provider's index*, not about Google.
+
+## Not an evidence label: opportunity source
+
+`editorial` is **not** a label. Whether an idea (a topic, a content gap) is backed by a
+search signal is a separate axis, recorded as `opportunity_source: "gsc_evidence" | "editorial"`
+(`src/types.ts`, `schemas/opportunity.schema.json`). It says *where the idea came from*, never
+*how sure we are*. An editorial idea stays editorial however often it repeats, and it is never
+reported as measured demand. The six labels above are the whole evidence ontology.

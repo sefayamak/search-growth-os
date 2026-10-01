@@ -9,6 +9,12 @@ export type EvidenceLabel =
   | "IMPLEMENTED_CHANGE"
   | "VERIFIED_RESULT";
 
+/** Where an opportunity (a topic, a content idea) came from. This is PROVENANCE, not
+ *  evidence: it says whether a search signal exists, never how sure we are of a claim.
+ *  Keeping it a separate field is deliberate: `editorial` must not be read as a seventh
+ *  evidence label, and an editorial idea is never promoted by repetition. */
+export type OpportunitySource = "gsc_evidence" | "editorial";
+
 export type Severity = "critical" | "high" | "medium" | "low" | "info";
 
 /** Trust state of a finding. Detectors emit CANDIDATE or CONFIRMED only; a human or a
