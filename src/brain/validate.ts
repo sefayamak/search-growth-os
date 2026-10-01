@@ -4,7 +4,8 @@
 //
 // Ihlaller yalniz KOD olarak doner (metin/kanit/sir icermez): izler ve artifact bu kodlari tasir.
 import {
-  ACTIONABILITY, AGENT_RESULT_SCHEMA, CONFIDENCES, EVIDENCE_LABELS, FINDING_ID_RE,
+  ACTIONABILITY, AGENT_RESULT_SCHEMA, CONFIDENCES, EVIDENCE_LABELS, FINDING_ID_RE, MAX_FINDINGS_PER_SPECIALIST, MAX_SPECIALIST_CONFLICTS,
+  MAX_SPECIALIST_UNKNOWNS, SPECIALIST_CONFLICT_CHARS, SPECIALIST_FIELD_LIMITS, SPECIALIST_UNKNOWN_CHARS,
   type AgentId, type AgentResult, type BrainFinding, type ComplianceReview, type ComplianceVerdict, type EvidenceEnvelope,
 } from "./contracts.ts";
 import { containsSecret, isUsable } from "./evidence.ts";
@@ -72,6 +73,8 @@ export interface ValidationContext {
   /** Bu ajanin GORDUGU kanit: izin verilen kimlikler yalniz bunlardir. */
   allowed: ReadonlyMap<string, EvidenceEnvelope>;
   secrets?: readonly string[];
+  /** "specialist": Phase 2C.2 kisa-cikti limitleri (en fazla 5 bulgu, alan uzunluklari, unknowns/conflicts <= 5). Verilmezse (Chief) eski genis sinirlar. */
+  role?: "specialist" | "chief";
 }
 export interface ValidationOutcome<T> { ok: boolean; violations: string[]; result?: T }
 
@@ -85,7 +88,8 @@ export function validateFindingsResult(raw: unknown, ctx: ValidationContext): Va
   if (raw.agent_id !== ctx.agentId) v.add("WRONG_AGENT_ID");
   if (raw.site_id !== ctx.siteId) v.add("WRONG_SITE");
   if (!Array.isArray(raw.findings) || !Array.isArray(raw.unknowns) || !Array.isArray(raw.conflicts)) return { ok: false, violations: [...v, "BAD_SHAPE"] };
-  if (raw.findings.length > MAX_FINDINGS) v.add("TOO_MANY_FINDINGS");
+  const spec = ctx.role === "specialist";
+  if (raw.findings.length > (spec ? MAX_FINDINGS_PER_SPECIALIST : MAX_FINDINGS)) v.add("TOO_MANY_FINDINGS");
 
   const findings: BrainFinding[] = [];
   const ids = new Set<string>();
@@ -97,7 +101,7 @@ export function validateFindingsResult(raw: unknown, ctx: ValidationContext): Va
     if (f.site_id !== ctx.siteId) v.add(isStr(f.site_id) && f.site_id !== ctx.siteId ? "FOREIGN_SITE_FINDING" : "WRONG_SITE");
     for (const k of TEXT_FIELDS) {
       if (!isStr(f[k]) || !f[k].trim()) v.add("EMPTY_FIELD");
-      else if (f[k].length > MAX_FIELD) v.add("FIELD_TOO_LONG");
+      else if (f[k].length > (spec ? SPECIALIST_FIELD_LIMITS[k] : MAX_FIELD)) v.add("FIELD_TOO_LONG");
     }
     const label = f.evidence_label;
     if (isStr(label) && label.trim().toUpperCase() === "EDITORIAL") v.add("EDITORIAL_LABEL");
@@ -138,13 +142,14 @@ export function validateFindingsResult(raw: unknown, ctx: ValidationContext): Va
   }
 
   const unknowns = raw.unknowns as unknown[];
-  if (unknowns.length > 20 || !unknowns.every((u) => isStr(u) && u.length <= 300)) v.add("BAD_UNKNOWNS");
+  if (unknowns.length > (spec ? MAX_SPECIALIST_UNKNOWNS : 20) || !unknowns.every((u) => isStr(u) && u.length <= (spec ? SPECIALIST_UNKNOWN_CHARS : 300))) v.add("BAD_UNKNOWNS");
   for (const u of unknowns) if (isStr(u) && containsSecret(u, ctx.secrets)) v.add("SECRET_IN_OUTPUT");
   const conflicts = raw.conflicts as unknown[];
-  if (conflicts.length > 10) v.add("BAD_CONFLICTS");
+  if (conflicts.length > (spec ? MAX_SPECIALIST_CONFLICTS : 10)) v.add("BAD_CONFLICTS");
   for (const c of conflicts) {
     if (!isObj(c) || !isStr(c.description) || !Array.isArray(c.evidence_ids) || !c.evidence_ids.every(isStr)) { v.add("BAD_CONFLICTS"); continue; }
     if ((c.evidence_ids as string[]).some((id) => !ctx.allowed.has(id))) v.add("UNKNOWN_EVIDENCE_ID");
+    if (spec && c.description.length > SPECIALIST_CONFLICT_CHARS) v.add("BAD_CONFLICTS");
     if (looksLikeProductionWrite(c.description)) v.add("PRODUCTION_WRITE_INSTRUCTION");
     if (containsSecret(c.description, ctx.secrets)) v.add("SECRET_IN_OUTPUT");
   }

@@ -146,7 +146,7 @@ export async function runBrain(opts: BrainOptions): Promise<BrainRun> {
     const allowed = new Map(sent.map((i) => [i, byId.get(i)!] as const));
     const { t, parsed } = await callAgent(a, "specialist", { evidence: sent.map((i) => byId.get(i)) }, sent, OUTPUT_TOKEN_CAPS.specialist);
     if (t.status === "ERROR" || parsed === null) { specialistFailed = true; setDecision(a, "CALLED", `${t.status}: ${t.error_code ?? t.violations.join(",")}`); continue; }
-    const v = validateFindingsResult(parsed, { agentId: a, siteId: opts.siteId, allowed, secrets });
+    const v = validateFindingsResult(parsed, { agentId: a, siteId: opts.siteId, allowed, secrets, role: "specialist" });
     if (!v.ok) { t.status = "INVALID_OUTPUT"; t.violations = v.violations; specialistFailed = true; setDecision(a, "CALLED", "cikti reddedildi (dogrulama)"); continue; }
     t.status = "OK"; t.output_finding_ids = v.result!.findings.map((f) => f.finding_id);
     specialistResults.push(v.result!);

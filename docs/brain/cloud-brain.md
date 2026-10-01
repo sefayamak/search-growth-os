@@ -73,7 +73,7 @@ Serileştirmede `<` kaçırıldığı için kanıt içinde blok sınırı taklit
 
 ## Maliyet koruması
 
-`max_specialists=3`, `max_calls=5`, çağrı başına çıktı token tavanı (uzman 4000 / Chief 3000 / uyum 1500), kanıt boyutu tavanı (`MAX_EVIDENCE_BYTES_PER_RUN=60000` bayt, kayıt başına 8000).
+`max_specialists=3`, `max_calls=5`, çağrı başına çıktı token tavanı (uzman 6000 / Chief 3000 / uyum 1500), kanıt boyutu tavanı (`MAX_EVIDENCE_BYTES_PER_RUN=60000` bayt, kayıt başına 8000).
 Büyük payload'lar deterministik olarak sıkıştırılır ve **işaretlenir** (`<alan>__truncated`); sığmayan paket reddedilir. İstemci hiç yeniden deneme yapmaz (429/5xx tek çağrıdır).
 `cost_guard` çağrı sayısını, bayt'ı ve API'nin kendi `usage` token'larını taşır; **dolar maliyeti `UNKNOWN`** (fiyat tarifesi burada bilinmiyor, tahmin yazılmaz).
 
@@ -173,5 +173,24 @@ Yerel kullanım: `brain-handoff config/sites.yaml --site pamistanbul --run-id <i
 
 - İstemci `stop_reason`'ı okur ve normalize eder (`end_turn|max_tokens|stop_sequence|tool_use|pause_turn|refusal`, aksi `UNKNOWN`); ham yanıt saklanmaz. İz alanı: `stop_reason` (yanıt alınmadıysa `null`).
 - `stop_reason=max_tokens` ise HTTP 200 olsa bile çıktı kabul edilmez: `status=INVALID_OUTPUT`, `error_code=MODEL_OUTPUT_TRUNCATED`, `violations` içinde `MODEL_OUTPUT_TRUNCATED` (parse de başarısızsa ikincil `MALFORMED_JSON`). Parse edilebilir yarım JSON da bulguya dönüşmez. Chief/uyum çağrılmaz, yeniden deneme yok.
-- Uzman çıktı tavanı 2000 → 4000. Chief 3000, uyum 1500, `max_calls=5`, `max_specialists=3` aynı. `estimated_cost_usd` `UNKNOWN`.
+- Uzman çıktı tavanı 2000 → 4000 (Phase 2C.2 ile 6000). Chief 3000, uyum 1500, `max_calls=5`, `max_specialists=3` aynı. `estimated_cost_usd` `UNKNOWN`.
+- Bu düzeltme canlı Anthropic ile henüz doğrulanmadı.
+
+## Phase 2C.2 — uzman çıktısını sınırlama (more tokens + bounded output)
+
+Canlı pilotlar (ikisi de `pamistanbul`, Clarity run 36835627390, 2 kayıt / 8933 bayt, tek uzman `search-performance-engineer`):
+
+| Pilot | Run | Uzman tavanı | Gözlem | Sonuç |
+|---|---|---|---|---|
+| 1 | 36845827563 | 2000 | `output_tokens=2000`, `http_status=200`; `stop_reason` o zaman izlenmiyordu | `MALFORMED_JSON` → `NO_VALID_SPECIALIST_OUTPUT`; kesilme sonradan çıkarıldı |
+| 2 | 36847868355 | 4000 | `output_tokens=4000`, `stop_reason=max_tokens` | `MODEL_OUTPUT_TRUNCATED` + `MALFORMED_JSON`; truncation **kesin doğrulandı** |
+
+Amaç: **daha fazla token + sınırlı çıktı**. Yalnız tavanı artırmak yetmez; çıktı hem kısa istenir hem doğrulayıcıda sınırlanır.
+
+- Uzman tavanı 4000 → **6000**. Chief 3000, uyum 1500, `max_calls=5`, `max_specialists=3` aynı.
+- Uzman sonucu en fazla `MAX_FINDINGS_PER_SPECIALIST = 5` bulgu. Alan sınırları (karakter): title 120, category 60, summary 500, impact 300, recommended_action 300, verification_plan 300, risk 120. `unknowns` en fazla 5 (her biri ≤ 200), `conflicts` en fazla 5 (açıklama ≤ 300).
+- Sınırı aşan çıktı `INVALID_OUTPUT` olur (`TOO_MANY_FINDINGS`, `FIELD_TOO_LONG`, `BAD_UNKNOWNS`, `BAD_CONFLICTS`). **Sessiz kesme yok**: ilk 5 bulgu "kurtarılmaz".
+- Limitler yalnız uzmana uygulanır (`ValidationContext.role = "specialist"`); Chief doğrulaması ve istemi değişmedi.
+- Uzman istemine `OUTPUT SIZE LIMITS` bloğu eklendi: yalnız JSON, en fazla 5 bulgu, kısa alanlar, kanıtı tekrar etme, metodoloji/akıl yürütme/chain-of-thought yok, yalnız karar için gerekli sayılar. Kanıt `EVIDENCE_DATA_BLOCK` içinde kalır; prompt-injection koruması aynı.
+- `stop_reason=max_tokens` → `MODEL_OUTPUT_TRUNCATED` davranışı aynen korunur; retry yok, Chief çağrılmaz.
 - Bu düzeltme canlı Anthropic ile henüz doğrulanmadı.

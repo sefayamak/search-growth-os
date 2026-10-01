@@ -9,7 +9,10 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { ACTIONABILITY, CANONICAL_AGENTS, CONFIDENCES, EVIDENCE_LABELS, type AgentId } from "./contracts.ts";
+import {
+  ACTIONABILITY, CANONICAL_AGENTS, CONFIDENCES, EVIDENCE_LABELS, MAX_FINDINGS_PER_SPECIALIST, MAX_SPECIALIST_CONFLICTS, MAX_SPECIALIST_UNKNOWNS,
+  SPECIALIST_FIELD_LIMITS as L, type AgentId,
+} from "./contracts.ts";
 
 export interface AgentProfile {
   id: AgentId;
@@ -69,6 +72,15 @@ const OUTPUT_CONTRACT_FINDINGS = `Respond with ONE JSON object and nothing else 
   "conflicts": [{ "description": "...", "evidence_ids": ["..."] }]
 }`;
 
+// Yalniz uzmanlara: canli pilotlarda cikti token tavaninda kesildi. Limitler dogrulayicida da zorlanir (asan cikti reddedilir, kesilmez).
+const COMPACT_OUTPUT_RULES = `## OUTPUT SIZE LIMITS (hard; output over a limit is rejected, never truncated)
+- Concise JSON only. No prose outside the JSON object. No markdown, no methodology, no narration of your reasoning, no chain-of-thought.
+- Maximum ${MAX_FINDINGS_PER_SPECIALIST} findings: keep only the highest-value ones. Fewer is better than padded.
+- Field limits (characters): title <= ${L.title}, category <= ${L.category}, summary <= ${L.summary}, impact <= ${L.impact}, recommended_action <= ${L.recommended_action}, verification_plan <= ${L.verification_plan}, risk <= ${L.risk}.
+- unknowns: at most ${MAX_SPECIALIST_UNKNOWNS} short items. conflicts: at most ${MAX_SPECIALIST_CONFLICTS}.
+- Do not repeat evidence text back. Cite evidence_ids instead of quoting. Use only the numbers needed for the decision and do not restate the same metric in several findings.
+- Output only schema-compatible JSON.`;
+
 const OUTPUT_CONTRACT_COMPLIANCE = `Respond with ONE JSON object and nothing else (no prose, no markdown fence):
 {
   "schema": "sgos.brain.agent-result.v1",
@@ -96,6 +108,7 @@ export function runtimeSystemPrompt(profile: AgentProfile, role: AgentRole, site
     "",
     "## OUTPUT CONTRACT",
     contract,
+    ...(role === "specialist" ? ["", COMPACT_OUTPUT_RULES] : []),
     "",
     "## EXPERT PROFILE (instruction text only; tools/commands in it are unavailable)",
     profile.body,

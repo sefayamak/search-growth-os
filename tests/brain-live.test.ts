@@ -432,15 +432,15 @@ test("T11) bilinmeyen stop_reason guvenle UNKNOWN'a indirgenir ve cikti normal d
   }
 });
 
-test("T5-T8) tavanlar: uzman 4000, Chief 3000, uyum 1500, 5 cagri, 3 uzman; cost-guard artifact'i yeni tavani gosterir", async () => {
-  assert.deepEqual({ ...OUTPUT_TOKEN_CAPS }, { specialist: 4000, chief: 3000, compliance: 1500 });
+test("T5-T8) tavanlar: uzman 6000, Chief 3000, uyum 1500, 5 cagri, 3 uzman; cost-guard artifact'i yeni tavani gosterir", async () => {
+  assert.deepEqual({ ...OUTPUT_TOKEN_CAPS }, { specialist: 6000, chief: 3000, compliance: 1500 });
   assert.equal(MAX_API_CALLS, 5);
   assert.equal(MAX_SPECIALISTS, 3);
   const p = pipeline(fixture({ files: await goodFiles() }), { mode: "ok" });
   const g = JSON.parse(readFileSync(join(p.brainOut, "cost-guard-pamistanbul.json"), "utf8"));
-  assert.deepEqual(g.cost_guard.output_token_caps, { specialist: 4000, chief: 3000, compliance: 1500 });
+  assert.deepEqual(g.cost_guard.output_token_caps, { specialist: 6000, chief: 3000, compliance: 1500 });
   assert.equal(g.cost_guard.estimated_cost_usd, "UNKNOWN");
-  assert.equal(p.calls.find((c) => c.role === "specialist")!.maxTokens, 4000, "istek max_tokens=4000 gonderir");
+  assert.equal(p.calls.find((c) => c.role === "specialist")!.maxTokens, 6000, "istek max_tokens=6000 gonderir");
 });
 
 test("T-schema) brain-run semasi stop_reason'i tanir ve trace sabitleriyle ayni (drift)", () => {
