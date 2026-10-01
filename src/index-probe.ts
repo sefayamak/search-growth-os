@@ -16,6 +16,7 @@
  */
 import type { SiteEntry } from "./registry.ts";
 import { normalizeUrl, type UrlInspectionSummary, type IndexVerdict } from "./url-inventory.ts";
+import type { Segment } from "./index-candidates.ts";
 
 export const PROBE_SITE_ID = "pamistanbul";
 export const DEFAULT_LIMIT = 20;
@@ -97,13 +98,39 @@ export interface ProbeResult {
   attempted: number;
   limit: number;
   stopped: StopReason;
-  results: { url: string; summary: UrlInspectionSummary }[];
+  results: { url: string; summary: UrlInspectionSummary; segment?: Segment }[];
   skipped: { url: string; reason: string }[];
+  /** Yalniz segmentli stratejide dolu. Eski (gsc) cikti bu alanlar olmadan ayni kalir. */
+  strategy?: "gsc" | "segmented";
+  segments?: SegmentReportRow[];
+}
+
+export interface SegmentReportRow {
+  segment: Segment;
+  state: "COMPUTED" | "UNKNOWN";
+  reason?: string;
+  pool: number | null;
+  quota: number;
+  probed: number;
+  /** INDEXED / NOT_INDEXED / NEUTRAL / UNKNOWN (Google'in karari) ve ERROR (cagri hatasi). */
+  verdicts: Record<string, number>;
+}
+
+/** Segmentli stratejide secim ozeti (runProbe'a CLI'dan gelir). */
+export interface SegmentInfo {
+  segments: Record<Segment, { state: "COMPUTED" | "UNKNOWN"; reason?: string; pool: number | null; quota: number }>;
+  day_index: number;
 }
 
 export interface ProbeOptions {
   site: Pick<SiteEntry, "id" | "production_domain">;
-  urls: string[];
+  /** Duz URL listesi (strategy=gsc, Phase 1 davranisi). `candidates` verilirse kullanilmaz. */
+  urls?: string[];
+  /** Segment etiketli, calistirma sirasina gore dizili adaylar (strategy=segmented). */
+  candidates?: { url: string; segment: Segment }[];
+  segmentInfo?: SegmentInfo;
+  /** Aday kurulurken elenenler (gecersiz / host disi); rapora eklenir. */
+  skippedInput?: { url: string; reason: string }[];
   candidateSource: string;
   limit: number;
   delayMs: number;
@@ -115,16 +142,18 @@ export interface ProbeOptions {
 
 export async function runProbe(o: ProbeOptions): Promise<ProbeResult> {
   assertProbeSite(o.site.id);
-  const skipped: ProbeResult["skipped"] = [];
+  const skipped: ProbeResult["skipped"] = [...(o.skippedInput ?? [])];
   const seen = new Set<string>();
-  const candidates: string[] = [];
-  for (const raw of o.urls) {
+  const segmented = !!o.candidates;
+  const candidates: { url: string; segment?: Segment }[] = [];
+  const input: { raw: string; segment?: Segment }[] = o.candidates ? o.candidates.map((c) => ({ raw: c.url, segment: c.segment })) : (o.urls ?? []).map((raw) => ({ raw }));
+  for (const { raw, segment } of input) {
     const n = normalizeUrl(raw);
     if (!n) { skipped.push({ url: raw, reason: "gecersiz URL" }); continue; }
     if (!hostAllowed(n, o.site.production_domain)) { skipped.push({ url: raw, reason: `host ${o.site.production_domain} (apex/www) disinda` }); continue; }
     if (seen.has(n)) { skipped.push({ url: raw, reason: "tekrar" }); continue; }
     seen.add(n);
-    candidates.push(n);
+    candidates.push({ url: n, segment });
   }
 
   const res: ProbeResult = {
@@ -138,18 +167,18 @@ export async function runProbe(o: ProbeOptions): Promise<ProbeResult> {
     res.stopped = "not_connected";
   } else {
     let consecutive = 0;
-    for (const url of candidates) {
+    for (const { url, segment } of candidates) {
       if (res.attempted >= o.limit) { res.stopped = "limit_reached"; break; }
       if (res.attempted > 0 && o.delayMs > 0) await sleep(o.delayMs);
       res.attempted++;
       try {
         const raw = await o.inspect(url);
         if (raw === null) { res.attempted--; res.stopped = "not_connected"; break; }
-        res.results.push({ url, summary: classifyInspection(raw) });
+        res.results.push({ url, summary: classifyInspection(raw), ...(segment ? { segment } : {}) });
         consecutive = 0;
       } catch (e) {
         const { summary, fatal, code } = classifyError(e);
-        res.results.push({ url, summary });
+        res.results.push({ url, summary, ...(segment ? { segment } : {}) });
         if (fatal) { res.stopped = code === 429 ? "rate_limited_429" : "forbidden_403"; break; }
         if (++consecutive >= MAX_CONSECUTIVE_ERRORS) { res.stopped = "consecutive_errors"; break; }
       }
@@ -157,10 +186,25 @@ export async function runProbe(o: ProbeOptions): Promise<ProbeResult> {
   }
   const examined = res.results.length;
   // Durdurulduysa kalan adaylar NOT_INSPECTED'dir; "sorunsuz" diye okunmamali.
-  res.coverage_notice =
-    `ÖRNEKLEM (SAMPLE) — TAM COVERAGE DEĞİL. ${candidates.length} aday URL'den ${examined} tanesi denetlendi; ` +
-    `sitedeki toplam URL sayısı bu ölçümde BİLİNMİYOR. Adaylar "${o.candidateSource}" kaynağından geldi: ` +
-    `kaynakta hiç yer almayan URL'ler (ör. hiç gösterimi olmayan sayfalar) bu örneklemde TEMSİL EDİLMEZ.`;
+  res.coverage_notice = segmented
+    ? `ÖRNEKLEM (SAMPLE) — TAM COVERAGE DEĞİL. ${candidates.length} aday URL'den ${examined} tanesi denetlendi; ` +
+      `sitedeki toplam URL sayısı bu ölçümde BİLİNMİYOR. Adaylar sitemap evreni ile son 28 günlük GSC page dataset'inden ` +
+      `segmentlere ayrılarak seçildi ("${o.candidateSource}"); ikisinde de bulunmayan URL'ler TEMSİL EDİLMEZ. ` +
+      `Seçim stateless ve deterministik bir günlük rotasyondur: YAKLAŞIK bir turdur, segment boyu değişirse pencere kayar ve tam tur garantisi yoktur.`
+    : `ÖRNEKLEM (SAMPLE) — TAM COVERAGE DEĞİL. ${candidates.length} aday URL'den ${examined} tanesi denetlendi; ` +
+      `sitedeki toplam URL sayısı bu ölçümde BİLİNMİYOR. Adaylar "${o.candidateSource}" kaynağından geldi: ` +
+      `kaynakta hiç yer almayan URL'ler (ör. hiç gösterimi olmayan sayfalar) bu örneklemde TEMSİL EDİLMEZ.`;
+  if (segmented && o.segmentInfo) {
+    res.strategy = "segmented";
+    res.segments = (Object.keys(o.segmentInfo.segments) as Segment[]).map((segment) => {
+      const info = o.segmentInfo!.segments[segment];
+      const mine = res.results.filter((r) => r.segment === segment);
+      const verdicts: Record<string, number> = {};
+      for (const r of mine) { const k = r.summary.state === "ERROR" ? "ERROR" : r.summary.index_verdict; verdicts[k] = (verdicts[k] ?? 0) + 1; }
+      return { segment, ...info, probed: mine.length, verdicts };
+    });
+  } else if (segmented) res.strategy = "segmented";
+  else res.strategy = "gsc";
   return res;
 }
 
@@ -206,10 +250,20 @@ export function probeToMarkdown(p: ProbeResult, sitemaps: ReturnType<typeof summ
   ];
   if (p.stopped === "not_connected") L.push("**NOT_CONNECTED** — kimlik yok, hiçbir API çağrısı yapılmadı.", "");
   if (p.stopped && p.stopped !== "limit_reached" && p.stopped !== "not_connected") L.push(`**Koşu erken durdu (${p.stopped}).** Kalan aday URL'ler NOT_INSPECTED'dır; "sorunsuz" anlamına gelmez.`, "");
-  L.push("| URL | durum | karar | coverage | Google canonical |", "|---|---|---|---|---|");
+  if (p.segments) {
+    L.push("## Segmentler", "",
+      "Segment adları iddia taşır: **SITEMAP_NOT_OBSERVED_IN_GSC_WINDOW** = sitemap evreninde var, son 28 günlük GSC page dataset'inde gözlenmedi. Bu bir HATA değildir; daha az gözlenmiş, daha yüksek inceleme öncelikli aday havuzudur. **HOST_VARIANT_RISK** = GSC'de üretim origin'inden farklı scheme/host ile görünen URL; canonical/redirect hatası İDDİA ETMEZ (sayfalar fetch edilmedi).", "",
+      "| segment | havuz | kota | denetlenen | dağılım |", "|---|---|---|---|---|");
+    for (const r of p.segments) {
+      const dist = Object.entries(r.verdicts).map(([k, v]) => `${k} ${v}`).join(", ") || "—";
+      L.push(`| ${r.segment} | ${r.state === "COMPUTED" ? r.pool : `UNKNOWN (${r.reason})`} | ${r.quota} | ${r.probed} | ${dist} |`);
+    }
+    L.push("");
+  }
+  L.push(p.segments ? "| URL | segment | durum | karar | coverage | Google canonical |" : "| URL | durum | karar | coverage | Google canonical |", p.segments ? "|---|---|---|---|---|---|" : "|---|---|---|---|---|");
   for (const r of p.results) {
     const s = r.summary;
-    L.push(`| ${r.url} | ${s.state}${s.error ? ` (${s.error})` : ""} | ${s.index_verdict} | ${s.coverage_state} | ${s.google_canonical} |`);
+    L.push(`| ${r.url} | ${p.segments ? `${r.segment ?? "—"} | ` : ""}${s.state}${s.error ? ` (${s.error})` : ""} | ${s.index_verdict} | ${s.coverage_state} | ${s.google_canonical} |`);
   }
   L.push("", "## Sitemap'ler (GSC)", "");
   if (sitemaps.state === "NOT_CONNECTED") L.push("NOT_CONNECTED");

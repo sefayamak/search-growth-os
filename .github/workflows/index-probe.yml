@@ -3,6 +3,10 @@
 # NE DEGIL: tam index coverage olcumu. URL Inspection API sayfa basina tek URL
 # cevaplar; bu is kucuk, kota korumali bir ornek alir ve raporu bunu basliga yazar.
 #
+# strategy=gsc varsayilandir ve Phase 1 davranisidir. strategy=segmented sitemap'i de
+# okur (robots.txt + sitemap.xml, birkac GET; sayfalar fetch edilmez) ve adaylari
+# segmentlere ayirir; canli dogrulanana kadar varsayilan DEGISTIRILMEZ.
+#
 # SADECE ELLE: zamanlayici yok. Kota (property basina gunluk 2000) paylasimli bir
 # kaynaktir; kendi kendine tetiklenen bir is onu sessizce tuketebilirdi.
 #
@@ -22,6 +26,13 @@ on:
         description: "Kosu basina en fazla kac URL denetlensin (varsayilan 20, kod sert tavani 100)"
         type: string
         default: "20"
+      strategy:
+        description: "Aday kaynagi: gsc (varsayilan, Phase 1 davranisi) | segmented (sitemap + GSC, segmentli, stateless rotasyon)"
+        type: choice
+        options:
+          - gsc
+          - segmented
+        default: gsc
 
 permissions:
   contents: read
@@ -49,10 +60,12 @@ jobs:
         env:
           SEARCH_GROWTH_GSC_CREDENTIALS_JSON: ${{ secrets.SEARCH_GROWTH_GSC_CREDENTIALS_JSON }}
           LIMIT: ${{ inputs.limit }}
+          STRATEGY: ${{ inputs.strategy }}
         run: |
           set -o pipefail
           case "$LIMIT" in ''|*[!0-9]*) echo "limit sayi olmali"; exit 1;; esac
-          node --experimental-strip-types src/cli.ts inspect-index config/sites.yaml --site pamistanbul --limit "$LIMIT" --write | tee probe.md
+          case "$STRATEGY" in gsc|segmented) ;; *) echo "strategy gsc ya da segmented olmali"; exit 1;; esac
+          node --experimental-strip-types src/cli.ts inspect-index config/sites.yaml --site pamistanbul --limit "$LIMIT" --strategy "$STRATEGY" --write | tee probe.md
           cat probe.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Artifact

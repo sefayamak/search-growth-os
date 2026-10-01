@@ -19,7 +19,7 @@ sistemle bir ilgisi yok (o yalnız siteleri yayına alıyor).
 | Eski not (20 Eylül) | Bugün (doğrulandı) |
 |---|---|
 | "GSC/GA4 bağlı değil, UNKNOWN kalır" (bölüm 6) | **Bağlı.** `reports/measure-latest.md` (28 Eylül): 7/7 GSC OK, 7/7 GA4 OK. Service account + Search Console + GA4 erişimi tamamlandı |
-| "65 test" | **174 test**, `npm run typecheck` temiz |
+| "65 test" | **213 test**, `npm run typecheck` temiz |
 | "iki workflow var" | Beş: `measure.yml` (haftalık GSC+GA4), `tests.yml` (her PR'da test), `index-probe.yml` (yalnız elle), `portfolio-check.yml`, `search-audit.yml` |
 | "Sıradaki adım: 3 PR'ı merge et" (pamistanbul-site #89/#90, pamaistudio#40) | Bu depodan **doğrulanamadı**; o repolar bu oturumun kapsamı dışı. Sefa'nın teyidi gerekir |
 | 18 skill | 18 skill (README'deki "15" eskiydi, düzeltildi) |
@@ -43,6 +43,12 @@ Phase 1'de eklenenler (hepsi salt-okunur; sınır sözleşmesi: `docs/integratio
 
 Verilmiş kararlar (tekrar tartışılmaz): `pamistanbul` **`pilot_onboarding` olarak kalır**, Phase 1 kabul
 edilene kadar `active` yapılmaz. Eski sistemler kapatılmaz/temizlenmez; mevcut workflow'lar değişmedi.
+
+**Güncelleme (1 Ekim, merge sonrası):** PR #14 main'de (`f68706e`). `index-probe.yml` canlı koşuldu
+(run 36824162453, limit 5): 5/5 INSPECTED, 5/5 INDEXED, ham alanlar şemayla uyumlu, sitemap listesi döndü. Phase 1
+canlı doğrulanmış sayılır. Dikkat: bu 5/5, adaylar yalnız GSC'de görünen sayfalar olduğu için "site index coverage
+sağlıklı" demek **değildir**. Phase 1.5a bunu `--strategy segmented` ile ele alır (`docs/integrations/index-probe.md`):
+varsayılan hâlâ `gsc`, `schedule` yok; ilk canlı segmented koşu (limit 10) merge sonrası, ayrı kararla.
 
 **Bilinen veri sorunu (FACT):** 28 Eylül'de shm, Clarity'ye 7 sitenin 7'sinde erişemedi (ağ izni) ve
 history'ye sıfır satır yazdı; pamistanbul ve spryhand için aynı güne iki **farklı** satır var. İçe aktarıcı
@@ -72,7 +78,7 @@ içerik taslağı → PR hattı, dashboard.
 cd search-growth-os && git pull && npm test
 ```
 
-174 test yeşil gelmeli (20 Eylül'de 65 idi). Sonra bölüm 2'deki tek adıma geç.
+213 test yeşil gelmeli (20 Eylül'de 65 idi). Sonra bölüm 2'deki tek adıma geç.
 
 Bir şeyin hâlâ geçerli olup olmadığından şüphelenirsen ölçümü tekrarla —
 ama önce bu dosyadaki sayıya bak; çoğu soru orada cevaplı.
@@ -149,7 +155,7 @@ node --experimental-strip-types src/cli.ts portfolio     # içerik ritmi, 7 site
 node --experimental-strip-types src/cli.ts llmstxt       # llms.txt envanteri
 node --experimental-strip-types src/cli.ts audit --site pamistanbul --full
 node --experimental-strip-types src/cli.ts registry config/sites.yaml
-npm test                                                  # 174 test
+npm test                                                  # 213 test
 ```
 
 Bağımlılık yok, sadece Node 24.

@@ -42,7 +42,7 @@ reports/                     changelog, learning log, dry-run template; runs/ is
 ## Run
 
 ```bash
-npm test                                   # node:test suite, spins a local fixture site (174 tests on 2026-10-01)
+npm test                                   # node:test suite, spins a local fixture site (213 tests on 2026-10-01)
 npm run cli -- audit --site pamistanbul    # registry-gated, read-only, sample crawl
 npm run cli -- audit --site pamistanbul --full   # FULL_BASELINE: every eligible sitemap URL
 npm run cli -- audit https://example.com   # ad-hoc URL (bypasses the registry gate)
@@ -52,6 +52,7 @@ npm run cli -- registry config/sites.example.yaml
 npm run cli -- integrations
 npm run cli -- import-health <snapshotDir>          # validate a site-health-monitor snapshot DIRECTORY (local, no network); --write merges per site
 npm run cli -- inspect-index config/sites.yaml --site pamistanbul   # read-only URL Inspection SAMPLE, not full coverage; pamistanbul only
+npm run cli -- inspect-index config/sites.yaml --strategy segmented # candidates from sitemap + GSC, risk segments (default stays gsc)
 claude plugin validate .
 claude plugin eval . --no-publish
 claude --plugin-dir .                      # load locally

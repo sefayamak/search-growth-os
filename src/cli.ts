@@ -14,8 +14,10 @@
 //   import-health <snapshotDir> [--registry path] [--site id] [--write]
 //                                   validate a site-health-monitor snapshot DIRECTORY (local path, no network);
 //                                   "no data" never becomes zero; --write merges into sites/<id>/health-import.json
-//   inspect-index [registry] --site pamistanbul [--limit N] [--urls file] [--delay ms] [--write]
-//                                   read-only URL Inspection SAMPLE for pamistanbul only (NOT full coverage)
+//   inspect-index [registry] --site pamistanbul [--limit N] [--urls file] [--delay ms] [--write] [--strategy gsc|segmented]
+//                                   read-only URL Inspection SAMPLE for pamistanbul only (NOT full coverage).
+//                                   gsc (default) = candidates from the last 28 days of GSC pages;
+//                                   segmented = sitemap + GSC, split into risk segments, stateless daily rotation
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { crawl } from "./crawler.ts";
@@ -475,21 +477,56 @@ async function main() {
       const { limit, clampedFrom } = ip.resolveLimit(opt("limit") ? Number(opt("limit")) : undefined, ip.usedOn(ledger, today));
       if (clampedFrom !== undefined) console.error(`not: limit ${clampedFrom} -> ${limit} (sert tavan ${ip.HARD_LIMIT}/gun, bugun kullanilan ${ip.usedOn(ledger, today)})`);
 
+      const strategy = opt("strategy", "gsc");
+      if (strategy !== "gsc" && strategy !== "segmented") { console.error(`gecersiz --strategy: ${strategy} (gsc | segmented)`); process.exitCode = 1; return; }
+      if (strategy === "segmented" && opt("urls")) { console.error("--strategy segmented ile --urls birlikte kullanilamaz"); process.exitCode = 1; return; }
+
       let urls: string[] = []; let source = "yok";
       const urlsFile = opt("urls");
+      let candidates: { url: string; segment: import("./index-candidates.ts").Segment }[] | undefined;
+      let segmentInfo: import("./index-probe.ts").SegmentInfo | undefined;
+      let preSkipped: { url: string; reason: string }[] = [];
+      let universeNotes: string[] = [];
       try {
-        if (urlsFile) {
-          urls = readFileSync(urlsFile, "utf8").split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#"));
-          source = `dosya: ${urlsFile}`;
-        } else if (connected) {
-          const rows = await searchConsole.searchAnalytics(prop, periods(new Date()).current, ["page"]);
-          urls = (rows ?? []).filter((r) => r.page).sort((a, b) => b.impressions - a.impressions).map((r) => r.page as string);
-          source = "GSC sayfa listesi, son 28 gün, gösterime göre";
+        if (strategy === "gsc") {
+          if (urlsFile) {
+            urls = readFileSync(urlsFile, "utf8").split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#"));
+            source = `dosya: ${urlsFile}`;
+          } else if (connected) {
+            const rows = await searchConsole.searchAnalytics(prop, periods(new Date()).current, ["page"]);
+            urls = (rows ?? []).filter((r) => r.page).sort((a, b) => b.impressions - a.impressions).map((r) => r.page as string);
+            source = "GSC sayfa listesi, son 28 gün, gösterime göre";
+          }
+        } else {
+          const ic = await import("./index-candidates.ts");
+          const { readSitemapUniverse, defaultFetchText } = await import("./sitemap-universe.ts");
+          source = "sitemap + GSC sayfa listesi (son 28 gün), segmentli";
+          let gsc: import("./index-candidates.ts").UrlSource = { state: "UNKNOWN", reason: "kimlik yok" };
+          let sitemap: import("./index-candidates.ts").UrlSource = { state: "UNKNOWN", reason: "kimlik yok; ag cagrisi yapilmadi" };
+          if (connected) {
+            try {
+              const rows = await searchConsole.searchAnalytics(prop, periods(new Date()).current, ["page"]);
+              gsc = rows === null ? { state: "UNKNOWN", reason: "GSC yaniti yok" } : { state: "MEASURED", urls: rows.filter((r) => r.page).map((r) => r.page as string) };
+            } catch (e) { gsc = { state: "UNKNOWN", reason: (e as Error).message.slice(0, 160) }; }
+            // GSC okunamadiysa sitemap'i cekmenin anlami yok: hicbir segment hesaplanmayacak.
+            if (gsc.state === "MEASURED") {
+              const u = await readSitemapUniverse({
+                locations: site.sitemap_locations, robotsUrl: `https://${site.canonical_hostname}/robots.txt`,
+                productionDomain: site.production_domain, fetchText: defaultFetchText(),
+              });
+              universeNotes = u.notes;
+              sitemap = u.state === "MEASURED" ? { state: "MEASURED", urls: u.urls } : { state: "UNKNOWN", reason: u.reason };
+            } else sitemap = { state: "UNKNOWN", reason: "GSC okunamadigi icin cekilmedi" };
+          }
+          const built = ic.segmentCandidates({ sitemap, gsc, canonicalOrigin: `https://${site.canonical_hostname}`, productionDomain: site.production_domain });
+          const sel = ic.selectSegmented({ pools: built.pools, limit, dayIndex: Math.floor(Date.now() / 86_400_000) });
+          candidates = sel.order; segmentInfo = { segments: sel.segments, day_index: sel.day_index }; preSkipped = built.rejected;
+          if (connected && gsc.state === "UNKNOWN") { console.error(`segmentli aday uretilemedi: ${gsc.reason}`); process.exitCode = 1; }
         }
       } catch (e) { console.error(`aday URL listesi alinamadi: ${(e as Error).message}`); process.exitCode = 1; return; }
 
       const probe = await ip.runProbe({
-        site, urls, candidateSource: source, limit, connected,
+        site, urls, candidates, segmentInfo, skippedInput: preSkipped, candidateSource: source, limit, connected,
         delayMs: opt("delay") ? Number(opt("delay")) : ip.DEFAULT_DELAY_MS,
         inspect: (u) => searchConsole.urlInspection(prop, u),
       });
@@ -501,7 +538,7 @@ async function main() {
       if (flag("write")) {
         mkdirSync(dir, { recursive: true });
         const inventory = buildInventory({ site: siteId, sitemapEntries: null, inspections: Object.fromEntries(probe.results.map((r) => [r.url, r.summary])) });
-        writeFileSync(join(dir, `${today}-index-probe.json`), JSON.stringify({ probe, sitemaps, url_inventory: inventory.records }, null, 2) + "\n");
+        writeFileSync(join(dir, `${today}-index-probe.json`), JSON.stringify({ probe, sitemaps, url_inventory: inventory.records, ...(strategy === "segmented" ? { sitemap_universe_notes: universeNotes } : {}) }, null, 2) + "\n");
         writeFileSync(join(dir, `${today}-index-probe.md`), md);
         writeFileSync(ledgerFile, JSON.stringify(ip.recordUsage(ledger, today, probe.attempted), null, 2) + "\n");
       }
