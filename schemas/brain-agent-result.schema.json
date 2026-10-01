@@ -1,0 +1,215 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "search-growth-os/brain-agent-result",
+  "title": "Validated output of one Brain agent. DRAFT_PR_CANDIDATE is a label only; nothing is written anywhere.",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": [
+        "schema",
+        "agent_id",
+        "site_id",
+        "findings",
+        "unknowns",
+        "conflicts"
+      ],
+      "properties": {
+        "schema": {
+          "const": "sgos.brain.agent-result.v1"
+        },
+        "agent_id": {
+          "type": "string",
+          "enum": [
+            "chief-search-strategist",
+            "technical-search-auditor",
+            "search-measurement-scientist",
+            "content-evidence-strategist",
+            "aeo-geo-strategist",
+            "competitor-intelligence-analyst",
+            "entity-structured-data-specialist",
+            "search-performance-engineer",
+            "search-policy-compliance-officer"
+          ]
+        },
+        "site_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "finding_id",
+              "site_id",
+              "title",
+              "category",
+              "evidence_ids",
+              "evidence_label",
+              "confidence",
+              "summary",
+              "impact",
+              "recommended_action",
+              "actionability",
+              "risk",
+              "verification_plan"
+            ],
+            "properties": {
+              "finding_id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$"
+              },
+              "site_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1
+              },
+              "category": {
+                "type": "string",
+                "minLength": 1
+              },
+              "evidence_ids": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "evidence_label": {
+                "type": "string",
+                "enum": [
+                  "FACT",
+                  "INFERENCE",
+                  "HYPOTHESIS",
+                  "RECOMMENDATION",
+                  "IMPLEMENTED_CHANGE",
+                  "VERIFIED_RESULT"
+                ]
+              },
+              "confidence": {
+                "type": "string",
+                "enum": [
+                  "CONFIRMED",
+                  "CANDIDATE",
+                  "FALSE_POSITIVE",
+                  "UNKNOWN"
+                ]
+              },
+              "summary": {
+                "type": "string",
+                "minLength": 1
+              },
+              "impact": {
+                "type": "string",
+                "minLength": 1
+              },
+              "recommended_action": {
+                "type": "string",
+                "minLength": 1
+              },
+              "actionability": {
+                "type": "string",
+                "enum": [
+                  "MONITOR",
+                  "HUMAN_REVIEW",
+                  "DRAFT_PR_CANDIDATE"
+                ]
+              },
+              "risk": {
+                "type": "string",
+                "minLength": 1
+              },
+              "verification_plan": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "unknowns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "conflicts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "description",
+              "evidence_ids"
+            ],
+            "properties": {
+              "description": {
+                "type": "string",
+                "minLength": 1
+              },
+              "evidence_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "schema",
+        "agent_id",
+        "site_id",
+        "reviews"
+      ],
+      "properties": {
+        "schema": {
+          "const": "sgos.brain.agent-result.v1"
+        },
+        "agent_id": {
+          "const": "search-policy-compliance-officer"
+        },
+        "site_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reviews": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "finding_id",
+              "verdict",
+              "reason"
+            ],
+            "properties": {
+              "finding_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "verdict": {
+                "type": "string",
+                "enum": [
+                  "PASS",
+                  "FLAG",
+                  "REJECT"
+                ]
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

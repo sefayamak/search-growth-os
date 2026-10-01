@@ -1,0 +1,228 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "search-growth-os/brain-evidence",
+  "title": "Normalized evidence envelope (one record, ONE site). evidence_label is exactly the six labels; EDITORIAL is not one. Records of another site are rejected, never carried over.",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "evidence_id",
+        "site_id",
+        "source",
+        "source_ref",
+        "measured_at",
+        "measurement_state",
+        "evidence_label",
+        "confidence",
+        "category",
+        "payload"
+      ],
+      "properties": {
+        "schema": {
+          "const": "sgos.brain.evidence.v1"
+        },
+        "evidence_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{2,95}$"
+        },
+        "site_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "GSC",
+            "GA4",
+            "CLARITY",
+            "CRAWL",
+            "INDEX",
+            "REGISTRY",
+            "AI_VISIBILITY",
+            "COMPETITOR"
+          ]
+        },
+        "source_ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "measured_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "measurement_state": {
+          "type": "string",
+          "enum": [
+            "MEASURED",
+            "PARTIAL",
+            "RECORDED",
+            "ERROR",
+            "NOT_CONNECTED",
+            "NOT_AVAILABLE",
+            "UNKNOWN"
+          ]
+        },
+        "evidence_label": {
+          "type": "string",
+          "enum": [
+            "FACT",
+            "INFERENCE",
+            "HYPOTHESIS",
+            "RECOMMENDATION",
+            "IMPLEMENTED_CHANGE",
+            "VERIFIED_RESULT"
+          ]
+        },
+        "confidence": {
+          "type": "string",
+          "enum": [
+            "CONFIRMED",
+            "CANDIDATE",
+            "FALSE_POSITIVE",
+            "UNKNOWN"
+          ]
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "SEARCH_PERFORMANCE",
+            "CONTENT_OPPORTUNITY",
+            "BEHAVIOR",
+            "TECHNICAL",
+            "INDEXING",
+            "STRUCTURED_DATA",
+            "AI_VISIBILITY",
+            "COMPETITOR",
+            "REGISTRY"
+          ]
+        },
+        "payload": {
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "schema",
+        "site_id",
+        "evidence"
+      ],
+      "properties": {
+        "schema": {
+          "const": "sgos.brain.evidence-bundle.v1"
+        },
+        "site_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence": {
+          "type": "array",
+          "maxItems": 40,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "schema",
+              "evidence_id",
+              "site_id",
+              "source",
+              "source_ref",
+              "measured_at",
+              "measurement_state",
+              "evidence_label",
+              "confidence",
+              "category",
+              "payload"
+            ],
+            "properties": {
+              "schema": {
+                "const": "sgos.brain.evidence.v1"
+              },
+              "evidence_id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{2,95}$"
+              },
+              "site_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "GSC",
+                  "GA4",
+                  "CLARITY",
+                  "CRAWL",
+                  "INDEX",
+                  "REGISTRY",
+                  "AI_VISIBILITY",
+                  "COMPETITOR"
+                ]
+              },
+              "source_ref": {
+                "type": "string",
+                "minLength": 1
+              },
+              "measured_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "measurement_state": {
+                "type": "string",
+                "enum": [
+                  "MEASURED",
+                  "PARTIAL",
+                  "RECORDED",
+                  "ERROR",
+                  "NOT_CONNECTED",
+                  "NOT_AVAILABLE",
+                  "UNKNOWN"
+                ]
+              },
+              "evidence_label": {
+                "type": "string",
+                "enum": [
+                  "FACT",
+                  "INFERENCE",
+                  "HYPOTHESIS",
+                  "RECOMMENDATION",
+                  "IMPLEMENTED_CHANGE",
+                  "VERIFIED_RESULT"
+                ]
+              },
+              "confidence": {
+                "type": "string",
+                "enum": [
+                  "CONFIRMED",
+                  "CANDIDATE",
+                  "FALSE_POSITIVE",
+                  "UNKNOWN"
+                ]
+              },
+              "category": {
+                "type": "string",
+                "enum": [
+                  "SEARCH_PERFORMANCE",
+                  "CONTENT_OPPORTUNITY",
+                  "BEHAVIOR",
+                  "TECHNICAL",
+                  "INDEXING",
+                  "STRUCTURED_DATA",
+                  "AI_VISIBILITY",
+                  "COMPETITOR",
+                  "REGISTRY"
+                ]
+              },
+              "payload": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

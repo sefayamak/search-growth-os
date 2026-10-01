@@ -1,0 +1,315 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "search-growth-os/brain-run",
+  "title": "One cloud Brain run. production_write is always false in this phase.",
+  "type": "object",
+  "required": [
+    "schema",
+    "run_id",
+    "site_id",
+    "started_at",
+    "completed_at",
+    "status",
+    "status_reason",
+    "input_evidence_ids",
+    "agents_considered",
+    "agents_called",
+    "agent_results",
+    "agent_trace",
+    "findings",
+    "recommendations",
+    "unknowns",
+    "conflicts",
+    "cost_guard",
+    "production_write"
+  ],
+  "properties": {
+    "schema": {
+      "const": "sgos.brain.run.v1"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "site_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "started_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "completed_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "SUCCESS",
+        "PARTIAL",
+        "NOT_CONFIGURED",
+        "ERROR"
+      ]
+    },
+    "status_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "input_evidence_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "agents_considered": {
+      "type": "array"
+    },
+    "agents_called": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "chief-search-strategist",
+          "technical-search-auditor",
+          "search-measurement-scientist",
+          "content-evidence-strategist",
+          "aeo-geo-strategist",
+          "competitor-intelligence-analyst",
+          "entity-structured-data-specialist",
+          "search-performance-engineer",
+          "search-policy-compliance-officer"
+        ]
+      }
+    },
+    "agent_results": {
+      "type": "array"
+    },
+    "agent_trace": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "agent_id",
+          "role",
+          "started_at",
+          "completed_at",
+          "status",
+          "input_evidence_ids",
+          "output_finding_ids",
+          "error_code"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK",
+              "INVALID_OUTPUT",
+              "ERROR",
+              "SKIPPED"
+            ]
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "specialist",
+              "chief",
+              "compliance"
+            ]
+          }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "allOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "finding_id",
+              "site_id",
+              "title",
+              "category",
+              "evidence_ids",
+              "evidence_label",
+              "confidence",
+              "summary",
+              "impact",
+              "recommended_action",
+              "actionability",
+              "risk",
+              "verification_plan"
+            ],
+            "properties": {
+              "finding_id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$"
+              },
+              "site_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1
+              },
+              "category": {
+                "type": "string",
+                "minLength": 1
+              },
+              "evidence_ids": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "evidence_label": {
+                "type": "string",
+                "enum": [
+                  "FACT",
+                  "INFERENCE",
+                  "HYPOTHESIS",
+                  "RECOMMENDATION",
+                  "IMPLEMENTED_CHANGE",
+                  "VERIFIED_RESULT"
+                ]
+              },
+              "confidence": {
+                "type": "string",
+                "enum": [
+                  "CONFIRMED",
+                  "CANDIDATE",
+                  "FALSE_POSITIVE",
+                  "UNKNOWN"
+                ]
+              },
+              "summary": {
+                "type": "string",
+                "minLength": 1
+              },
+              "impact": {
+                "type": "string",
+                "minLength": 1
+              },
+              "recommended_action": {
+                "type": "string",
+                "minLength": 1
+              },
+              "actionability": {
+                "type": "string",
+                "enum": [
+                  "MONITOR",
+                  "HUMAN_REVIEW",
+                  "DRAFT_PR_CANDIDATE"
+                ]
+              },
+              "risk": {
+                "type": "string",
+                "minLength": 1
+              },
+              "verification_plan": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "compliance",
+              "execution_candidate"
+            ],
+            "properties": {
+              "compliance": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "required": [
+                  "finding_id",
+                  "verdict",
+                  "reason",
+                  "reviewed_by"
+                ],
+                "properties": {
+                  "finding_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "verdict": {
+                    "type": "string",
+                    "enum": [
+                      "PASS",
+                      "FLAG",
+                      "REJECT"
+                    ]
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "reviewed_by": {
+                    "type": "string",
+                    "enum": [
+                      "deterministic_gate",
+                      "search-policy-compliance-officer"
+                    ]
+                  }
+                }
+              },
+              "execution_candidate": {
+                "type": "boolean"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "recommendations": {
+      "type": "array"
+    },
+    "unknowns": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "conflicts": {
+      "type": "array"
+    },
+    "cost_guard": {
+      "type": "object",
+      "required": [
+        "max_calls",
+        "calls_used",
+        "max_specialists",
+        "specialists_called",
+        "evidence_bytes",
+        "output_token_caps",
+        "input_tokens_measured",
+        "output_tokens_measured",
+        "estimated_cost_usd"
+      ],
+      "properties": {
+        "max_calls": {
+          "const": 5
+        },
+        "max_specialists": {
+          "const": 3
+        },
+        "estimated_cost_usd": {
+          "const": "UNKNOWN"
+        }
+      }
+    },
+    "production_write": {
+      "const": false
+    }
+  }
+}
