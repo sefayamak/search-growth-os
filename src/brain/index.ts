@@ -10,3 +10,4 @@ export { MEMORY_STATUSES, appendMemory, memoryEntriesFromRun, memoryPath, parseM
 export { brainRunToMarkdown } from "./report.ts";
 export { CLARITY_WORKFLOW_PATH, HANDOFF_STATUS_SCHEMA, runHandoff, validateClarityContract, type HandoffInput, type HandoffResult, type HandoffState } from "./handoff.ts";
 export { validateProvenance } from "./evidence.ts";
+export { RUN_REQUIRED_KEYS, TRACE_KEYS, quarantineRun, sealRun, validateBrainRun } from "./run-check.ts";

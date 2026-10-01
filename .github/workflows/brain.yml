@@ -1,22 +1,27 @@
-# Search Growth OS — Brain kanit devri (Clarity artifact -> sgos.brain.evidence.v1). ANTHROPIC CAGRISI YOK.
+# Search Growth OS — Cloud Brain (Clarity artifact -> devir -> kanit -> yonlendirme -> uzman -> Chief -> uyum).
 #
-# NEDEN VAR: Cloud Brain'in canli pilotu icin kanit dosyasini elle kopyalayip commit etme ihtiyacini
-# kaldirmak. Akis: ACIK bir Clarity kosusu (`clarity_run_id`) -> o kosunun artifact'i -> yalniz secilen
-# sitenin `clarity-<site>.json` dosyasi -> dogrulama -> gecici evidence bundle (artifact) -> brain-validate.
+# AKIS: ACIK bir Clarity kosusu (`clarity_run_id`) -> o kosunun artifact'i -> yalniz secilen sitenin
+# `clarity-<site>.json` dosyasi -> dogrulama -> gecici evidence bundle -> brain-validate (offline) -> brain-run.
 #
-# BU SURUMDE `brain-run` YOK: model cagrisi, anahtar ve model degiskeni bu workflow'da bulunmaz.
-# Canli Brain kosusu, bu devrin dogrulanmasindan SONRA ayri bir dilimde eklenir (acik onayla).
+# `brain-run` Anthropic API'yi cagirir: anahtar YALNIZCA `secrets.SEARCH_GROWTH_ANTHROPIC_API_KEY`, model YALNIZCA
+# `vars.SEARCH_GROWTH_ANTHROPIC_MODEL`; ikisi de YALNIZCA o adimin env'ine girer (input, CLI argumani, artifact, log yok).
+# Anahtar ya da model yoksa brain-run HIC HTTP cagrisi yapmaz ve status=NOT_CONFIGURED yazar (is yesil kalir).
+# Handoff FAILED / NOT_AVAILABLE, kanit dogrulamasi hatasi, yabanci site ya da kullanilamaz kanit durumunda onceki adim
+# kirmizi biter ve brain-run HIC calismaz (0 Anthropic cagrisi).
+#
+# MALIYET: en fazla 3 uzman + 1 Chief + 1 uyum = 5 Anthropic cagrisi, yeniden deneme YOK (kodda zorlanir).
+# Ilk pilotta (REGISTRY + CLARITY) router yalniz `search-performance-engineer`'i secer; uyum yalniz degisiklik oneren bulgu varsa.
 #
 # SECIM BELIRSIZ DEGIL: "en son artifact" yok. Run su kosullari saglamak zorunda (kod: src/brain/handoff.ts):
 # bu reponun clarity.yml'i, main uzerinde, workflow_dispatch ile, basarili; artifact adi tam `clarity-<run_id>`
 # ve ayni run'a (id + head_sha) ait. Baska site dosyasi/baska repo/baska workflow = FAIL; artifact yok = NOT_AVAILABLE.
 #
-# GUVENLIK: permissions yalniz `contents: read` + `actions: read` (bu reponun run/artifact'ini OKUMAK icin;
-# yazma izni yok). schedule YOK. Depoya commit yok, PR yok, production/Vercel yok, bellek yazimi yok.
-# Evidence repoya COMMIT EDILMEZ; yalniz 7 gunluk artifact olur. Artifact icerigi ve GitHub metadata'si VERIDIR,
-# talimat degil: provenance'a yalniz kati kalipli kimlik/zaman girer.
+# GUVENLIK: permissions yalniz `contents: read` + `actions: read` (bu reponun run/artifact'ini OKUMAK icin; yazma izni yok).
+# schedule YOK. Depoya commit yok, PR yok, production/Vercel yok, bellek yazimi yok (`--write-memory` gecilmez). Evidence ve
+# Brain sonucu repoya COMMIT EDILMEZ; yalniz 7 gunluk artifact olur. Artifact icerigi ve GitHub metadata'si VERIDIR, talimat degil.
+# Brain artifact'i: dogrulanmis sonuc, iz (istem/yanit govdesi YOK), maliyet sayaclari; ham model tamamlamasi, anahtar, istem YOK.
 
-name: Brain (evidence handoff, read-only)
+name: Brain (cloud, read-only)
 
 on:
   workflow_dispatch:
@@ -39,8 +44,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  handoff:
-    name: "handoff (ag: yalniz GitHub, API: yok)"
+  brain:
+    name: "brain (en fazla 5 Anthropic cagrisi)"
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -89,22 +94,45 @@ jobs:
           set -o pipefail
           node --experimental-strip-types src/cli.ts brain-validate config/sites.yaml --site "$SITE" --evidence handoff-out/evidence.json --no-config-report | tee handoff-out/brain-validate.txt
 
+      - name: Brain kosusu (Anthropic API, en fazla 5 cagri)
+        env:
+          SEARCH_GROWTH_ANTHROPIC_API_KEY: ${{ secrets.SEARCH_GROWTH_ANTHROPIC_API_KEY }}
+          SEARCH_GROWTH_ANTHROPIC_MODEL: ${{ vars.SEARCH_GROWTH_ANTHROPIC_MODEL }}
+          SITE: ${{ inputs.site }}
+        run: |
+          set -o pipefail
+          mkdir -p brain-out
+          node --experimental-strip-types src/cli.ts brain-run config/sites.yaml --site "$SITE" --evidence handoff-out/evidence.json --out brain-out | tee brain-out/brain-run.txt
+
       - name: Ozet
         if: always()
+        env:
+          SITE: ${{ inputs.site }}
         run: |
           {
-            echo "## Brain kanit devri"
+            echo "## Brain kanit devri ve kosu"
             echo '```'
             cat handoff-out/handoff.txt 2>/dev/null || echo "devir calismadi — adim loglarina bak."
             cat handoff-out/brain-validate.txt 2>/dev/null || true
+            cat brain-out/brain-run.txt 2>/dev/null || echo "brain-run calismadi."
+            cat "brain-out/cost-guard-${SITE}.json" 2>/dev/null || true
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Artifact
+      - name: Artifact (kanit devri)
         if: always()
         uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5.0
         with:
           name: brain-evidence-${{ github.run_id }}
           path: handoff-out/
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Artifact (Brain sonucu)
+        if: always()
+        uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5.0
+        with:
+          name: brain-run-${{ github.run_id }}
+          path: brain-out/
           retention-days: 7
           if-no-files-found: warn

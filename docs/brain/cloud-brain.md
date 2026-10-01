@@ -1,6 +1,7 @@
 # Cloud Brain — GitHub Actions üzerinde gerçek ajan orkestrasyonu
 
-Durum: Phase 2B (temel). **Henüz canlı koşulmadı**; kod sahte (enjekte) Anthropic istemcisiyle test edildi.
+Durum: Phase 2C (canlı çalışma zamanı bağlandı). Kanıt devri (Clarity artifact → evidence → routing) **canlı doğrulandı** (Brain run 36840181816, Anthropic çağrısı 0).
+**Phase 2C henüz canlı Anthropic ile doğrulanmadı**: `brain-run` adımı kodda ve testlerde (sahte Anthropic sunucusu) var, gerçek bir API çağrısıyla hiç koşulmadı.
 
 ## Çalışma zamanı kim?
 
@@ -101,13 +102,41 @@ node --experimental-strip-types src/cli.ts brain-run config/sites.yaml --site pa
 
 Anahtar CLI argümanı olarak kabul edilmez. `NOT_CONFIGURED` çıkış kodu 0 (kimlik yok ≠ hata); `ERROR`/`PARTIAL` 1.
 
-## Workflow ve kanıt devri (Phase 2B.1)
+## Canlı mimari (Phase 2C) — workflow
 
-`.github/workflows/brain.yml` artık **kanıt devri** workflow'udur ve **Anthropic'e hiç gitmez** (anahtar, model değişkeni ve `brain-run` adımı yoktur;
-canlı Brain koşusu devrin doğrulanmasından sonra ayrı bir dilimde, açık onayla eklenir). Yalnız `workflow_dispatch`; inputlar `site` ve **zorunlu**
-`clarity_run_id`. İzinler `contents: read` + `actions: read` (bu reponun run/artifact'ini OKUMAK için; yazma izni yok). Schedule, commit, PR, Vercel, bellek yazımı yok.
+```
+Clarity workflow → Clarity artifact → Brain workflow → handoff → evidence normalization → brain-validate (offline)
+   → deterministik router → uzman → Chief → (gerekirse) uyum → doğrulanmış Brain artifact
+```
 
-Akış (`Clarity artifact → güvenli devir → sgos.brain.evidence.v1 → brain-validate`):
+`.github/workflows/brain.yml`: yalnız `workflow_dispatch`; inputlar **yalnız** `site` ve zorunlu `clarity_run_id` (manuel `evidence_path` yok; anahtar/model input olamaz).
+İzinler `contents: read` + `actions: read` (bu reponun run/artifact'ini OKUMAK için; yazma yok). Schedule, commit, PR, deploy, bellek yazımı (`--write-memory` geçilmez) yok.
+Adımlar `set -e` semantiğiyle sıralıdır; **önceki adım kırmızı biterse sonrakiler çalışmaz**:
+
+1. `brain-handoff` (yerel; açık run id, ağ/API yok) → 2. `brain-validate` (offline) → 3. **`brain-run`** (Anthropic API).
+
+`brain-run` adımının env'inde — yalnız orada — `SEARCH_GROWTH_ANTHROPIC_API_KEY` (**`secrets`** bağlamı) ve `SEARCH_GROWTH_ANTHROPIC_MODEL` (**`vars`** bağlamı) bulunur. Model koda gömülü değildir; anahtar/model
+CLI argümanı olamaz (`--api-key`, `--model` reddedilir ve yankılanmaz), artifact'e, log'a ve istemlere girmez (anahtar yalnız `x-api-key` başlığında).
+Anahtar ya da model yoksa `brain-run` **hiç HTTP çağrısı yapmaz**, `status=NOT_CONFIGURED` yazar, iş yeşil kalır ve artifact yine üretilir (canlı pilotta bunu ayrıca kontrol edin).
+Handoff `FAILED` / `NOT_AVAILABLE`, kanıt doğrulama hatası, yabancı site ya da kullanılamaz kanıt (`ERROR`/`NOT_CONNECTED`) → **0 Anthropic çağrısı**.
+
+**Çağrı bütçesi:** en fazla 3 uzman + 1 Chief + 1 uyum = **5 HTTP çağrısı** (`CallBudget`, istek başlamadan önce tüketilir); 429 ve 5xx dahil **hiçbir yeniden deneme yok**.
+İlk pilot (REGISTRY + CLARITY) için router yalnız `search-performance-engineer`'i seçer; Chief onun geçerli sonucundan sentez yapar. Uyum incelemesi yalnız **MONITOR dışı** (değişiklik öneren)
+bir bulgu varsa çalışır, bu yüzden çağrı sayısı 2 ya da 3 olur — sabit değildir, orkestratör karar verir.
+
+**Artifact'ler** (`brain-evidence-<github_run_id>` ve `brain-run-<github_run_id>`, 7 gün; repoya commit edilmez):
+`brain-run-<site>.json` (`sgos.brain.run.v1`), `brain-report-<site>.md`, `agent-trace-<site>.json`, `cost-guard-<site>.json`, `memory-candidates-<site>.jsonl` (yalnız aday; kalıcı değil).
+**Artifact'e asla girmeyenler:** API anahtarı, `Authorization`, model adı, tam sistem/kullanıcı istemi, ham (doğrulanmamış) model tamamlaması, yanıt gövdesi. İz yalnız
+`agent_id, role, zamanlar, status, input_evidence_ids, output_finding_ids, error_code, ihlal kodları, http_status, token sayıları, profile_sha256` taşır.
+`cost_guard`: `max_calls, calls_used, specialists_called, evidence_bytes, output_token_caps` ve API'nin kendi `usage` alanından `input/output_tokens_measured`; **dolar maliyeti `UNKNOWN`** (fiyat tablosu yok).
+Artifact yazılmadan önce `brain-run` kendi çıktısını `validateBrainRun` ile sözleşmeye karşı doğrular (yabancı site, kanıt dışı id, EDITORIAL, izde bilinmeyen alan, sır, bütçe aşımı, `production_write`);
+ihlalde model kaynaklı metin (bulgu/sonuç/bilinmeyen) artifact'e **yazılmaz** (`RUN_CONTRACT_VIOLATION`, status `ERROR`).
+
+Geçersiz model çıktısı: uzman çıktısı reddedilirse uydurma fallback bulgu üretilmez (`PARTIAL`/`ERROR`, geçerli uzman yoksa Chief çağrılmaz); Chief reddedilirse `PARTIAL` (SUCCESS değil).
+
+### Kanıt devri (Phase 2B.1, canlı doğrulandı)
+
+Devir adımları (`Clarity artifact → güvenli devir → sgos.brain.evidence.v1 → brain-validate`):
 
 1. `gh api repos/<repo>/actions/runs/<id>` + artifact listesi + `gh run download --name clarity-<id>` (yalnız bu repo, **açık run id**; "en son" seçimi yok).
 2. `brain-handoff` (yerel dosyalar, ağ/API yok) `src/brain/handoff.ts` ile doğrular:
@@ -133,5 +162,7 @@ Yerel kullanım: `brain-handoff config/sites.yaml --site pamistanbul --run-id <i
 
 ## Henüz YOK (bilinçli)
 
-Canlı Anthropic çağrısı (workflow'da `brain-run` adımı), kalıcı bulut belleği, schedule, GSC/GA4/index/crawl için artifact devri (yalnız Clarity var), PR açma. Model çıktı kalitesi
-**canlıda doğrulanmadı**: sayı kuralı (özette yalnız kanıtta geçen sayılar) muhafazakârdır ve gerçek modelde fazla sert çıkabilir; ilk canlı pilot bunu ölçecek.
+- **Gerçek Anthropic API ile doğrulanmış koşu.** Phase 2C `brain-run` adımı kodda ve sahte Anthropic sunucusuyla (gerçek CLI → gerçek istemci → sahte `fetch`) test edildi; canlı pilot ayrıca,
+  secret/variable tanımlandıktan ve açık onaydan sonra yapılacak. Bu yüzden canlıda doğrulanmayanlar: modelin JSON sözleşmesine uyumu, `usage` alanı, gerçek gecikme ve çağrı sayısı (beklenen 2–3).
+- Kalıcı bulut belleği, schedule, GSC/GA4/index/crawl için artifact devri (yalnız Clarity var), PR açma.
+- Model çıktı kalitesi: sayı kuralı (başlık/özet/etkide yalnız kanıtta geçen sayılar) muhafazakârdır ve gerçek modelde fazla sert çıkabilir; ilk canlı pilot bunu ölçecek.

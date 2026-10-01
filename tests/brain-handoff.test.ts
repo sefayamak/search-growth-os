@@ -285,9 +285,10 @@ test("9) brain-handoff ve brain-validate AG/API cagrisi YAPMAZ (anahtar+model ta
 const WF = read(".github/workflows/brain.yml");
 const wf = WF.split("\n").filter((l) => !l.trim().startsWith("#")).join("\n");
 
-test("10) workflow Anthropic API cagirmaz: anahtar/model/brain-run/uc nokta yok", () => {
-  assert.ok(!/anthropic|ANTHROPIC|brain-run|api\.anthropic|secrets\./i.test(wf));
-  assert.ok(!/\bvars\./.test(wf));
+test("10) Anthropic'e yalniz brain-run adimindan gidilir; devir/dogrulama adimlari API'ye gitmez (Phase 2C: brain-run eklendi)", () => {
+  const steps = wf.split(/\n(?=      - )/);
+  for (const s of steps.filter((x) => /name: (Devir dogrulamasi|Brain dogrulama|Clarity run)/.test(x))) assert.ok(!/anthropic|ANTHROPIC|brain-run|secrets\./i.test(s), "devir/dogrulama adimlari API anahtari/model gormez");
+  assert.ok(!/api\.anthropic/.test(wf), "uc nokta workflow'da degil, kodda gomulu");
 });
 test("11) workflow schedule/cron/push/pull_request icermez; yalniz workflow_dispatch + ZORUNLU acik run id", () => {
   const on = wf.match(/^on:\n([\s\S]*?)^\S/m)![1];

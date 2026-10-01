@@ -490,8 +490,9 @@ async function main() {
     case "brain-validate":
     case "brain-run": {
       const br = await import("./brain/index.ts");
-      if (args.some((a) => /^--?(api[-_]?)?(key|token|secret|anthropic[-_]?key)\b/i.test(a))) {
-        console.error(`Anahtar CLI argumani olarak kabul edilmez; ${br.ANTHROPIC_KEY_ENV} ortam degiskenini (GitHub Secret) kullan.`);
+      // Anahtar da MODEL de CLI argumani degildir: anahtar ps/shell gecmisine, model ise koda/komuta gomulmeye acik kapi olurdu.
+      if (args.some((a) => /^--?(api[-_]?)?(key|token|secret|model|anthropic[-_]?(key|model))\b/i.test(a))) {
+        console.error(`Anahtar ve model CLI argumani olarak kabul edilmez; ${br.ANTHROPIC_KEY_ENV} (GitHub Secret) ve ${br.ANTHROPIC_MODEL_ENV} (repo variable) ortam degiskenlerini kullan.`);
         process.exitCode = 1; return;
       }
       const siteId = opt("site");
@@ -562,18 +563,27 @@ async function main() {
         return;
       }
 
-      const run = !parsed.ok || !parsed.bundle
+      const produced = !parsed.ok || !parsed.bundle
         ? br.evidenceRejectedRun(siteId, parsed.errors)
         : await br.runBrain({ siteId, site, bundle: parsed.bundle, evidenceBytes: parsed.evidence_bytes, config: cfg, profiles });
+      // Artifact'e yazilmadan ONCE kendi ciktimizi dogrula: ihlalde model kaynakli metin artifact'e GIRMEZ.
+      const { run, violations } = br.sealRun(produced, { secrets });
       console.log(`Brain ${run.site_id}: ${run.status}${run.status_reason ? ` (${run.status_reason})` : ""} — API ${run.cost_guard.calls_used}/${run.cost_guard.max_calls}, ${run.findings.length} bulgu`);
       const outDir = opt("out", "brain-out");
       mkdirSync(outDir, { recursive: true });
       writeFileSync(join(outDir, `brain-run-${siteId}.json`), JSON.stringify(run, null, 2) + "\n");
       writeFileSync(join(outDir, `brain-report-${siteId}.md`), br.brainRunToMarkdown(run));
+      // Iz: yalniz izin verilen alanlar (istem/yanit govdesi, ham tamamlama YOK). Maliyet: sayaclar + API'nin kendi `usage` token'lari.
+      writeFileSync(join(outDir, `agent-trace-${siteId}.json`), JSON.stringify(run.agent_trace, null, 2) + "\n");
+      writeFileSync(join(outDir, `cost-guard-${siteId}.json`), JSON.stringify({
+        site_id: run.site_id, run_id: run.run_id, status: run.status, cost_guard: run.cost_guard,
+        per_agent_tokens: run.agent_trace.map((t) => ({ agent_id: t.agent_id, role: t.role, input_tokens: t.input_tokens, output_tokens: t.output_tokens })),
+      }, null, 2) + "\n");
       const mem = br.memoryEntriesFromRun(run);
       // Bellek ADAYLARI artifact klasorune yazilir (kalici degil). Kalici yazim yalniz acik --write-memory ile.
       writeFileSync(join(outDir, `memory-candidates-${siteId}.jsonl`), mem.map((m) => JSON.stringify(m)).join("\n") + (mem.length ? "\n" : ""));
       if (flag("write-memory")) for (const m of mem) br.appendMemory(".", m, { write: true });
+      if (violations.length) console.log(`BRAIN_RUN_CONTRACT_VIOLATION ${violations.join(",")} — model kaynakli metin artifact'e yazilmadi`);
       if (run.status === "ERROR" || run.status === "PARTIAL") process.exitCode = 1;   // NOT_CONFIGURED yesil kalir (kimlik yok != hata)
       return;
     }
