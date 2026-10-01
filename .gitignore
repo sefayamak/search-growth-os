@@ -12,3 +12,4 @@ reports/runs/*.crawl.json
 node_modules/
 *.log
 evals/results/
+clarity-out/
