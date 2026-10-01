@@ -101,12 +101,37 @@ node --experimental-strip-types src/cli.ts brain-run config/sites.yaml --site pa
 
 Anahtar CLI argümanı olarak kabul edilmez. `NOT_CONFIGURED` çıkış kodu 0 (kimlik yok ≠ hata); `ERROR`/`PARTIAL` 1.
 
-## Workflow
+## Workflow ve kanıt devri (Phase 2B.1)
 
-`.github/workflows/brain.yml`: yalnız `workflow_dispatch` (`site`, `evidence_path`), `contents: read`, schedule yok, commit yok, PR yok, Vercel yok, `--write-memory` geçilmez.
-Model repo variable'ı `SEARCH_GROWTH_ANTHROPIC_MODEL`, anahtar secret'ı `SEARCH_GROWTH_ANTHROPIC_API_KEY`. Artifact: `brain-<run_id>` (30 gün; yalnız iz/kod/bulgu, prompt ve anahtar yok).
+`.github/workflows/brain.yml` artık **kanıt devri** workflow'udur ve **Anthropic'e hiç gitmez** (anahtar, model değişkeni ve `brain-run` adımı yoktur;
+canlı Brain koşusu devrin doğrulanmasından sonra ayrı bir dilimde, açık onayla eklenir). Yalnız `workflow_dispatch`; inputlar `site` ve **zorunlu**
+`clarity_run_id`. İzinler `contents: read` + `actions: read` (bu reponun run/artifact'ini OKUMAK için; yazma izni yok). Schedule, commit, PR, Vercel, bellek yazımı yok.
+
+Akış (`Clarity artifact → güvenli devir → sgos.brain.evidence.v1 → brain-validate`):
+
+1. `gh api repos/<repo>/actions/runs/<id>` + artifact listesi + `gh run download --name clarity-<id>` (yalnız bu repo, **açık run id**; "en son" seçimi yok).
+2. `brain-handoff` (yerel dosyalar, ağ/API yok) `src/brain/handoff.ts` ile doğrular:
+   - run: bu reponun `clarity.yml`'i, `main` üzerinde, `workflow_dispatch`, `completed/success`; id eşleşir; `repository` ve `head_repository` bu repo;
+   - artifact: adı tam `clarity-<run_id>`, tek, süresi dolmamış, aynı run'a (id + `head_sha`) ait;
+   - dosya: **yalnız** `clarity-out/clarity-<site>.json` açılır (aynı artifact başka siteleri de taşıyabilir; onlar açılmaz); sembolik bağlantı/2 MB üstü reddedilir;
+   - içerik: sır benzeri veri → FAIL; `site_id` seçilen siteyle aynı değilse **FOREIGN_SITE_ARTIFACT**; `sgos.clarity.v1` sözleşmesi doğrulanır
+     (ölçülememiş sonuç sayı taşıyorsa sözleşme ihlali).
+3. `evidence.json` (REGISTRY + CLARITY, additive `provenance` ile) yalnız `handoff-out/` altına yazılır ve **7 günlük artifact** olur (`brain-evidence-<run_id>`); repoya commit edilmez
+   (`handoff-out/`, `handoff-work/` `.gitignore`'da). 4. `brain-validate` yönlendirme planını yazar.
+
+**Hata semantiği** (çıkış kodu 1, `handoff-status.json` her zaman yazılır; kod, içerik/sır taşımaz):
+`NOT_AVAILABLE` = run/artifact/dosya yok ya da süresi dolmuş (`RUN_NOT_AVAILABLE`, `ARTIFACT_NOT_AVAILABLE`, `ARTIFACT_EXPIRED`, `CLARITY_FILE_NOT_AVAILABLE`, …) — sahte veri yok.
+`FAILED` = belirsiz/yabancı/bozuk (`FOREIGN_SITE_ARTIFACT`, `RUN_NOT_CLARITY_WORKFLOW`, `RUN_NOT_MAIN`, `RUN_FOREIGN_REPOSITORY`, `ARTIFACT_RUN_MISMATCH`, `ARTIFACT_AMBIGUOUS`,
+`CLARITY_JSON_INVALID`, `CLARITY_CONTRACT_INVALID`, `CLARITY_SECRET_DETECTED`, `EVIDENCE_REJECTED`, …).
+Clarity ölçümü `ERROR`/`NOT_CONNECTED` ise devir **OK ama kullanılamaz**: pakette sayı yoktur, serbest metin notu düşülür, `brain-validate` hiçbir uzmanı çağırmaz ve CLI açıkça `KANIT KULLANILAMAZ` yazar.
+
+**Provenance** (zarfta additive, isteğe bağlı `provenance`; mevcut sözleşme kırılmadı): `handoff, source_workflow, source_run_id, source_run_attempt, source_head_sha,
+source_artifact_name, source_artifact_id, source_artifact_digest, source_measured_at, handoff_run_id`. Yalnız katı kalıpla doğrulanmış kimlik/zaman; GitHub'dan gelen serbest metin
+(başlık, commit mesajı, not) **hiçbir yere kopyalanmaz** ve talimat olarak yorumlanmaz. Artifact içeriği (satırlar) yine güvenilmeyen veridir ve modele yalnız DATA bloğunda gider.
+
+Yerel kullanım: `brain-handoff config/sites.yaml --site pamistanbul --run-id <id> --repo <owner/repo> --artifact-dir … --run-meta … --artifacts-meta … --out handoff-out`.
 
 ## Henüz YOK (bilinçli)
 
-Canlı Anthropic çağrısı, kalıcı bulut belleği, schedule, kanıt paketini otomatik üreten toplayıcı zinciri (Clarity/GSC/GA4 artifact'ından), PR açma. Model çıktı kalitesi
+Canlı Anthropic çağrısı (workflow'da `brain-run` adımı), kalıcı bulut belleği, schedule, GSC/GA4/index/crawl için artifact devri (yalnız Clarity var), PR açma. Model çıktı kalitesi
 **canlıda doğrulanmadı**: sayı kuralı (özette yalnız kanıtta geçen sayılar) muhafazakârdır ve gerçek modelde fazla sert çıkabilir; ilk canlı pilot bunu ölçecek.

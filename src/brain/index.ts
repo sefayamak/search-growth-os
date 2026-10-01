@@ -8,3 +8,5 @@ export { parseAgentJson, validateComplianceResult, validateFindingsResult, looks
 export { buildUserMessage, evidenceRejectedRun, gapUnknowns, runBrain } from "./orchestrator.ts";
 export { MEMORY_STATUSES, appendMemory, memoryEntriesFromRun, memoryPath, parseMemoryJsonl, readMemory, validateMemoryEntry, type MemoryEntry } from "./memory.ts";
 export { brainRunToMarkdown } from "./report.ts";
+export { CLARITY_WORKFLOW_PATH, HANDOFF_STATUS_SCHEMA, runHandoff, validateClarityContract, type HandoffInput, type HandoffResult, type HandoffState } from "./handoff.ts";
+export { validateProvenance } from "./evidence.ts";

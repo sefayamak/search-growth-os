@@ -356,18 +356,17 @@ test("20) brain.yml yalniz workflow_dispatch", () => {
   assert.match(on, /workflow_dispatch:/);
   for (const t of ["push:", "pull_request", "schedule:", "workflow_run", "repository_dispatch", "issue_comment"]) assert.ok(!on.includes(t), t);
 });
-test("21) brain.yml contents: read, baska yazma izni yok", () => {
-  assert.match(wfCode, /permissions:\n  contents: read\n/);
+test("21) brain.yml izinleri en dar: yalniz contents: read + actions: read (yazma yok)", () => {
+  assert.match(wfCode, /permissions:\n  contents: read\n  actions: read\n/);
   assert.ok(!/:\s*write\b/.test(wfCode));
 });
 test("22) brain.yml schedule/cron icermez", () => { assert.ok(!/schedule:|cron:/.test(wfCode)); });
 test("23) brain.yml depoya commit/push etmez ve --write-memory GECMEZ", () => {
   assert.ok(!/git\s+(add|commit|push|config)|stefanzweifel|add-and-commit|--write-memory/.test(wfCode));
 });
-test("24) brain.yml PR acmaz, Vercel'e dokunmaz; sirlar yalniz secrets/vars -> env", () => {
+test("24) brain.yml PR acmaz, Vercel'e dokunmaz; Anthropic'e HIC gitmez; yalniz github.token kullanir", () => {
   assert.ok(!/gh\s+pr|create-pull-request|pulls|vercel|VERCEL/i.test(wfCode));
-  assert.match(wfCode, /SEARCH_GROWTH_ANTHROPIC_API_KEY: \$\{\{ secrets\.SEARCH_GROWTH_ANTHROPIC_API_KEY \}\}/);
-  assert.match(wfCode, /SEARCH_GROWTH_ANTHROPIC_MODEL: \$\{\{ vars\.SEARCH_GROWTH_ANTHROPIC_MODEL \}\}/);
+  assert.ok(!/anthropic|ANTHROPIC|brain-run|secrets\./i.test(wfCode), "bu surumde model cagrisi/anahtar yok");
   assert.ok(!/--(api-)?key|--token/.test(wfCode), "anahtar komut satirina girmez");
   for (const m of wfCode.matchAll(/uses: (\S+)/g)) assert.match(m[1], /@[0-9a-f]{40}$/, "action SHA'ya sabitli");
 });

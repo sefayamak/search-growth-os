@@ -16,7 +16,10 @@
 //                                   native Microsoft Clarity export: 3 requests/site/run, numOfDays=1; writes JSON+MD to --out (default clarity-out)
 //   brain-evidence [registry] --site id --clarity <clarity-<site>.json> [--out file]
 //                                   normalize existing collector output into a sgos.brain.evidence-bundle.v1 file (local, no network)
-//   brain-validate [registry] --site id [--evidence file]
+//   brain-handoff [registry] --site id --run-id N --repo owner/repo [--artifact-dir d] [--run-meta f] [--artifacts-meta f] [--handoff-run-id N] [--out dir=handoff-out]
+//                                   Clarity artifact -> sgos.brain.evidence.v1 (LOCAL files, no network, no API call). Explicit run id; only
+//                                   the selected site's clarity-<site>.json is read; foreign site = FAILED, missing = NOT_AVAILABLE
+//   brain-validate [registry] --site id [--evidence file] [--no-config-report]
 //                                   OFFLINE: load the 9 agents/*.md profiles, validate the evidence bundle, print the routing plan (NO API call)
 //   brain-run [registry] --site id [--evidence file] [--out dir=brain-out] [--write-memory]
 //                                   cloud Brain: route -> <=3 specialists -> Chief -> compliance via the Anthropic API (key + model from env;
@@ -483,6 +486,7 @@ async function main() {
     // Brain: bulut akil yuruten katman. Anahtar YALNIZCA ortam degiskeninden okunur; CLI argumani olarak
     // asla kabul edilmez ve reddedilirken degeri yankilanmaz.
     case "brain-evidence":
+    case "brain-handoff":
     case "brain-validate":
     case "brain-run": {
       const br = await import("./brain/index.ts");
@@ -515,6 +519,26 @@ async function main() {
         return;
       }
 
+      if (cmd === "brain-handoff") {
+        // Ag YOK: workflow GitHub'dan dosyalari indirir, bu komut onlari dogrular. Model cagrisi yok.
+        const out = opt("out", "handoff-out");
+        mkdirSync(out, { recursive: true });
+        const res = br.runHandoff({
+          siteId, site, runId: opt("run-id") ?? "", repo: opt("repo") ?? "", artifactDir: opt("artifact-dir", "handoff-work/artifact"),
+          runMetaPath: opt("run-meta", "handoff-work/run.json"), artifactsMetaPath: opt("artifacts-meta", "handoff-work/artifacts.json"), handoffRunId: opt("handoff-run-id"),
+        });
+        const { bundle, provenance, ...status } = res;
+        writeFileSync(join(out, "handoff-status.json"), JSON.stringify(status, null, 2) + "\n");
+        if (bundle && provenance) {
+          writeFileSync(join(out, "evidence.json"), JSON.stringify(bundle, null, 2) + "\n");
+          writeFileSync(join(out, "provenance.json"), JSON.stringify(provenance, null, 2) + "\n");
+        }
+        console.log(`HANDOFF ${res.state} ${res.code ?? "-"} site=${siteId} run=${res.source_run_id}${res.detail.length ? ` detail=${res.detail.join(",")}` : ""}`);
+        if (res.state === "OK" && res.usable === false) console.log("KANIT KULLANILAMAZ: Clarity olcumu MEASURED/PARTIAL degil — pakette sayi yok, hicbir uzman cagrilmaz");
+        if (res.state !== "OK") process.exitCode = 1;
+        return;
+      }
+
       const cfg = br.loadAnthropicConfig();
       const secrets = cfg.state === "CONFIGURED" ? [cfg.apiKey] : [];
       const evPath = opt("evidence");
@@ -529,7 +553,9 @@ async function main() {
       const profiles = br.loadAgentProfiles("agents");
 
       if (cmd === "brain-validate") {
-        console.log(`Brain (offline — API cagrisi YOK): ${profiles.size} ajan profili yuklendi, ${br.ANTHROPIC_KEY_ENV}: ${cfg.state === "CONFIGURED" ? "VAR" : "YOK"}, ${br.ANTHROPIC_MODEL_ENV}: ${cfg.state === "CONFIGURED" ? "VAR" : (cfg.missing.includes(br.ANTHROPIC_MODEL_ENV) ? "YOK" : "VAR")}`);
+        // Workflow anahtari/modeli HIC gecmez; orada "YOK" yazmak yaniltici olurdu, o yuzden rapor kapatilabilir.
+        if (flag("no-config-report")) console.log(`Brain (offline — API cagrisi YOK): ${profiles.size} ajan profili yuklendi`);
+        else console.log(`Brain (offline — API cagrisi YOK): ${profiles.size} ajan profili yuklendi, ${br.ANTHROPIC_KEY_ENV}: ${cfg.state === "CONFIGURED" ? "VAR" : "YOK"}, ${br.ANTHROPIC_MODEL_ENV}: ${cfg.state === "CONFIGURED" ? "VAR" : (cfg.missing.includes(br.ANTHROPIC_MODEL_ENV) ? "YOK" : "VAR")}`);
         if (!parsed.ok || !parsed.bundle) { console.log(`KANIT REDDEDILDI: ${parsed.errors.join(", ")}`); process.exitCode = 1; return; }
         console.log(`kanit: ${parsed.bundle.evidence.length} kayit, ${parsed.evidence_bytes} bayt (sinir ${br.MAX_EVIDENCE_BYTES_PER_RUN}); sikistirilan: ${parsed.compaction.length}`);
         for (const c of br.routeAgents(parsed.bundle.evidence).considered) console.log(`${c.decision.padEnd(14)} ${c.agent_id} — ${c.reason}`);
@@ -693,7 +719,7 @@ async function main() {
       return;
     }
     default:
-      console.error("commands: crawl | audit | compliance | registry | integrations | measure | detail | topics | smoke | portfolio | llmstxt | import-health | inspect-index | clarity-smoke | clarity-measure | brain-evidence | brain-validate | brain-run");
+      console.error("commands: crawl | audit | compliance | registry | integrations | measure | detail | topics | smoke | portfolio | llmstxt | import-health | inspect-index | clarity-smoke | clarity-measure | brain-evidence | brain-handoff | brain-validate | brain-run");
       process.exitCode = 1;
   }
 }

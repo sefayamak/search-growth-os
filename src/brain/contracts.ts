@@ -65,6 +65,25 @@ export const MAX_EVIDENCE_BYTES_PER_RUN = 60_000;
 export const MAX_EVIDENCE_BYTES_PER_ITEM = 8_000;
 export const MAX_EVIDENCE_ITEMS = 40;
 
+export const HANDOFF_SCHEMA = "sgos.brain.handoff.v1";
+
+/** Kanitin hangi workflow/kosu/artifact'tan geldigi. ADDITIVE ve istege bagli: yoksa zarf degismez. Alanlar
+ *  yalniz katı kalip dogrulanmis kimlik/zaman degerleridir; GitHub'dan gelen serbest metin (baslik,
+ *  commit mesaji, dal aciklamasi...) buraya ASLA girmez ve talimat olarak yorumlanmaz. */
+export interface EvidenceProvenance {
+  handoff: typeof HANDOFF_SCHEMA;
+  source_workflow: string;
+  source_run_id: string;
+  source_run_attempt: number | "UNKNOWN";
+  source_head_sha: string;
+  source_artifact_name: string;
+  source_artifact_id: string;
+  source_artifact_digest: string | "UNKNOWN";
+  source_measured_at: string;
+  handoff_run_id: string | "UNKNOWN";
+}
+export const PROVENANCE_KEYS = ["handoff", "source_workflow", "source_run_id", "source_run_attempt", "source_head_sha", "source_artifact_name", "source_artifact_id", "source_artifact_digest", "source_measured_at", "handoff_run_id"] as const;
+
 export interface EvidenceEnvelope {
   schema: typeof EVIDENCE_SCHEMA;
   evidence_id: string;
@@ -78,6 +97,8 @@ export interface EvidenceEnvelope {
   confidence: Confidence;
   category: EvidenceCategory;
   payload: Record<string, unknown>;
+  /** Istege bagli, additive: artifact devrinden geldiyse kaynak izi. */
+  provenance?: EvidenceProvenance;
 }
 
 export interface EvidenceBundle {

@@ -14,3 +14,5 @@ node_modules/
 evals/results/
 clarity-out/
 brain-out/
+handoff-out/
+handoff-work/
