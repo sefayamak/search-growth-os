@@ -100,6 +100,84 @@
         },
         "payload": {
           "type": "object"
+        },
+        "provenance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "handoff",
+            "source_workflow",
+            "source_run_id",
+            "source_run_attempt",
+            "source_head_sha",
+            "source_artifact_name",
+            "source_artifact_id",
+            "source_artifact_digest",
+            "source_measured_at",
+            "handoff_run_id"
+          ],
+          "description": "Optional, additive. Only strictly validated ids/timestamps of the source workflow run and artifact; never free text from GitHub.",
+          "properties": {
+            "handoff": {
+              "const": "sgos.brain.handoff.v1"
+            },
+            "source_workflow": {
+              "const": ".github/workflows/clarity.yml"
+            },
+            "source_run_id": {
+              "type": "string",
+              "pattern": "^\\d{1,20}$"
+            },
+            "source_run_attempt": {
+              "oneOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "const": "UNKNOWN"
+                }
+              ]
+            },
+            "source_head_sha": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            },
+            "source_artifact_name": {
+              "type": "string",
+              "pattern": "^clarity-\\d{1,20}$"
+            },
+            "source_artifact_id": {
+              "type": "string",
+              "pattern": "^\\d{1,20}$"
+            },
+            "source_artifact_digest": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                {
+                  "const": "UNKNOWN"
+                }
+              ]
+            },
+            "source_measured_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "handoff_run_id": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^\\d{1,20}$"
+                },
+                {
+                  "const": "UNKNOWN"
+                }
+              ]
+            }
+          }
         }
       }
     },
@@ -218,6 +296,84 @@
               },
               "payload": {
                 "type": "object"
+              },
+              "provenance": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "handoff",
+                  "source_workflow",
+                  "source_run_id",
+                  "source_run_attempt",
+                  "source_head_sha",
+                  "source_artifact_name",
+                  "source_artifact_id",
+                  "source_artifact_digest",
+                  "source_measured_at",
+                  "handoff_run_id"
+                ],
+                "description": "Optional, additive. Only strictly validated ids/timestamps of the source workflow run and artifact; never free text from GitHub.",
+                "properties": {
+                  "handoff": {
+                    "const": "sgos.brain.handoff.v1"
+                  },
+                  "source_workflow": {
+                    "const": ".github/workflows/clarity.yml"
+                  },
+                  "source_run_id": {
+                    "type": "string",
+                    "pattern": "^\\d{1,20}$"
+                  },
+                  "source_run_attempt": {
+                    "oneOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      {
+                        "const": "UNKNOWN"
+                      }
+                    ]
+                  },
+                  "source_head_sha": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{40}$"
+                  },
+                  "source_artifact_name": {
+                    "type": "string",
+                    "pattern": "^clarity-\\d{1,20}$"
+                  },
+                  "source_artifact_id": {
+                    "type": "string",
+                    "pattern": "^\\d{1,20}$"
+                  },
+                  "source_artifact_digest": {
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^sha256:[0-9a-f]{64}$"
+                      },
+                      {
+                        "const": "UNKNOWN"
+                      }
+                    ]
+                  },
+                  "source_measured_at": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "handoff_run_id": {
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^\\d{1,20}$"
+                      },
+                      {
+                        "const": "UNKNOWN"
+                      }
+                    ]
+                  }
+                }
               }
             }
           }

@@ -8,8 +8,8 @@
 import { createHash } from "node:crypto";
 import {
   EVIDENCE_BUNDLE_SCHEMA, EVIDENCE_CATEGORIES, EVIDENCE_LABELS, EVIDENCE_SCHEMA, EVIDENCE_SOURCES, CONFIDENCES, MEASUREMENT_STATES,
-  MAX_EVIDENCE_BYTES_PER_ITEM, MAX_EVIDENCE_BYTES_PER_RUN, MAX_EVIDENCE_ITEMS, USABLE_STATES,
-  type EvidenceBundle, type EvidenceEnvelope, type MeasurementState,
+  MAX_EVIDENCE_BYTES_PER_ITEM, MAX_EVIDENCE_BYTES_PER_RUN, MAX_EVIDENCE_ITEMS, USABLE_STATES, HANDOFF_SCHEMA, PROVENANCE_KEYS,
+  type EvidenceBundle, type EvidenceEnvelope, type EvidenceProvenance, type MeasurementState,
 } from "./contracts.ts";
 import type { ClaritySiteResult } from "../adapters/clarity.ts";
 import type { SiteEntry } from "../registry.ts";
@@ -57,6 +57,26 @@ export function compactPayload(payload: Record<string, unknown>, maxBytes = MAX_
 
 // --- zarf dogrulamasi ------------------------------------------------------------------------
 
+const DIGITS = /^\d{1,20}$/;
+/** Provenance katı kalıplarla dogrulanir; bilinmeyen anahtar ya da serbest metin reddedilir. */
+export function validateProvenance(p: unknown): string[] {
+  if (!p || typeof p !== "object" || Array.isArray(p)) return ["INVALID_PROVENANCE"];
+  const o = p as Record<string, unknown>;
+  const errs: string[] = [];
+  if (Object.keys(o).some((k) => !(PROVENANCE_KEYS as readonly string[]).includes(k))) errs.push("INVALID_PROVENANCE_KEY");
+  if (o.handoff !== HANDOFF_SCHEMA) errs.push("INVALID_PROVENANCE_SCHEMA");
+  if (o.source_workflow !== ".github/workflows/clarity.yml") errs.push("INVALID_PROVENANCE_WORKFLOW");
+  if (typeof o.source_run_id !== "string" || !DIGITS.test(o.source_run_id)) errs.push("INVALID_PROVENANCE_RUN_ID");
+  if (!(o.source_run_attempt === "UNKNOWN" || (Number.isInteger(o.source_run_attempt) && (o.source_run_attempt as number) >= 1))) errs.push("INVALID_PROVENANCE_ATTEMPT");
+  if (typeof o.source_head_sha !== "string" || !/^[0-9a-f]{40}$/.test(o.source_head_sha)) errs.push("INVALID_PROVENANCE_SHA");
+  if (typeof o.source_artifact_name !== "string" || !/^clarity-\d{1,20}$/.test(o.source_artifact_name)) errs.push("INVALID_PROVENANCE_ARTIFACT_NAME");
+  if (typeof o.source_artifact_id !== "string" || !DIGITS.test(o.source_artifact_id)) errs.push("INVALID_PROVENANCE_ARTIFACT_ID");
+  if (!(o.source_artifact_digest === "UNKNOWN" || (typeof o.source_artifact_digest === "string" && /^sha256:[0-9a-f]{64}$/.test(o.source_artifact_digest)))) errs.push("INVALID_PROVENANCE_DIGEST");
+  if (typeof o.source_measured_at !== "string" || Number.isNaN(Date.parse(o.source_measured_at))) errs.push("INVALID_PROVENANCE_MEASURED_AT");
+  if (!(o.handoff_run_id === "UNKNOWN" || (typeof o.handoff_run_id === "string" && DIGITS.test(o.handoff_run_id)))) errs.push("INVALID_PROVENANCE_HANDOFF_RUN");
+  return errs;
+}
+
 export interface EnvelopeCheck { ok: boolean; errors: string[] }
 
 export function validateEnvelope(raw: unknown, siteId: string): EnvelopeCheck {
@@ -75,6 +95,7 @@ export function validateEnvelope(raw: unknown, siteId: string): EnvelopeCheck {
   if (!(CONFIDENCES as readonly string[]).includes(e.confidence as string)) errors.push("INVALID_CONFIDENCE");
   if (!(EVIDENCE_CATEGORIES as readonly string[]).includes(e.category as string)) errors.push("INVALID_CATEGORY");
   if (!e.payload || typeof e.payload !== "object" || Array.isArray(e.payload)) errors.push("INVALID_PAYLOAD");
+  if (e.provenance !== undefined) errors.push(...validateProvenance(e.provenance));
   return { ok: errors.length === 0, errors };
 }
 
@@ -134,8 +155,8 @@ export function makeEvidenceId(site: string, source: string, ref: string, measur
 
 /** Clarity sonucu -> kanit. Olculemeyen (ERROR / NOT_CONNECTED) sonuc SAYI tasimaz: yalniz durum
  *  ve hata kodu gider; "veri yok" sifira donusmez. */
-export function evidenceFromClarity(r: ClaritySiteResult): EvidenceEnvelope {
-  const ref = `clarity:${r.site_id}:${r.measured_at.slice(0, 10)}`;
+export function evidenceFromClarity(r: ClaritySiteResult, opts: { source_ref?: string; provenance?: EvidenceProvenance } = {}): EvidenceEnvelope {
+  const ref = opts.source_ref ?? `clarity:${r.site_id}:${r.measured_at.slice(0, 10)}`;
   const state: MeasurementState = r.measurement_state;
   const usable = state === "MEASURED" || state === "PARTIAL";
   const payload: Record<string, unknown> = usable
@@ -150,7 +171,7 @@ export function evidenceFromClarity(r: ClaritySiteResult): EvidenceEnvelope {
   return {
     schema: EVIDENCE_SCHEMA, evidence_id: makeEvidenceId(r.site_id, "CLARITY", ref, r.measured_at), site_id: r.site_id, source: "CLARITY",
     source_ref: ref, measured_at: r.measured_at, measurement_state: state, evidence_label: "FACT", confidence: r.confidence,
-    category: "BEHAVIOR", payload,
+    category: "BEHAVIOR", payload, ...(opts.provenance ? { provenance: opts.provenance } : {}),
   };
 }
 
