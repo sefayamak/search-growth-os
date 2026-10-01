@@ -62,7 +62,7 @@ node --experimental-strip-types src/cli.ts registry config/sites.yaml
 node --experimental-strip-types src/cli.ts compliance <dosya>
 node --experimental-strip-types src/cli.ts import-health <snapshotDir>   # site-health snapshot DİZİNİ, yerel, ağ yok
 node --experimental-strip-types src/cli.ts inspect-index config/sites.yaml --site pamistanbul   # ÖRNEKLEM, tam coverage değil
-npm test        # 252 doğrulama (2026-10-01)
+npm test        # 286 doğrulama (2026-10-01)
 npm run typecheck
 ```
 

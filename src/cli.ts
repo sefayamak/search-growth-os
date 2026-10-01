@@ -11,6 +11,9 @@
 //   llmstxt [--site id] [--out dir]  inventory each site's llms.txt against the spec and the registry
 //   topics [--site id] [--count N=2] [--top N] [--ledger path] [--write-ledger]
 //                                   2 weekly topics per site: GSC gap first, business_category fallback
+//   clarity-smoke [registry]        OFFLINE: token map shape, site routing and request budget (NO API call, NO token printed)
+//   clarity-measure [registry] [--site id] [--out dir]
+//                                   native Microsoft Clarity export: 3 requests/site/run, numOfDays=1; writes JSON+MD to --out (default clarity-out)
 //   import-health <snapshotDir> [--registry path] [--site id] [--write]
 //                                   validate a site-health-monitor snapshot DIRECTORY (local path, no network);
 //                                   "no data" never becomes zero; --write merges into sites/<id>/health-import.json
@@ -430,6 +433,46 @@ async function main() {
       }
       return;
     }
+    // Clarity: token YALNIZCA ortam degiskeninden okunur. CLI argumani olarak asla kabul edilmez
+    // (ps ciktisinda gorunur, shell gecmisine girer); reddedilirken degeri yankilanmaz.
+    case "clarity-smoke":
+    case "clarity-measure": {
+      const cl = await import("./adapters/clarity.ts");
+      if (args.some((a) => /^--?(clarity[-_]?)?tokens?\b/i.test(a))) {
+        console.error(`Clarity token'i CLI argumani olarak kabul edilmez; ${cl.CLARITY_ENV} ortam degiskenini (GitHub Secret) kullan.`);
+        process.exitCode = 1; return;
+      }
+      const reg = loadRegistry(args[1] && !args[1].startsWith("--") ? args[1] : "config/sites.yaml");
+      if (!reg.ok || !reg.registry) { console.error(reg.errors.join("\n")); process.exitCode = 1; return; }
+      const only = opt("site");
+      const ids = reg.registry.sites.map((x) => x.id).filter((id) => !only || id === only);
+      if (only && !ids.length) { console.error(`site bulunamadi: ${only}`); process.exitCode = 1; return; }
+      const parsed = cl.parseClarityTokens(process.env[cl.CLARITY_ENV]);
+      if (cmd === "clarity-smoke") {
+        // Cagri YAPMAZ: Microsoft proje basina gunde 10 istege izin veriyor; "smoke" ile "measure"
+        // ayri ayri API'ye gitseydi her kosu 6 istek yakardi.
+        console.log(`Clarity (offline kontrol — API cagrisi YOK):`);
+        for (const id of ids) console.log(`${parsed.tokens.has(id) ? "TOKEN_PRESENT " : "NOT_CONNECTED"} ${id}`);
+        const ignored = [...parsed.tokens.keys()].filter((k) => !reg.registry!.sites.some((x) => x.id === k));
+        for (const p of parsed.problems) console.log(`SORUN ${p}`);
+        if (ignored.length) console.log(`UYARI registry'de olmayan site kimligi (kullanilmaz): ${ignored.join(", ")}`);
+        const withToken = ids.filter((id) => parsed.tokens.has(id)).length;
+        console.log(`butce: ${cl.PROFILE_REQUESTS_PER_SITE} istek/site/kosu (en fazla ${cl.MAX_HTTP_ATTEMPTS_PER_SITE} HTTP denemesi), resmi limit ${cl.OFFICIAL_DAILY_LIMIT_PER_PROJECT}/proje/gun; ${withToken} site token'li`);
+        if (parsed.problems.length) process.exitCode = 1;
+        return;
+      }
+      const { results, ignoredTokenSites } = await cl.measureSites(ids, parsed.tokens);
+      console.log("Clarity:");
+      for (const r of results) console.log(cl.summaryLine(r));
+      for (const p of parsed.problems) console.log(`SORUN ${p}`);
+      const outDir = opt("out", "clarity-out");
+      mkdirSync(outDir, { recursive: true });
+      for (const r of results) { cl.assertResultSite(r, r.site_id); writeFileSync(join(outDir, `clarity-${r.site_id}.json`), JSON.stringify(r, null, 2) + "\n"); }
+      writeFileSync(join(outDir, "clarity-summary.md"), cl.resultsToMarkdown(results, ignoredTokenSites));
+      // ERROR / PARTIAL gorunur kalsin (is kirmizi); NOT_CONNECTED degildir.
+      if (results.some((r) => r.measurement_state === "ERROR" || r.measurement_state === "PARTIAL") || parsed.problems.length) process.exitCode = 1;
+      return;
+    }
     // Snapshot importu: yerel DIZIN okur, ag ve token gerektirmez. Dizinin nereden
     // geldigi (git clone, artifact, elle kopya) bu komutun bilgisi degildir.
     case "import-health": {
@@ -572,7 +615,7 @@ async function main() {
       return;
     }
     default:
-      console.error("commands: crawl | audit | compliance | registry | integrations | measure | detail | topics | smoke | portfolio | llmstxt | import-health | inspect-index");
+      console.error("commands: crawl | audit | compliance | registry | integrations | measure | detail | topics | smoke | portfolio | llmstxt | import-health | inspect-index | clarity-smoke | clarity-measure");
       process.exitCode = 1;
   }
 }

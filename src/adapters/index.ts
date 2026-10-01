@@ -5,6 +5,7 @@
 import type { IntegrationState } from "../types.ts";
 import * as gscClient from "./gsc.ts";
 import * as ga4Client from "./ga4.ts";
+import { clarityStatus, CLARITY_ENV } from "./clarity.ts";
 
 export interface AdapterStatus { name: string; state: IntegrationState; note: string; envVar: string }
 
@@ -104,6 +105,9 @@ export const logs: LogAdapter = { status: () => status("Server/CDN logs", "SEARC
 export const github: GitHubAdapter = { status: () => status("GitHub deploy history", "SEARCH_GROWTH_GITHUB_TOKEN"), deployHistory: async () => null };
 export const thirdParty: ThirdPartyAdapter = { status: () => status("Third-party SEO data", "SEARCH_GROWTH_THIRD_PARTY_API_KEY"), provider: process.env.SEARCH_GROWTH_THIRD_PARTY_PROVIDER ?? "NOT_CONNECTED" };
 
+// Clarity: kimlik var/yok durumu; CAGRI YAPMAZ (canli olcum yalnizca `clarity-measure`).
+export const clarity = { status: (): AdapterStatus => ({ name: "Microsoft Clarity", envVar: CLARITY_ENV, ...clarityStatus() }) };
+
 export function allStatuses(): AdapterStatus[] {
-  return [searchConsole, ga4, bing, indexNow, logs, github, thirdParty].map((a) => a.status());
+  return [searchConsole, ga4, clarity, bing, indexNow, logs, github, thirdParty].map((a) => a.status());
 }

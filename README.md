@@ -42,7 +42,7 @@ reports/                     changelog, learning log, dry-run template; runs/ is
 ## Run
 
 ```bash
-npm test                                   # node:test suite, spins a local fixture site (252 tests on 2026-10-01)
+npm test                                   # node:test suite, spins a local fixture site (286 tests on 2026-10-01)
 npm run cli -- audit --site pamistanbul    # registry-gated, read-only, sample crawl
 npm run cli -- audit --site pamistanbul --full   # FULL_BASELINE: every eligible sitemap URL
 npm run cli -- audit https://example.com   # ad-hoc URL (bypasses the registry gate)
@@ -51,6 +51,8 @@ npm run cli -- compliance path/to/file     # exit 0 PASS · 1 FLAG · 2 REJECT
 npm run cli -- registry config/sites.example.yaml
 npm run cli -- integrations
 npm run cli -- import-health <snapshotDir>          # validate a site-health-monitor snapshot DIRECTORY (local, no network); --write merges per site
+npm run cli -- clarity-smoke config/sites.yaml                 # OFFLINE token/routing/budget check (no API call, no token printed)
+npm run cli -- clarity-measure config/sites.yaml --site pamistanbul   # native Clarity export, 3 requests/site/run (see docs/integrations/clarity.md)
 npm run cli -- inspect-index config/sites.yaml --site pamistanbul   # read-only URL Inspection SAMPLE, not full coverage; pamistanbul only
 npm run cli -- inspect-index config/sites.yaml --strategy segmented # candidates from sitemap + GSC, risk segments (default stays gsc)
 claude plugin validate .
