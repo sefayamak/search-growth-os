@@ -194,3 +194,13 @@ Amaç: **daha fazla token + sınırlı çıktı**. Yalnız tavanı artırmak yet
 - Uzman istemine `OUTPUT SIZE LIMITS` bloğu eklendi: yalnız JSON, en fazla 5 bulgu, kısa alanlar, kanıtı tekrar etme, metodoloji/akıl yürütme/chain-of-thought yok, yalnız karar için gerekli sayılar. Kanıt `EVIDENCE_DATA_BLOCK` içinde kalır; prompt-injection koruması aynı.
 - `stop_reason=max_tokens` → `MODEL_OUTPUT_TRUNCATED` davranışı aynen korunur; retry yok, Chief çağrılmaz.
 - Bu düzeltme canlı Anthropic ile henüz doğrulanmadı.
+
+## Phase 2C.3 — site_id sözleşmesi (canlı pilot 3)
+
+Pilot 3 (run 36849150571, 6000 token tavanı): `stop_reason=end_turn`, `output_tokens=2520`; truncation, `TOO_MANY_FINDINGS` ve `FIELD_TOO_LONG` yok. Uzman çıktısı yalnız **`WRONG_SITE`** ile reddedildi → `NO_VALID_SPECIALIST_OUTPUT`. Phase 2C.2 truncation sorununu çözmüş görünüyor.
+
+- Doğrulayıcı `site_id`'yi tam eşitlikle kontrol eder (`raw.site_id !== ctx.siteId`; bulgu düzeyinde eksik/string değilse `WRONG_SITE`, farklı string ise `FOREIGN_SITE_FINDING`). Beklenen değer `runBrain`'in `siteId`'sidir (kanonik iç kimlik, ör. `pamistanbul`).
+- Kök neden (koddan): çıktı sözleşmesi `"site_id": "<the site id>"` yer tutucusu taşıyordu; gerçek değer yalnız `SITE_ID:` başlığında vardı. Kanıt kayıtları ise alan adı (`pamistanbul.com`) taşır. Modelin tam olarak hangi değeri döndürdüğü artifact'te tutulmaz (ham tamamlama yok), bu yüzden bu kod düzeyinde bir gerekçedir, ölçülmüş bir gözlem değil.
+- Düzeltme: sözleşme ve yeni `SITE ID CONTRACT` bloğu (tüm roller) kimliği çalışma zamanından **aynen** verir: `site_id = "<id>"`; hostname/URL/görünen ad döndürülmez, değer kanıttan türetilmez. Kimlik her çağrıda `runtimeSystemPrompt(..., siteId)` ile gelir; siteye özel sabit yok.
+- Doğrulayıcı gevşetilmedi: takma ad, normalizasyon, bulanık eşleştirme yok. `pamistanbul.com` ≠ `pamistanbul`.
+- Bu düzeltme canlı Anthropic ile henüz doğrulanmadı.

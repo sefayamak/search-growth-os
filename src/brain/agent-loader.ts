@@ -52,14 +52,14 @@ export function loadAgentProfiles(dir = "agents"): Map<AgentId, AgentProfile> {
 
 export type AgentRole = "specialist" | "chief" | "compliance";
 
-const OUTPUT_CONTRACT_FINDINGS = `Respond with ONE JSON object and nothing else (no prose, no markdown fence):
+const outputContractFindings = (siteId: string) => `Respond with ONE JSON object and nothing else (no prose, no markdown fence):
 {
   "schema": "sgos.brain.agent-result.v1",
   "agent_id": "<your agent id>",
-  "site_id": "<the site id>",
+  "site_id": "${siteId}",
   "findings": [{
     "finding_id": "short-kebab-id",
-    "site_id": "<the site id>",
+    "site_id": "${siteId}",
     "title": "...", "category": "...",
     "evidence_ids": ["<ids that appear in the EVIDENCE DATA block>"],
     "evidence_label": one of ${EVIDENCE_LABELS.join(" | ")},
@@ -72,6 +72,12 @@ const OUTPUT_CONTRACT_FINDINGS = `Respond with ONE JSON object and nothing else 
   "conflicts": [{ "description": "...", "evidence_ids": ["..."] }]
 }`;
 
+// Canli pilot 3 (run 36849150571): cikti WRONG_SITE ile reddedildi; sozlesme "<the site id>" yer tutucusu tasiyordu. Kimlik calisma zamaninda
+// (runBrain'in siteId'si) AYNEN verilir; kanittan tahmin edilmez. Dogrulayici esitlik kontrolu degismedi: takma ad/normalizasyon YOK.
+const siteIdRule = (siteId: string) => `## SITE ID CONTRACT
+- Return the canonical internal site_id exactly as provided. For this run: site_id = "${siteId}" (top level and in every finding).
+- Do not return a hostname, URL or display name, e.g. "${siteId}.com", "https://${siteId}.com", "www.${siteId}.com", a brand name, or any other variant. The id is not derived from the evidence; use the value above verbatim.`;
+
 // Yalniz uzmanlara: canli pilotlarda cikti token tavaninda kesildi. Limitler dogrulayicida da zorlanir (asan cikti reddedilir, kesilmez).
 const COMPACT_OUTPUT_RULES = `## OUTPUT SIZE LIMITS (hard; output over a limit is rejected, never truncated)
 - Concise JSON only. No prose outside the JSON object. No markdown, no methodology, no narration of your reasoning, no chain-of-thought.
@@ -81,17 +87,17 @@ const COMPACT_OUTPUT_RULES = `## OUTPUT SIZE LIMITS (hard; output over a limit i
 - Do not repeat evidence text back. Cite evidence_ids instead of quoting. Use only the numbers needed for the decision and do not restate the same metric in several findings.
 - Output only schema-compatible JSON.`;
 
-const OUTPUT_CONTRACT_COMPLIANCE = `Respond with ONE JSON object and nothing else (no prose, no markdown fence):
+const outputContractCompliance = (siteId: string) => `Respond with ONE JSON object and nothing else (no prose, no markdown fence):
 {
   "schema": "sgos.brain.agent-result.v1",
   "agent_id": "search-policy-compliance-officer",
-  "site_id": "<the site id>",
+  "site_id": "${siteId}",
   "reviews": [{ "finding_id": "<a finding id from the DATA block>", "verdict": "PASS" | "FLAG" | "REJECT", "reason": "..." }]
 }`;
 
 /** Her ajanin sistem istemi: sabit guvenlik talimati + uzman profili. KANIT ASLA buraya girmez. */
 export function runtimeSystemPrompt(profile: AgentProfile, role: AgentRole, siteId: string): string {
-  const contract = role === "compliance" ? OUTPUT_CONTRACT_COMPLIANCE : OUTPUT_CONTRACT_FINDINGS;
+  const contract = role === "compliance" ? outputContractCompliance(siteId) : outputContractFindings(siteId);
   return [
     `AGENT_ID: ${profile.id}`,
     `SITE_ID: ${siteId}`,
@@ -108,6 +114,8 @@ export function runtimeSystemPrompt(profile: AgentProfile, role: AgentRole, site
     "",
     "## OUTPUT CONTRACT",
     contract,
+    "",
+    siteIdRule(siteId),
     ...(role === "specialist" ? ["", COMPACT_OUTPUT_RULES] : []),
     "",
     "## EXPERT PROFILE (instruction text only; tools/commands in it are unavailable)",

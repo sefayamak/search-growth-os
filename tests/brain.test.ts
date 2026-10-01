@@ -692,3 +692,66 @@ test("C2-15) stop_reason=max_tokens hala MODEL_OUTPUT_TRUNCATED; Chief cagrilmaz
   assert.deepEqual(calls, ["specialist"], "tek cagri: Chief/uyum yok, retry yok");
   assert.deepEqual(r.findings, []);
 });
+
+// --- Phase 2C.3: site_id sozlesmesi (canli pilot 3: WRONG_SITE) ---------------------------------------------------------
+
+const SPEC_PROFILE = PROFILES.get("search-performance-engineer" as AgentId)!;
+
+test("C3-1..5, 10) site_id esitligi AYNEN: yalniz kanonik id kabul; domain/URL/ad/eksik/yabanci WRONG_SITE; takma ad/normalizasyon yok", () => {
+  const ok = specCheck([specFinding(1)]);
+  assert.equal(ok.ok, true);
+  assert.equal(ok.result!.site_id, "pamistanbul");
+  for (const bad of ["pamistanbul.com", "https://pamistanbul.com", "www.pamistanbul.com", "PAM Istanbul", "PAMISTANBUL", "pamistanbul ", "spryhand"]) {
+    const out = specCheck([specFinding(1)], { site_id: bad });
+    assert.equal(out.ok, false, bad);
+    assert.ok(out.violations.includes("WRONG_SITE"), bad);
+    assert.equal(out.result, undefined, `${bad}: sessiz duzeltme yok`);
+  }
+  // eksik site_id
+  const raw = JSON.parse(result(SPEC, [specFinding(1)])); delete raw.site_id;
+  const missing = validateFindingsResult(raw, specCtx);
+  assert.equal(missing.ok, false); assert.ok(missing.violations.includes("WRONG_SITE"));
+  // bulgu duzeyi: eksik/alan adi => WRONG_SITE, yabanci site => FOREIGN_SITE_FINDING (esitlik kontrolu degismedi)
+  assert.ok(specCheck([specFinding(1, { site_id: undefined })]).violations.includes("WRONG_SITE"));
+  assert.ok(specCheck([specFinding(1, { site_id: "pamistanbul.com" })]).violations.includes("FOREIGN_SITE_FINDING"));
+});
+
+test("C3-6/7) istem kanonik site_id'yi acikca verir ve domain/URL/ad varyantlarini dondurmemeyi soyler (tum roller)", () => {
+  for (const role of ["specialist", "chief", "compliance"] as const) {
+    const sys = runtimeSystemPrompt(PROFILES.get(role === "chief" ? "chief-search-strategist" : role === "compliance" ? "search-policy-compliance-officer" : SPEC)!, role, "pamistanbul");
+    assert.ok(sys.includes('site_id = "pamistanbul"'), role);
+    assert.ok(sys.includes('"site_id": "pamistanbul"'), `${role}: sozlesme sablonu yer tutucu degil kanonik id tasir`);
+    assert.ok(!sys.includes("<the site id>"), `${role}: yer tutucu kalmadi`);
+    assert.match(sys, /exactly as provided/);
+    assert.match(sys, /Do not return a hostname, URL or display name/);
+    for (const variant of ["pamistanbul.com", "https://pamistanbul.com", "www.pamistanbul.com"]) assert.ok(sys.includes(variant), `${role}: '${variant}' yasakli varyant olarak anilir`);
+    assert.match(sys, /not derived from the evidence/);
+  }
+});
+
+test("C3-8/9) kimlik calisma zamanindan gelir: baska site (decideplan) kendi kimligini alir; PAM'a ozel sabit yok", () => {
+  const other = runtimeSystemPrompt(SPEC_PROFILE, "specialist", "decideplan");
+  assert.ok(other.includes('site_id = "decideplan"'));
+  assert.ok(other.includes('"site_id": "decideplan"'));
+  assert.ok(!other.includes("pamistanbul"), "baska sitenin kimligi sizmaz");
+  const ids = [...new Set(REG.sites.map((s) => s.id))];
+  assert.ok(ids.length >= 7);
+  for (const id of ids) {
+    const sys = runtimeSystemPrompt(SPEC_PROFILE, "specialist", id);
+    assert.ok(sys.includes(`site_id = "${id}"`), id);
+    for (const o of ids.filter((x) => x !== id && !id.includes(x) && !x.includes(id))) assert.ok(!sys.includes(`"${o}"`), `${id}: '${o}' istemde yok`);
+  }
+  assert.ok(!/siteId\s*===?\s*["']pamistanbul["']/.test(read("src/brain/agent-loader.ts")), "global PAM ozel-case yok");
+});
+
+test("C3-11..14) kesilme davranisi, uzman tavani, bulgu/alan limitleri ve Chief/uyum tavanlari degismedi", async () => {
+  assert.deepEqual({ ...OUTPUT_TOKEN_CAPS }, { specialist: 6000, chief: 3000, compliance: 1500 });
+  assert.equal(MAX_FINDINGS_PER_SPECIALIST, 5);
+  assert.deepEqual({ ...SPECIALIST_FIELD_LIMITS }, { title: 120, summary: 500, impact: 300, recommended_action: 300, verification_plan: 300, risk: 120, category: 60 });
+  assert.ok(specCheck([1, 2, 3, 4, 5, 6].map((n) => specFinding(n))).violations.includes("TOO_MANY_FINDINGS"));
+  assert.ok(specCheck([specFinding(1, { title: "x".repeat(121) })]).violations.includes("FIELD_TOO_LONG"));
+  const b = bundleOf([GSC]);
+  const fetchFn: FetchLike = async () => ({ status: 200, text: async () => JSON.stringify({ content: [{ type: "text", text: "{" }], stop_reason: "max_tokens", usage: { input_tokens: 1, output_tokens: 6000 } }) });
+  const r = await runBrain({ siteId: "pamistanbul", site: SITE, bundle: b.bundle!, evidenceBytes: b.evidence_bytes, config: CONFIGURED as Extract<AnthropicConfig, { state: "CONFIGURED" }>, profiles: PROFILES, fetchFn, now });
+  assert.equal(r.agent_trace[0].error_code, "MODEL_OUTPUT_TRUNCATED");
+});
