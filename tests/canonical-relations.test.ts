@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { classifyCanonicalRelations } from "../src/canonical-relations.ts";
+import { classifyCanonicalRelations, derivePattern } from "../src/canonical-relations.ts";
 import { classifyInspection } from "../src/index-probe.ts";
 import { runProbe, probeToMarkdown, summarizeSitemaps } from "../src/index-probe.ts";
 
@@ -40,7 +40,7 @@ test("B: www ile apex AYNI host sayilmaz (user_cross_domain true); A: baska doma
 test("normal (sentetik): denetlenen == user == google -> hepsi SAME, cross_domain false, review gerekmez", () => {
   const u = "https://pamistanbul.com/en/works";
   const r = rels(u, u, u);
-  assert.deepEqual(r, { inspected_vs_google: "SAME", user_vs_google: "SAME", user_vs_inspected: "SAME", user_cross_domain: false, google_cross_domain: false, review_required: false, review_status: "NO_DIVERGENCE_OBSERVED", reasons: [] });
+  assert.deepEqual(r, { inspected_vs_google: "SAME", user_vs_google: "SAME", user_vs_inspected: "SAME", user_cross_domain: false, google_cross_domain: false, review_required: false, review_status: "NO_DIVERGENCE_OBSERVED", reasons: [], canonical_pattern: "NO_DIVERGENCE_OBSERVED" });
 });
 
 // --- eksik alan = UNKNOWN, tahmin yok -----------------------------------------------
@@ -172,7 +172,7 @@ test("segment raporunda canonical_candidate_count segment basina; markdown 'Cano
   assert.match(md, /\| canonical adayı \|/);
   const section = md.split("## Canonical candidates")[1].split("## Sitemap")[0];
   assert.match(section, /CANDIDATE \/ REVIEW_REQUIRED/);
-  assert.match(section, /hata değildir/);
+  assert.match(section, /hata değildir/i);
   assert.ok(section.includes("bath-loofah-lifestyle") && section.includes("ucretsiz-ai-gorsel-uretme-araclari-2026.html"));
   assert.ok(!section.includes(NORMAL), "normal URL listelenmez");
   assert.ok(!/\bERROR\b/.test(section) && !/SEO hatası\b(?! olarak etiketlenmez)/.test(section));
@@ -192,4 +192,155 @@ test("gsc stratejisi da (segmentsiz) canonical_relations alir; ERROR sonuc UNKNO
   const err = await runProbe({ site: SITE, urls: [NORMAL], candidateSource: "t", limit: 5, delayMs: 0, connected: true, sleep: async () => {}, inspect: async () => { throw new Error("HTTP 500 x"); } });
   assert.equal(err.results[0].canonical_relations!.review_status, "UNKNOWN");
   assert.equal(err.canonical_candidate_count, 0);
+});
+
+// ============================================================================
+// canonical_pattern (Phase 1.5b ikinci dilim): conflict ile convergence ayri olgulardir
+// ============================================================================
+
+const ALL4: { inspected: string; inspectionResult: Record<string, unknown>; expected: Record<string, unknown> }[] = [...FIX.cases, ...FIX.convergence_cases];
+
+test("DORT canli fixture: A, B = DECLARED_GOOGLE_CONFLICT; C, D = GOOGLE_USER_CONVERGE_ON_OTHER_URL", () => {
+  assert.equal(ALL4.length, 4);
+  const got = ALL4.map((c) => {
+    const s = classifyInspection(c.inspectionResult);
+    return classifyCanonicalRelations(c.inspected, s.google_canonical, s.user_canonical).canonical_pattern;
+  });
+  assert.deepEqual(got, ["DECLARED_GOOGLE_CONFLICT", "DECLARED_GOOGLE_CONFLICT", "GOOGLE_USER_CONVERGE_ON_OTHER_URL", "GOOGLE_USER_CONVERGE_ON_OTHER_URL"]);
+});
+
+for (const c of FIX.convergence_cases) {
+  test(`GERCEK fixture ${c.name.split(":")[0]}: mevcut FACT iliskileri DEGISMEDI + pattern convergence`, () => {
+    const s = classifyInspection(c.inspectionResult);
+    const r = classifyCanonicalRelations(c.inspected, s.google_canonical, s.user_canonical);
+    for (const [k, v] of Object.entries(c.expected)) assert.equal((r as unknown as Record<string, unknown>)[k], v, k);
+    assert.equal(r.review_status, "REVIEW_REQUIRED", "review_required anlami korundu (canlida dogrulanmis davranis)");
+    assert.deepEqual(r.reasons, ["GOOGLE_CANONICAL_DIFFERS_FROM_INSPECTED", "USER_CANONICAL_CROSS_DOMAIN", "GOOGLE_CANONICAL_CROSS_DOMAIN"]);
+  });
+}
+
+test("A ve B icin mevcut iliskiler ve review_required AYNEN (pattern eklemesi onlari degistirmedi)", () => {
+  for (const c of FIX.cases) {
+    const s = classifyInspection(c.inspectionResult);
+    const r = classifyCanonicalRelations(c.inspected, s.google_canonical, s.user_canonical);
+    assert.equal(r.review_status, "REVIEW_REQUIRED");
+    assert.deepEqual(r.reasons, ["USER_CANONICAL_DIFFERS_FROM_GOOGLE", "USER_CANONICAL_CROSS_DOMAIN"]);
+  }
+});
+
+test("derivePattern: dort desen, celiski onceliklidir, eksik alan INCOMPLETE", () => {
+  assert.equal(derivePattern("SAME", "DIFFERENT"), "DECLARED_GOOGLE_CONFLICT");
+  assert.equal(derivePattern("DIFFERENT", "DIFFERENT"), "DECLARED_GOOGLE_CONFLICT", "iki fark birlikteyse celiski");
+  assert.equal(derivePattern("UNKNOWN", "DIFFERENT"), "DECLARED_GOOGLE_CONFLICT", "user vs google bilindigi surece denetlenen URL gerekmez");
+  assert.equal(derivePattern("DIFFERENT", "SAME"), "GOOGLE_USER_CONVERGE_ON_OTHER_URL");
+  assert.equal(derivePattern("SAME", "SAME"), "NO_DIVERGENCE_OBSERVED");
+  for (const [a, b] of [["UNKNOWN", "UNKNOWN"], ["SAME", "UNKNOWN"], ["DIFFERENT", "UNKNOWN"], ["UNKNOWN", "SAME"]] as const) assert.equal(derivePattern(a, b), "INCOMPLETE", `${a}/${b}`);
+});
+
+test("normal (sentetik) NO_DIVERGENCE_OBSERVED; eksik canonical INCOMPLETE (tahmin yok)", () => {
+  const u = "https://pamistanbul.com/en/works";
+  assert.equal(rels(u, u, u).canonical_pattern, "NO_DIVERGENCE_OBSERVED");
+  assert.equal(rels(u, u).canonical_pattern, "INCOMPLETE", "user canonical yok");
+  assert.equal(rels(u, undefined, u).canonical_pattern, "INCOMPLETE", "Google canonical yok");
+  assert.equal(rels(u).canonical_pattern, "INCOMPLETE");
+  assert.equal(rels(u, "https://pamistanbul.com/baska", undefined).canonical_pattern, "INCOMPLETE", "user yok: convergence/conflict denemez");
+});
+
+test("hostname / cross-domain kararin YERINE GECMEZ: ayni desen farkli host iliskileriyle", () => {
+  // Her ikisinde Google ve user ayni hedefte, denetlenen farkli -> convergence; hostname iliskisi degisse de desen ayni.
+  const sameHost = rels("https://pamistanbul.com/a", "https://pamistanbul.com/a/", "https://pamistanbul.com/a/");
+  const crossHost = rels("https://pamistanbul.com/a", "https://pamaistudio.com/a", "https://pamaistudio.com/a");
+  assert.equal(sameHost.canonical_pattern, "GOOGLE_USER_CONVERGE_ON_OTHER_URL");
+  assert.equal(crossHost.canonical_pattern, "GOOGLE_USER_CONVERGE_ON_OTHER_URL");
+  assert.equal(sameHost.user_cross_domain, false);
+  assert.equal(crossHost.user_cross_domain, true, "FACT alanlari etkilenmedi");
+  // Cross-domain olmayan ama celiskili vaka yine celiski.
+  assert.equal(rels("https://pamistanbul.com/a", "https://pamistanbul.com/a", "https://pamistanbul.com/a/").canonical_pattern, "DECLARED_GOOGLE_CONFLICT");
+});
+
+test("www ile apex hala FARKLI hostname (user_cross_domain / google_cross_domain davranisi bozulmadi)", () => {
+  const r = rels("http://www.pamistanbul.com/", "https://pamistanbul.com/", "https://pamistanbul.com/");
+  assert.equal(r.user_cross_domain, true);
+  assert.equal(r.google_cross_domain, true);
+});
+
+test("pattern coverageState metnine bagli degil", () => {
+  const c = FIX.convergence_cases[0];
+  const outs = ["Yönlendirmeli sayfa", "Redirected page", "Gönderildi ve dizine eklendi", "???", ""].map((cov) => {
+    const res = JSON.parse(JSON.stringify(c.inspectionResult)); res.indexStatusResult.coverageState = cov;
+    const s = classifyInspection(res);
+    return classifyCanonicalRelations(c.inspected, s.google_canonical, s.user_canonical).canonical_pattern;
+  });
+  assert.deepEqual([...new Set(outs)], ["GOOGLE_USER_CONVERGE_ON_OTHER_URL"]);
+  const src = readFileSync(new URL("../src/canonical-relations.ts", import.meta.url), "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+  assert.ok(!/coverage/i.test(src) && !/Y[oö]nlendirmeli/i.test(src));
+});
+
+// --- runProbe / rapor ---------------------------------------------------------------------
+
+const byUrl4 = Object.fromEntries(ALL4.map((c) => [c.inspected, c.inspectionResult]));
+
+test("runProbe: 4 canli vaka + normal -> candidate 4, conflict 2, convergence 2; verdict'ler degismez", async () => {
+  const r = await probeWith({ ...byUrl4, [NORMAL]: normalResult });
+  assert.equal(r.canonical_candidate_count, 4, "geriye uyumluluk: review_required sayisi");
+  assert.equal(r.canonical_conflict_count, 2);
+  assert.equal(r.canonical_convergence_count, 2);
+  const v = (u: string) => r.results.find((x) => x.url === u)!.summary;
+  assert.equal(v("http://www.pamistanbul.com/").index_verdict, "NEUTRAL");
+  assert.equal(v("https://pamistanbul.com/en/video/bath-loofah-lifestyle").index_verdict, "INDEXED");
+  assert.ok(r.results.every((x) => x.summary.state === "INSPECTED"));
+  assert.equal(r.results.find((x) => x.url === NORMAL)!.canonical_relations!.canonical_pattern, "NO_DIVERGENCE_OBSERVED");
+});
+
+test("segment satiri conflict ve convergence ayri sayar; markdown iki alt grup + tablo sutunlari", async () => {
+  const urls = ALL4.map((c) => c.inspected);
+  const r = await probeWith({ ...byUrl4, [NORMAL]: normalResult }, {
+    [urls[0]]: "GSC_NOT_IN_SITEMAP", [urls[1]]: "HOST_VARIANT_RISK", [urls[2]]: "HOST_VARIANT_RISK", [urls[3]]: "HOST_VARIANT_RISK", [NORMAL]: "SITEMAP_AND_GSC" });
+  const seg = (n: string) => r.segments!.find((s) => s.segment === n)!;
+  assert.deepEqual([seg("HOST_VARIANT_RISK").canonical_candidate_count, seg("HOST_VARIANT_RISK").canonical_conflict_count, seg("HOST_VARIANT_RISK").canonical_convergence_count], [3, 1, 2]);
+  assert.deepEqual([seg("GSC_NOT_IN_SITEMAP").canonical_candidate_count, seg("GSC_NOT_IN_SITEMAP").canonical_conflict_count, seg("GSC_NOT_IN_SITEMAP").canonical_convergence_count], [1, 1, 0]);
+  assert.deepEqual([seg("SITEMAP_AND_GSC").canonical_candidate_count, seg("SITEMAP_AND_GSC").canonical_conflict_count], [0, 0]);
+  const md = probeToMarkdown(r, summarizeSitemaps(null), "2026-10-01");
+  assert.match(md, /\| canonical adayı \| conflict \| convergence \|/);
+  const section = md.split("## Canonical candidates")[1].split("## Sitemap")[0];
+  const conflict = section.split("### Google/user convergence")[0];
+  const converge = section.split("### Google/user convergence on another URL")[1];
+  assert.match(conflict, /### Declared vs Google conflicts \(2\)/);
+  assert.match(converge, /^ \(2\)/);
+  assert.ok(conflict.includes("bath-loofah-lifestyle") && conflict.includes("ucretsiz-ai-gorsel-uretme-araclari-2026.html"));
+  assert.ok(!conflict.includes("flux-ai-image-model-guide-2026") && !conflict.includes("http://www.pamistanbul.com/"));
+  assert.ok(converge.includes("flux-ai-image-model-guide-2026") && converge.includes("http://www.pamistanbul.com/"));
+  assert.ok(!converge.includes("bath-loofah-lifestyle") && !converge.includes("ucretsiz-ai-gorsel"));
+});
+
+test("convergence bolumu istenen metni yazar; ERROR / SEO hatasi / fix onerisi yok; conflict bolumu CANDIDATE / REVIEW_REQUIRED der", async () => {
+  const r = await probeWith({ ...byUrl4 });
+  const md = probeToMarkdown(r, summarizeSitemaps(null), "2026-10-01");
+  const converge = md.split("### Google/user convergence on another URL")[1].split("## Sitemap")[0];
+  assert.ok(converge.includes("Google canonical ile bildirilen canonical aynı hedefte uzlaşıyor. Bu, denetlenen URL'nin başka bir URL varyantı olduğuna dair FACT'tir; doğru HTTP redirect/canonical uygulaması olduğu henüz doğrulanmamıştır."));
+  assert.match(converge, /INFO \/ OBSERVED_CONVERGENCE/);
+  assert.ok(!/CANDIDATE \/ REVIEW_REQUIRED/.test(converge), "convergence aday/inceleme olarak etiketlenmez");
+  const section = md.split("## Canonical candidates")[1].split("## Sitemap")[0];
+  assert.ok(!/\bERROR\b/.test(section) && !/önerilir|düzelt(in|elim)|fix\b|should/i.test(section.replace("düzeltme önerisi içermez", "")));
+  assert.match(md.split("### Declared vs Google conflicts")[1].split("### Google/user")[0], /CANDIDATE \/ REVIEW_REQUIRED/);
+});
+
+test("yalniz convergence varsa conflict alt grubu 'Yok.' yazar; aday yoksa bolum hic yazilmaz", async () => {
+  const [, , c, d] = ALL4;
+  const r = await probeWith({ [c.inspected]: c.inspectionResult, [d.inspected]: d.inspectionResult });
+  assert.equal(r.canonical_conflict_count, 0);
+  assert.equal(r.canonical_convergence_count, 2);
+  assert.match(probeToMarkdown(r, summarizeSitemaps(null), "2026-10-01").split("### Declared vs Google conflicts (0)")[1].split("###")[0], /Yok\./);
+  assert.ok(!probeToMarkdown(await probeWith({ [NORMAL]: normalResult }), summarizeSitemaps(null), "2026-10-01").includes("Canonical candidates"));
+});
+
+test("review_required olup deseni INCOMPLETE olan satir kaybolmaz: 'Incomplete canonical data' alt grubunda gorunur ve sayimla tutarlidir", async () => {
+  const U = "https://pamistanbul.com/x";
+  const r = await probeWith({ [U]: { indexStatusResult: { verdict: "PASS", googleCanonical: "https://pamistanbul.com/y" } } });
+  assert.equal(r.canonical_candidate_count, 1);
+  assert.equal(r.canonical_conflict_count, 0);
+  assert.equal(r.canonical_convergence_count, 0);
+  const md = probeToMarkdown(r, summarizeSitemaps(null), "2026-10-01");
+  assert.match(md, /### Incomplete canonical data \(1\)/);
+  assert.ok(md.split("### Incomplete canonical data")[1].includes(U));
 });

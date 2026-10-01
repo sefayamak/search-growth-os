@@ -26,6 +26,23 @@ export type ReviewReason =
   | "USER_CANONICAL_CROSS_DOMAIN"
   | "GOOGLE_CANONICAL_CROSS_DOMAIN";
 
+/**
+ * TURETILMIS desen. Yalniz iki iliskiden (`inspected_vs_google`, `user_vs_google`) cikar;
+ * hostname/cross-domain alanlari kararin yerine GECMEZ (onlar ek FACT'tir).
+ *  - DECLARED_GOOGLE_CONFLICT: sayfanin bildirdigi canonical ile Google'inki uyusmuyor.
+ *  - GOOGLE_USER_CONVERGE_ON_OTHER_URL: denetlenen URL baska bir varyant, ama Google ve sayfa AYNI hedefte
+ *    uzlasiyor. Bu bir canonical CATISMASI degildir; dogru HTTP redirect/canonical uygulamasi oldugu
+ *    iddiasi da DEGILDIR (sayfa fetch edilmedi).
+ *  - NO_DIVERGENCE_OBSERVED: denetlenen == Google == bildirilen. (Not: `review_status` icindeki ayni adli
+ *    deger daha genistir; bildirilen canonical eksikken de olabilir. Bu desen siki: eksikse INCOMPLETE.)
+ *  - INCOMPLETE: gerekli alan UNKNOWN, guvenilir desen cikarilamiyor.
+ */
+export type CanonicalPattern =
+  | "DECLARED_GOOGLE_CONFLICT"
+  | "GOOGLE_USER_CONVERGE_ON_OTHER_URL"
+  | "NO_DIVERGENCE_OBSERVED"
+  | "INCOMPLETE";
+
 export interface CanonicalRelations {
   inspected_vs_google: Rel;
   user_vs_google: Rel;
@@ -38,6 +55,16 @@ export interface CanonicalRelations {
    *  tetikleyici yok. UNKNOWN = temel iliski (denetlenen vs Google canonical) olculemedi ve baska tetikleyici de yok. */
   review_status: "REVIEW_REQUIRED" | "NO_DIVERGENCE_OBSERVED" | "UNKNOWN";
   reasons: ReviewReason[];
+  /** Yeni, daha hassas turetilmis siniflandirma. `review_required` anlami DEGISMEDI. */
+  canonical_pattern: CanonicalPattern;
+}
+
+/** Yalniz iki iliskiye bakar; hostname/cross-domain karari etkilemez. Celiski onceliklidir. */
+export function derivePattern(inspected_vs_google: Rel, user_vs_google: Rel): CanonicalPattern {
+  if (user_vs_google === "DIFFERENT") return "DECLARED_GOOGLE_CONFLICT";
+  if (inspected_vs_google === "DIFFERENT" && user_vs_google === "SAME") return "GOOGLE_USER_CONVERGE_ON_OTHER_URL";
+  if (inspected_vs_google === "SAME" && user_vs_google === "SAME") return "NO_DIVERGENCE_OBSERVED";
+  return "INCOMPLETE";
 }
 
 const parse = (v: unknown): URL | null => {
@@ -69,5 +96,6 @@ export function classifyCanonicalRelations(inspectedUrl: string, googleCanonical
 
   const review_required = reasons.length > 0;
   const review_status = review_required ? "REVIEW_REQUIRED" : inspected_vs_google === "UNKNOWN" ? "UNKNOWN" : "NO_DIVERGENCE_OBSERVED";
-  return { inspected_vs_google, user_vs_google, user_vs_inspected, user_cross_domain, google_cross_domain, review_required, review_status, reasons };
+  const canonical_pattern = derivePattern(inspected_vs_google, user_vs_google);
+  return { inspected_vs_google, user_vs_google, user_vs_inspected, user_cross_domain, google_cross_domain, review_required, review_status, reasons, canonical_pattern };
 }
