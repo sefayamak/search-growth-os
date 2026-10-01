@@ -155,9 +155,42 @@ test("9) 1000 satir -> rows_complete false, CANDIDATE (tam veri DEGIL); 999 -> t
   assert.equal(under.confidence, "CONFIRMED");
 });
 
-test("satir siniri metrikler TOPLAMI uzerinden: iki metrik 500+500 -> kesilmis", async () => {
-  const body = [{ metricName: "A", information: Array.from({ length: 500 }, () => ({ x: 1 })) }, { metricName: "B", information: Array.from({ length: 500 }, () => ({ x: 1 })) }];
-  assert.equal((await run(fake([{ status: 200, body }]))).rows_complete, false);
+test("C) 9 metrik x 150 satir: toplam 1350 AMA tek basina toplam yuzunden kesilmis DENMEZ", async () => {
+  const body = Array.from({ length: 9 }, (_, m) => ({ metricName: `M${m}`, information: Array.from({ length: 150 }, (_, i) => ({ Url: `https://pamistanbul.com/p-${i}` })) }));
+  const r = await run(fake([{ status: 200, body }]));
+  assert.equal(r.requests[0].metric_row_count_total, 1350);
+  assert.equal(r.requests[0].max_metric_row_count, 150);
+  assert.equal(r.requests[0].rows_complete, true);
+  assert.equal(r.rows_complete, true);
+  assert.equal(r.confidence, "CONFIRMED");
+  assert.equal(r.requests[0].row_count, 1350, "row_count = metric_row_count_total takma adi");
+});
+
+test("D) tek metrik 1000 satira ulasti (digerleri kucuk) -> rows_complete false, CANDIDATE", async () => {
+  const body = [{ metricName: "A", information: Array.from({ length: 10 }, () => ({ x: 1 })) }, { metricName: "B", information: Array.from({ length: 1000 }, () => ({ x: 1 })) }];
+  const r = await run(fake([{ status: 200, body }]));
+  assert.equal(r.requests[0].max_metric_row_count, 1000);
+  assert.equal(r.rows_complete, false);
+  assert.equal(r.confidence, "CANDIDATE");
+  assert.equal(r.max_metric_row_count, 1000);
+  assert.equal(r.metric_row_count_total, r.row_count);
+});
+
+test("A) content istegi dimension1=URL (Url DEGIL); B) yanit 'Url' satiri sorgudan arindirilir", async () => {
+  const u = buildUrl(PROFILE.find((p) => p.id === "content")!);
+  assert.match(u, /[?&]dimension1=URL(&|$)/);
+  assert.doesNotMatch(u, /dimension1=Url/);
+  const body = [{ metricName: "Popular Pages", information: [{ Url: "https://example.com/x?secret=1#f", visitsCount: 1 }] }];
+  const r = await run(fake([{ status: 200, body }]));
+  assert.equal(r.metrics[0].rows[0].Url, "https://example.com/x");
+});
+
+test("E) hata/NOT_CONNECTED -> yeni sayim alanlari UNKNOWN (sifir degil)", async () => {
+  const nc = await run(fake([]), "");
+  assert.equal(nc.metric_row_count_total, "UNKNOWN"); assert.equal(nc.max_metric_row_count, "UNKNOWN");
+  const er = await run(fake([{ status: 403, body: "" }]));
+  assert.equal(er.metric_row_count_total, "UNKNOWN"); assert.equal(er.max_metric_row_count, "UNKNOWN");
+  assert.equal(er.requests[0].max_metric_row_count, "UNKNOWN");
 });
 
 // --- site izolasyonu ---------------------------------------------------------------------------

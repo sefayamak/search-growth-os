@@ -22,10 +22,13 @@
  *   - Uc nokta KODA GOMULUDUR; ortam degiskeniyle degistirilemez (token'i baska bir sunucuya
  *     yonlendirme yolu olmasin).
  *
- * Microsoft sinirlari (proje sahibinin gorevde verdigi, Microsoft Clarity Data Export API
- * dokumanindan; bu sandbox'tan dokumana ERISILEMEDI, burada yeniden dogrulanmadi):
+ * Microsoft Clarity Data Export API resmi dokumaninda dogrulanan sinirlar:
  *   numOfDays yalniz 1/2/3 · proje basina gunde en fazla 10 istek · istek basina en fazla 3
- *   boyut · yanit en fazla 1000 satir, sayfalama yok · 401/403 yetki · 429 gunluk limit · UTC.
+ *   boyut · yanit en fazla 1000 satir, sayfalama yok · 400/401/403/429 · UTC.
+ *   Istek boyutlari: Browser, Device, Country/Region, OS, Source, Medium, Campaign, Channel, URL.
+ * Canli dogrulama BEKLEYENLER: gercek token'larin calismasi, yanit metricName seti, yanit
+ *   boyut-yankisi buyuk/kucuk harfi ("Url"), 1000 sinirinin cok-metrikli yanittaki sayim
+ *   davranisi, 5xx davranisi, 5xx yeniden denemelerinin kota harcayip harcamadigi.
  */
 
 export const CLARITY_ENV = "SEARCH_GROWTH_CLARITY_TOKENS_JSON";
@@ -38,7 +41,9 @@ export const PROFILE_REQUESTS_PER_SITE = 3;
 /** Bir kosuda bir site icin TOPLAM HTTP denemesi tavani (3 profil + 1 paylasimli 5xx yeniden denemesi).
  *  Gunluk limitin yarisindan azdir: ayni gun ikinci bir elle kosu hala sigar. */
 export const MAX_HTTP_ATTEMPTS_PER_SITE = 4;
-/** Yanit satir siniri (sayfalama yok). Ulasan yanit KESILMIS olabilir. */
+/** Yanit satir siniri (sayfalama yok). Bir metrikte bu sayiya ulasan yanit KESILMIS olabilir.
+ *  Siniri cok-metrikli yanitta Microsoft'un nasil saydigi canli dogrulanmadi: bu yuzden
+ *  yalnizca TEK metrigin satir sayisina bakilir, metrik toplamina DEGIL. */
 export const RESPONSE_ROW_LIMIT = 1000;
 export const REQUEST_TIMEOUT_MS = 20_000;
 export const MAX_5XX_RETRIES_PER_REQUEST = 1;
@@ -57,14 +62,14 @@ export interface ProfileRequest {
 }
 
 /**
- * 3 istek / site / kosu. Boyut adi "Url": site-health-monitor'un calisan kodu bu yazimi
- * kullaniyor (Microsoft dokumanina erisilemedigi icin buyuk/kucuk harf duyarliligi dogrulanmadi);
- * satir anahtarlari buyuk/kucuk harfe duyarsiz okunur.
+ * 3 istek / site / kosu. ISTEK boyutu resmi dokumandaki "URL"dir. YANIT satirlarindaki alan
+ * adi canli orneklerde "Url" gelebilir (canli dogrulanmadi); satir anahtarlari buyuk/kucuk
+ * harfe duyarsiz okunur. Ikisi farkli seydir.
  */
 export const PROFILE: readonly ProfileRequest[] = [
   { id: "device", numOfDays: 1, dimensions: ["Device"] },
   { id: "acquisition", numOfDays: 1, dimensions: ["Source", "Medium"] },
-  { id: "content", numOfDays: 1, dimensions: ["Url"] },
+  { id: "content", numOfDays: 1, dimensions: ["URL"] },
 ];
 
 /** Profil sinirlari ihlal ediyorsa hata: istek ASLA kurulmaz. */
@@ -165,7 +170,12 @@ export interface RequestResult {
   /** Atlama sebebi (SKIPPED). */
   note?: string;
   /** Hata/atlama durumunda "UNKNOWN": veri yok sifir degildir. */
+  /** GERIYE UYUMLU takma ad = metric_row_count_total. Benzersiz URL/satir sayisi DEGILDIR. */
   row_count: number | "UNKNOWN";
+  /** Tum metrik `information` satirlarinin toplami; ayni boyut satiri her metrikte tekrarlanir. */
+  metric_row_count_total: number | "UNKNOWN";
+  /** Tek bir metrikteki en yuksek satir sayisi; 1000 siniri bu degerle karsilastirilir. */
+  max_metric_row_count: number | "UNKNOWN";
   rows_complete: boolean | "UNKNOWN";
 }
 
@@ -183,8 +193,12 @@ export interface ClaritySiteResult {
   window_days: 1;
   requests: RequestResult[];
   metrics: MetricResult[];
-  /** Olculen isteklerin toplam satiri; olculememisse "UNKNOWN". */
+  /** GERIYE UYUMLU takma ad = metric_row_count_total (olculen isteklerin metrik-satir toplami).
+   *  Benzersiz URL ya da benzersiz satir sayisi DEGILDIR. Olculememisse "UNKNOWN". */
   row_count: number | "UNKNOWN";
+  metric_row_count_total: number | "UNKNOWN";
+  /** Olculen isteklerdeki tek-metrik en yuksek satir sayisi. */
+  max_metric_row_count: number | "UNKNOWN";
   rows_complete: boolean | "UNKNOWN";
   /** MEASURED ve satir sayisi 0: gercek sifir. Hata durumunda false (sifir DEGIL). */
   is_zero: boolean;
@@ -202,23 +216,26 @@ function sanitizeRow(row: unknown): Record<string, unknown> | null {
   return out;
 }
 
-type ParsedResult = { ok: true; metrics: Omit<MetricResult, "request_id">[]; totalRows: number } | { ok: false };
+type ParsedResult = { ok: true; metrics: Omit<MetricResult, "request_id">[]; totalRows: number; maxMetricRows: number } | { ok: false };
 
 /** Beklenen sekil: [{ metricName, information: [ {...} ] }]. Baska sekil = INVALID_RESPONSE (sifir degil). */
 export function parseResponse(body: unknown): ParsedResult {
   if (!Array.isArray(body)) return { ok: false };
   const metrics: Omit<MetricResult, "request_id">[] = [];
   let total = 0;
+  let max = 0;
   for (const m of body) {
     if (!m || typeof m !== "object" || typeof (m as { metricName?: unknown }).metricName !== "string") return { ok: false };
     const info = (m as { information?: unknown }).information;
     if (info !== undefined && !Array.isArray(info)) return { ok: false };
     const rows = (info ?? []).map(sanitizeRow).filter((r): r is Record<string, unknown> => r !== null);
-    total += (info ?? []).length;
+    const n = (info ?? []).length;
+    total += n;
+    if (n > max) max = n;
     const name = (m as { metricName: string }).metricName;
-    metrics.push({ metric_name: name, metric_key: KNOWN_METRICS[norm(name)] ?? null, row_count: rows.length, rows });
+    metrics.push({ metric_name: name, metric_key: KNOWN_METRICS[norm(name)] ?? null, row_count: n, rows });
   }
-  return { ok: true, metrics, totalRows: total };
+  return { ok: true, metrics, totalRows: total, maxMetricRows: max };
 }
 
 // ---------------------------------------------------------------------------
@@ -245,7 +262,7 @@ export async function measureSite(siteId: string, token: string | undefined, o: 
   const now = (o.now ?? (() => new Date()))().toISOString();
   const base = { schema: "sgos.clarity.v1" as const, site_id: siteId, source: "microsoft_clarity_data_export_api" as const, evidence_label: "FACT" as const, measured_at: now, window_days: 1 as const };
   if (!token) {
-    return { ...base, measurement_state: "NOT_CONNECTED", confidence: "UNKNOWN", requests: [], metrics: [], row_count: "UNKNOWN", rows_complete: "UNKNOWN", is_zero: false, note: `${CLARITY_ENV} icinde '${siteId}' icin token yok` };
+    return { ...base, measurement_state: "NOT_CONNECTED", confidence: "UNKNOWN", requests: [], metrics: [], row_count: "UNKNOWN", metric_row_count_total: "UNKNOWN", max_metric_row_count: "UNKNOWN", rows_complete: "UNKNOWN", is_zero: false, note: `${CLARITY_ENV} icinde '${siteId}' icin token yok` };
   }
   const profile = o.profile ?? PROFILE;
   validateProfile(profile);
@@ -259,10 +276,10 @@ export async function measureSite(siteId: string, token: string | undefined, o: 
 
   for (const p of profile) {
     if (stopped) {
-      requests.push({ id: p.id, window_days: 1, dimensions: p.dimensions, state: "SKIPPED", http_status: null, attempts: 0, note: `${stopped} nedeniyle atlandi (yeniden denenmez, gunluk butce korunur)`, row_count: "UNKNOWN", rows_complete: "UNKNOWN" });
+      requests.push({ id: p.id, window_days: 1, dimensions: p.dimensions, state: "SKIPPED", http_status: null, attempts: 0, note: `${stopped} nedeniyle atlandi (yeniden denenmez, gunluk butce korunur)`, row_count: "UNKNOWN", metric_row_count_total: "UNKNOWN", max_metric_row_count: "UNKNOWN", rows_complete: "UNKNOWN" });
       continue;
     }
-    const r: RequestResult = { id: p.id, window_days: 1, dimensions: p.dimensions, state: "ERROR", http_status: null, attempts: 0, row_count: "UNKNOWN", rows_complete: "UNKNOWN" };
+    const r: RequestResult = { id: p.id, window_days: 1, dimensions: p.dimensions, state: "ERROR", http_status: null, attempts: 0, row_count: "UNKNOWN", metric_row_count_total: "UNKNOWN", max_metric_row_count: "UNKNOWN", rows_complete: "UNKNOWN" };
     let retries = 0;
     for (;;) {
       if (attemptsTotal >= MAX_HTTP_ATTEMPTS_PER_SITE) { r.error_code = r.error_code ?? "BUDGET_EXHAUSTED"; break; }
@@ -286,9 +303,12 @@ export async function measureSite(siteId: string, token: string | undefined, o: 
         const parsed = parseResponse(body);
         if (!parsed.ok) { r.error_code = "INVALID_RESPONSE"; break; }
         r.state = "MEASURED"; delete r.error_code;
-        r.row_count = parsed.metrics.reduce((n, m) => n + m.row_count, 0);
-        // Sayfalama yok: sinira ulasan yanit KESILMIS olabilir.
-        r.rows_complete = parsed.totalRows < RESPONSE_ROW_LIMIT;
+        r.metric_row_count_total = parsed.totalRows;
+        r.row_count = parsed.totalRows;
+        r.max_metric_row_count = parsed.maxMetricRows;
+        // Sayfalama yok: bir metrik belgelenmis sinira ulastiysa yanit KESILMIS olabilir.
+        // Toplam > 1000 tek basina kesilme kaniti DEGIL (ayni satirlar her metrikte tekrarlanir).
+        r.rows_complete = parsed.maxMetricRows < RESPONSE_ROW_LIMIT;
         for (const m of parsed.metrics) metrics.push({ request_id: p.id, ...m });
         break;
       }
@@ -309,12 +329,13 @@ export async function measureSite(siteId: string, token: string | undefined, o: 
   const bad = requests.filter((r) => r.state === "ERROR");
   const state: SiteState = ok.length === 0 ? "ERROR" : bad.length || ok.length < requests.length ? "PARTIAL" : "MEASURED";
   const rowsComplete: boolean | "UNKNOWN" = ok.length === 0 ? "UNKNOWN" : ok.every((r) => r.rows_complete === true) && state === "MEASURED" ? true : ok.some((r) => r.rows_complete === false) ? false : "UNKNOWN";
-  const rowCount: number | "UNKNOWN" = ok.length === 0 ? "UNKNOWN" : ok.reduce((n, r) => n + (r.row_count as number), 0);
+  const rowCount: number | "UNKNOWN" = ok.length === 0 ? "UNKNOWN" : ok.reduce((n, r) => n + (r.metric_row_count_total as number), 0);
+  const maxRows: number | "UNKNOWN" = ok.length === 0 ? "UNKNOWN" : Math.max(...ok.map((r) => r.max_metric_row_count as number));
   const result: ClaritySiteResult = {
     ...base,
     measurement_state: state,
     confidence: state === "ERROR" ? "UNKNOWN" : state === "MEASURED" && rowsComplete === true ? "CONFIRMED" : "CANDIDATE",
-    requests, metrics, row_count: rowCount, rows_complete: rowsComplete,
+    requests, metrics, row_count: rowCount, metric_row_count_total: rowCount, max_metric_row_count: maxRows, rows_complete: rowsComplete,
     is_zero: state === "MEASURED" && rowCount === 0,
   };
   if (state === "ERROR") result.error_code = bad[0]?.error_code ?? "BUDGET_EXHAUSTED";
@@ -342,7 +363,7 @@ export async function measureSites(siteIds: string[], tokens: Map<string, string
     } catch (e) {
       // Beklenmeyen hata bile token tasimaz ve baska siteyi etkilemez.
       const now = (o.now ?? (() => new Date()))().toISOString();
-      results.push({ schema: "sgos.clarity.v1", site_id: id, source: "microsoft_clarity_data_export_api", evidence_label: "FACT", measurement_state: "ERROR", confidence: "UNKNOWN", measured_at: now, window_days: 1, requests: [], metrics: [], row_count: "UNKNOWN", rows_complete: "UNKNOWN", is_zero: false, error_code: "NETWORK_ERROR", note: redact(String((e as Error)?.message ?? e), secrets).slice(0, 160) });
+      results.push({ schema: "sgos.clarity.v1", site_id: id, source: "microsoft_clarity_data_export_api", evidence_label: "FACT", measurement_state: "ERROR", confidence: "UNKNOWN", measured_at: now, window_days: 1, requests: [], metrics: [], row_count: "UNKNOWN", metric_row_count_total: "UNKNOWN", max_metric_row_count: "UNKNOWN", rows_complete: "UNKNOWN", is_zero: false, error_code: "NETWORK_ERROR", note: redact(String((e as Error)?.message ?? e), secrets).slice(0, 160) });
     }
   }
   const known = new Set(siteIds);
@@ -366,7 +387,7 @@ export function summaryLine(r: ClaritySiteResult): string {
   if (r.measurement_state === "NOT_CONNECTED") return `NOT_CONNECTED ${r.site_id}`;
   const okCount = r.requests.filter((q) => q.state === "MEASURED").length;
   if (r.measurement_state === "ERROR") return `ERROR ${r.site_id} — ${r.error_code}`;
-  const tail = r.rows_complete === false ? " (KESILMIS: 1000 satir siniri, rows_complete=false)" : r.is_zero ? " (olculdu, sifir)" : "";
+  const tail = r.rows_complete === false ? " (KESILMIS: bir metrik 1000 satir sinirina ulasti, rows_complete=false)" : r.is_zero ? " (olculdu, sifir)" : "";
   const head = r.measurement_state === "PARTIAL" ? "PARTIAL" : "OK";
   return `${head} ${r.site_id} — ${okCount}/${r.requests.length} request, ${r.measurement_state}${tail}${r.measurement_state === "PARTIAL" && r.note ? ` [${r.note}]` : ""}`;
 }
@@ -374,10 +395,10 @@ export function summaryLine(r: ClaritySiteResult): string {
 export function resultsToMarkdown(results: ClaritySiteResult[], ignoredTokenSites: string[]): string {
   const L: string[] = ["# Clarity ölçümü", "",
     "Salt-okunur (Clarity Data Export API, GET). Token, ham yanıt ve kişisel veri raporlanmaz. `UNKNOWN` = ölçülemedi, **sıfır DEĞİLDİR**; `NOT_CONNECTED` = token yok.", "",
-    "| site | durum | güven | istek | satır | rows_complete | not |", "|---|---|---|---|---|---|---|"];
+    "| site | durum | güven | istek | metrik-satır toplamı | en yüksek metrik satırı | rows_complete | not |", "|---|---|---|---|---|---|---|---|"];
   for (const r of results) {
     const okCount = r.requests.filter((q) => q.state === "MEASURED").length;
-    L.push(`| ${r.site_id} | ${r.measurement_state}${r.error_code ? ` (${r.error_code})` : ""} | ${r.confidence} | ${okCount}/${r.requests.length} | ${r.row_count}${r.is_zero ? " (sıfır)" : ""} | ${r.rows_complete} | ${r.note ?? ""} |`);
+    L.push(`| ${r.site_id} | ${r.measurement_state}${r.error_code ? ` (${r.error_code})` : ""} | ${r.confidence} | ${okCount}/${r.requests.length} | ${r.metric_row_count_total}${r.is_zero ? " (sıfır)" : ""} | ${r.max_metric_row_count} | ${r.rows_complete} | ${r.note ?? ""} |`);
   }
   const keys = new Set<string>();
   for (const r of results) for (const m of r.metrics) keys.add(`${m.metric_key ?? "?"}|${m.metric_name}`);

@@ -19,7 +19,7 @@ sistemle bir ilgisi yok (o yalnız siteleri yayına alıyor).
 | Eski not (20 Eylül) | Bugün (doğrulandı) |
 |---|---|
 | "GSC/GA4 bağlı değil, UNKNOWN kalır" (bölüm 6) | **Bağlı.** `reports/measure-latest.md` (28 Eylül): 7/7 GSC OK, 7/7 GA4 OK. Service account + Search Console + GA4 erişimi tamamlandı |
-| "65 test" | **286 test**, `npm run typecheck` temiz |
+| "65 test" | **289 test**, `npm run typecheck` temiz |
 | "iki workflow var" | Beş: `measure.yml` (haftalık GSC+GA4), `tests.yml` (her PR'da test), `index-probe.yml` (yalnız elle), `portfolio-check.yml`, `search-audit.yml` |
 | "Sıradaki adım: 3 PR'ı merge et" (pamistanbul-site #89/#90, pamaistudio#40) | Bu depodan **doğrulanamadı**; o repolar bu oturumun kapsamı dışı. Sefa'nın teyidi gerekir |
 | 18 skill | 18 skill (README'deki "15" eskiydi, düzeltildi) |
@@ -62,7 +62,7 @@ host varyantı. Bunları ayırmak için ikinci dilim: `canonical_pattern` (`docs
 
 **Phase 2A (PR açık, merge edilmedi): native Clarity adapter.** `src/adapters/clarity.ts`, `clarity-smoke` (offline) / `clarity-measure`,
 `.github/workflows/clarity.yml` (yalnız workflow_dispatch, schedule yok). Secret: `SEARCH_GROWTH_CLARITY_TOKENS_JSON` (site id → token). Site başına 3 istek,
-`numOfDays=1`, resmi limit 10/proje/gün (proje sahibinden, doğrulanmadı). Eski site-health-monitor'a dokunulmadı; native hat 2 başarılı takeover koşusu
+`numOfDays=1`, resmi limit 10/proje/gün (Microsoft dokümanında doğrulandı; istek boyutu `URL`; 1000 satır sınırı yalnız tek-metrik `max_metric_row_count` ile gözlenir, çok-metrikli sayım canlı doğrulanacak). Eski site-health-monitor'a dokunulmadı; native hat 2 başarılı takeover koşusu
 üretmeden legacy kapatılmaz. Ayrıntı: `docs/integrations/clarity.md`. Canlı doğrulama için gereken tek kullanıcı aksiyonu: GitHub Secret'ı tanımlamak.
 
 **Bilinen veri sorunu (FACT):** 28 Eylül'de shm, Clarity'ye 7 sitenin 7'sinde erişemedi (ağ izni) ve
@@ -93,7 +93,7 @@ içerik taslağı → PR hattı, dashboard.
 cd search-growth-os && git pull && npm test
 ```
 
-286 test yeşil gelmeli (20 Eylül'de 65 idi). Sonra bölüm 2'deki tek adıma geç.
+289 test yeşil gelmeli (20 Eylül'de 65 idi). Sonra bölüm 2'deki tek adıma geç.
 
 Bir şeyin hâlâ geçerli olup olmadığından şüphelenirsen ölçümü tekrarla —
 ama önce bu dosyadaki sayıya bak; çoğu soru orada cevaplı.
@@ -170,7 +170,7 @@ node --experimental-strip-types src/cli.ts portfolio     # içerik ritmi, 7 site
 node --experimental-strip-types src/cli.ts llmstxt       # llms.txt envanteri
 node --experimental-strip-types src/cli.ts audit --site pamistanbul --full
 node --experimental-strip-types src/cli.ts registry config/sites.yaml
-npm test                                                  # 286 test
+npm test                                                  # 289 test
 ```
 
 Bağımlılık yok, sadece Node 24.

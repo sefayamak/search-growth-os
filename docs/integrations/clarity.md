@@ -5,20 +5,29 @@ Durum: Phase 2A. GSC, GA4 ve Clarity artık native Search Growth OS adapter'lar�
 
 ## Kaynak ve doğrulama sınırı
 
-Bu sayfadaki Microsoft sınırları **proje sahibinin görevde verdiği özetten** alınmıştır (Microsoft Clarity Data Export API resmi dokümanı).
-Bu geliştirme ortamından Microsoft dokümanına **erişilemedi**; aşağıdaki sınırlar burada yeniden doğrulanmadı ve ilk canlı koşuda
-davranışla teyit edilmelidir. Doğrulanmamış hiçbir şey FACT olarak yazılmadı.
+Aşağıdaki Microsoft Clarity Data Export API sınırları **resmi Microsoft dokümanında doğrulanmıştır** (FACT):
 
-| Sınır | Değer (proje sahibinden, doğrulanmamış) |
+| Konu | Değer |
 |---|---|
 | Uç nokta | `GET https://www.clarity.ms/export-data/api/v1/project-live-insights` |
 | Kimlik | `Authorization: Bearer <proje token'ı>` |
+| Token | Project → Settings → Data Export → Generate new API token; yalnız proje admin'i yönetebilir |
 | `numOfDays` | yalnız 1, 2 veya 3 (biz **hep 1**) |
+| İstek boyutları | `Browser`, `Device`, `Country/Region`, `OS`, `Source`, `Medium`, `Campaign`, `Channel`, `URL` |
+| Boyut sayısı | istek başına en fazla 3 |
 | Günlük limit | proje başına en fazla **10 istek / gün** |
-| Boyut | istek başına en fazla 3 |
 | Yanıt | en fazla **1000 satır**, sayfalama **yok** |
-| Hatalar | 401/403 yetki, 429 günlük limit |
 | Saat dilimi | UTC |
+| Belgelenen hatalar | 400, 401, 403, 429 |
+
+**Canlı doğrulama bekleyenler** (resmi doküman söylemiyor; ilk canlı koşu artifact'ıyla teyit edilecek):
+
+- bizim gerçek proje token'larımızın çalışması
+- yanıttaki `metricName` kümesi (kod, site-health-monitor'un çalışan kodundan türetilen adları tanır; bilinmeyenleri korur)
+- yanıt satırındaki boyut-yankısı büyük/küçük harfi (`Url` mi `URL` mi)
+- 1000 satır sınırının **çok-metrikli** yanıttaki sayım davranışı (aşağıya bakın)
+- 5xx davranışı
+- 5xx yeniden denemelerinin günlük kotayı tüketip tüketmediği
 
 ## Token üretimi
 
@@ -44,7 +53,7 @@ Bir koşuda **site başına 3 istek**, hepsi `numOfDays=1`:
 
 1. `device`: `Device`
 2. `acquisition`: `Source`, `Medium`
-3. `content`: `Url` (boyut adı site-health-monitor'un çalışan kodundan alındı; büyük/küçük harf duyarlılığı doğrulanmadı, satır anahtarları duyarsız okunur)
+3. `content`: `URL` — **istek** boyutu resmi dokümandaki yazımla gönderilir (`dimension1=URL`). Yanıt satırındaki alan adı canlı örneklerde `Url` gelebilir (canlı doğrulanmadı); satır anahtarları büyük/küçük harfe duyarsız okunur. İstek yazımı ile yanıt yankısı farklı şeylerdir.
 
 Neden 3: resmi günlük limit 10/proje. Bir koşu 3 harcar; aynı gün en fazla 3 koşu (9) güvenli. Kod ayrıca bir site için bir koşuda
 **en fazla 4 HTTP denemesi** yapar (3 + yalnız 5xx için paylaşımlı 1 yeniden deneme). 401/403/429'dan sonra kalan istekler **atlanır**;
@@ -58,21 +67,32 @@ Neden 3: resmi günlük limit 10/proje. Bir koşu 3 harcar; aynı gün en fazla 
 | token yok | `NOT_CONNECTED` |
 | 200 ve satır var | `MEASURED` |
 | 200 ve gerçekten boş | `MEASURED`, `row_count: 0`, `is_zero: true` (ölçüldü, sıfır) |
-| 400/401/403/429/5xx/timeout/geçersiz JSON/beklenmeyen şekil | `ERROR` + sebep kodu; `row_count: "UNKNOWN"`, `is_zero: false` |
+| 400/401/403/429/5xx/timeout/geçersiz JSON/beklenmeyen şekil | `ERROR` + sebep kodu; `row_count`/`metric_row_count_total`/`max_metric_row_count: "UNKNOWN"`, `is_zero: false` |
 | bazı istekler tamam, bazıları değil | `PARTIAL` (güven `CANDIDATE`) |
 
 **Veri yok / ölçülemedi asla sıfır olmaz.** Bir sitenin hatası diğer sitelerin sonucunu etkilemez.
 
-## 1000 satır sınırı
+## 1000 satır sınırı ve satır sayıları
 
-Sayfalama yok. Bir yanıtın toplam satırı 1000'e ulaşırsa `rows_complete: false` yazılır ve sonuç `CONFIRMED` değil `CANDIDATE` olur
-(toplamlar gerçek toplamın alt sınırı olabilir).
+Yanıt `[{ metricName, information: [...] }]` biçimindedir; **aynı boyut satırı birçok metrik nesnesinde tekrarlanabilir**. Bu yüzden satır sayıları ayrı adlandırılır:
+
+| Alan | Anlam |
+|---|---|
+| `metrics[].row_count` | o metriğin `information.length` değeri |
+| `metric_row_count_total` | tüm metrik `information` satırlarının toplamı (benzersiz URL/satır sayısı **değildir**) |
+| `max_metric_row_count` | tek bir metrikteki en yüksek satır sayısı |
+| `row_count` | **geriye uyumluluk için** `metric_row_count_total` ile aynı değer; benzersiz URL/satır sayısı olarak okunmamalı |
+
+Kesilme gözlemi yalnız `max_metric_row_count` ile yapılır: herhangi bir metrik **1000 satıra ulaştıysa** belgelenmiş sınıra temas edilmiştir →
+`rows_complete: false`, güven `CANDIDATE`. Hiçbir metrik 1000'e ulaşmıyorsa, toplam 1000'i aşsa bile (ör. 9 metrik × 150 satır = 1350) **kesilme denmez**:
+Microsoft'un sınırı çok-metrikli yanıtta nasıl saydığı canlı doğrulanmadı, ilk canlı koşuda gerçek payload üzerinden ayrıca teyit edilecek.
+Bu PR'da tahminle kesinleştirilmedi.
 
 ## Normalize çıktı (Brain sözleşmesi, `sgos.clarity.v1`)
 
 Site başına `clarity-<site>.json`. Kaynak/provenans alanları: `source`, `site_id`, `measured_at` (UTC), `evidence_label` (**FACT**), `measurement_state`
 (`MEASURED | PARTIAL | ERROR | NOT_CONNECTED`), `confidence` (`CONFIRMED | CANDIDATE | UNKNOWN`). Ölçüm alanları: `window_days`, `requests[]`
-(`dimensions`, `http_status`, `attempts`, `error_code`, `row_count`, `rows_complete`), `metrics[]`, `row_count`, `rows_complete`, `is_zero`.
+(`dimensions`, `http_status`, `attempts`, `error_code`, `row_count`, `rows_complete`), `metrics[]`, `row_count` (= `metric_row_count_total`), `metric_row_count_total`, `max_metric_row_count`, `rows_complete`, `is_zero`.
 
 Metrikler: Traffic, Engagement Time, Scroll Depth, Popular Pages, Dead/Rage Click Count, Quickback Click, Excessive Scroll, Script/Error Click Count.
 Yanıttaki `metricName` **ham haliyle** `metric_name`'de korunur; bilinen adlar `metric_key`'e normalize edilir, **bilinmeyenler atılmaz** (`metric_key: null`).
