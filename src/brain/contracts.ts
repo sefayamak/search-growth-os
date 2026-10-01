@@ -1,0 +1,190 @@
+// Brain sozlesmeleri. Burasi tek dogruluk kaynagi: schemas/brain-*.schema.json bu sabitlerle
+// ayni sayilari tasir ve tests/brain.test.ts ikisi ayrisirsa kirilir.
+//
+// Evidence ontolojisi DEGISMEZ: alti etiket + dort guven. "EDITORIAL" bir etiket degildir
+// (policies/evidence-labels.md); kasitli olarak burada yoktur ve dogrulayici onu reddeder.
+import type { EvidenceLabel, Confidence } from "../types.ts";
+
+export type { EvidenceLabel, Confidence };
+
+export const EVIDENCE_LABELS: readonly EvidenceLabel[] = ["FACT", "INFERENCE", "HYPOTHESIS", "RECOMMENDATION", "IMPLEMENTED_CHANGE", "VERIFIED_RESULT"];
+export const CONFIDENCES: readonly Confidence[] = ["CONFIRMED", "CANDIDATE", "FALSE_POSITIVE", "UNKNOWN"];
+
+/** DRAFT_PR_CANDIDATE bu fazda yalnizca ETIKETTIR: hicbir PR acilmaz, hicbir yere yazilmaz. */
+export const ACTIONABILITY = ["MONITOR", "HUMAN_REVIEW", "DRAFT_PR_CANDIDATE"] as const;
+export type Actionability = (typeof ACTIONABILITY)[number];
+
+export const RUN_STATUSES = ["SUCCESS", "PARTIAL", "NOT_CONFIGURED", "ERROR"] as const;
+export type RunStatus = (typeof RUN_STATUSES)[number];
+
+/** Kaynak sozlesmeleri. AI_VISIBILITY ve COMPETITOR yonlendirme icin gerekli; baglanti yoksa
+ *  bu kaynaklar pakette hic bulunmaz (uydurma veri yok). */
+export const EVIDENCE_SOURCES = ["GSC", "GA4", "CLARITY", "CRAWL", "INDEX", "REGISTRY", "AI_VISIBILITY", "COMPETITOR"] as const;
+export type EvidenceSource = (typeof EVIDENCE_SOURCES)[number];
+
+export const EVIDENCE_CATEGORIES = [
+  "SEARCH_PERFORMANCE", "CONTENT_OPPORTUNITY", "BEHAVIOR", "TECHNICAL", "INDEXING",
+  "STRUCTURED_DATA", "AI_VISIBILITY", "COMPETITOR", "REGISTRY",
+] as const;
+export type EvidenceCategory = (typeof EVIDENCE_CATEGORIES)[number];
+
+/** MEASURED/PARTIAL: bir arac olcum yapti. RECORDED: sahibin kayda gectigi (registry) — olcum degil.
+ *  Gerisi veri YOK demektir ve hicbir ajani tetiklemez. */
+export const MEASUREMENT_STATES = ["MEASURED", "PARTIAL", "RECORDED", "ERROR", "NOT_CONNECTED", "NOT_AVAILABLE", "UNKNOWN"] as const;
+export type MeasurementState = (typeof MEASUREMENT_STATES)[number];
+export const USABLE_STATES: readonly MeasurementState[] = ["MEASURED", "PARTIAL", "RECORDED"];
+
+export const EVIDENCE_SCHEMA = "sgos.brain.evidence.v1";
+export const EVIDENCE_BUNDLE_SCHEMA = "sgos.brain.evidence-bundle.v1";
+export const AGENT_RESULT_SCHEMA = "sgos.brain.agent-result.v1";
+export const RUN_SCHEMA = "sgos.brain.run.v1";
+export const MEMORY_SCHEMA = "sgos.brain.memory.v1";
+
+export const CANONICAL_AGENTS = [
+  "chief-search-strategist",
+  "technical-search-auditor",
+  "search-measurement-scientist",
+  "content-evidence-strategist",
+  "aeo-geo-strategist",
+  "competitor-intelligence-analyst",
+  "entity-structured-data-specialist",
+  "search-performance-engineer",
+  "search-policy-compliance-officer",
+] as const;
+export type AgentId = (typeof CANONICAL_AGENTS)[number];
+export type SpecialistId = Exclude<AgentId, "chief-search-strategist" | "search-policy-compliance-officer">;
+
+// --- maliyet korumasi (kodda zorlanir, yapilandirma ile gevsetilemez) --------------------------
+export const MAX_SPECIALISTS = 3;
+/** 3 uzman + 1 Chief + 1 uyum incelemesi. */
+export const MAX_API_CALLS = 5;
+export const OUTPUT_TOKEN_CAPS = { specialist: 2000, chief: 3000, compliance: 1500 } as const;
+/** Modele giden sikistirilmis kanit paketinin ust siniri (serilestirilmis bayt). */
+export const MAX_EVIDENCE_BYTES_PER_RUN = 60_000;
+/** Tek bir kanit kaydinin sikistirma sonrasi ust siniri. */
+export const MAX_EVIDENCE_BYTES_PER_ITEM = 8_000;
+export const MAX_EVIDENCE_ITEMS = 40;
+
+export interface EvidenceEnvelope {
+  schema: typeof EVIDENCE_SCHEMA;
+  evidence_id: string;
+  site_id: string;
+  source: EvidenceSource;
+  source_ref: string;
+  /** UTC ISO-8601. */
+  measured_at: string;
+  measurement_state: MeasurementState;
+  evidence_label: EvidenceLabel;
+  confidence: Confidence;
+  category: EvidenceCategory;
+  payload: Record<string, unknown>;
+}
+
+export interface EvidenceBundle {
+  schema: typeof EVIDENCE_BUNDLE_SCHEMA;
+  site_id: string;
+  evidence: EvidenceEnvelope[];
+}
+
+export interface BrainFinding {
+  finding_id: string;
+  site_id: string;
+  title: string;
+  category: string;
+  evidence_ids: string[];
+  evidence_label: EvidenceLabel;
+  confidence: Confidence;
+  summary: string;
+  impact: string;
+  recommended_action: string;
+  actionability: Actionability;
+  risk: string;
+  verification_plan: string;
+}
+
+export interface BrainConflict {
+  description: string;
+  evidence_ids: string[];
+}
+
+export interface AgentResult {
+  schema: typeof AGENT_RESULT_SCHEMA;
+  agent_id: AgentId;
+  site_id: string;
+  findings: BrainFinding[];
+  unknowns: string[];
+  conflicts: BrainConflict[];
+}
+
+export type ComplianceVerdict = "PASS" | "FLAG" | "REJECT";
+export interface ComplianceReview { finding_id: string; verdict: ComplianceVerdict; reason: string; reviewed_by: "deterministic_gate" | "search-policy-compliance-officer" }
+
+/** Nihai bulgu = Chief'in dogrulanmis bulgusu + uyum sonucu. `execution_candidate` yalnizca
+ *  DRAFT_PR_CANDIDATE etiketli VE uyumdan PASS almis bulgu icin true'dur; bu fazda "aday"
+ *  yalnizca bir etikettir, uygulanacak bir sey yoktur. */
+export interface FinalFinding extends BrainFinding {
+  compliance: ComplianceReview | null;
+  execution_candidate: boolean;
+}
+
+export type TraceStatus = "OK" | "INVALID_OUTPUT" | "ERROR" | "SKIPPED";
+export interface AgentTrace {
+  agent_id: AgentId;
+  role: "specialist" | "chief" | "compliance";
+  started_at: string;
+  completed_at: string;
+  status: TraceStatus;
+  input_evidence_ids: string[];
+  output_finding_ids: string[];
+  error_code: string | null;
+  /** Reddedilen cikti icin ihlal kodlari (metin icermez). */
+  violations: string[];
+  http_status: number | null;
+  input_tokens: number | "UNKNOWN";
+  output_tokens: number | "UNKNOWN";
+  /** Yuklenen profil govdesinin sha256'si: hangi talimatla kosuldugunun izi, talimatin kendisi degil. */
+  profile_sha256: string;
+}
+
+export interface CostGuard {
+  max_calls: number;
+  calls_used: number;
+  max_specialists: number;
+  specialists_called: number;
+  evidence_bytes: number;
+  output_token_caps: { specialist: number; chief: number; compliance: number };
+  /** Yalniz API'nin kendi `usage` alanindan; yoksa "UNKNOWN". */
+  input_tokens_measured: number | "UNKNOWN";
+  output_tokens_measured: number | "UNKNOWN";
+  /** Fiyat tarifesi burada bilinmiyor: tahmin yazilmaz. */
+  estimated_cost_usd: "UNKNOWN";
+}
+
+export interface AgentConsidered { agent_id: AgentId; decision: "CALLED" | "NOT_ROUTED" | "SPECIALIST_CAP" | "NOT_CONFIGURED" | "SKIPPED"; reason: string }
+
+export interface BrainRecommendation { finding_id: string; recommended_action: string; actionability: Actionability; execution_candidate: boolean; compliance_verdict: ComplianceVerdict | "NOT_REVIEWED" }
+
+export interface BrainRun {
+  schema: typeof RUN_SCHEMA;
+  run_id: string;
+  site_id: string;
+  started_at: string;
+  completed_at: string;
+  status: RunStatus;
+  /** NOT_CONFIGURED / ERROR / PARTIAL icin nedenin kisa kodu. */
+  status_reason: string | null;
+  input_evidence_ids: string[];
+  agents_considered: AgentConsidered[];
+  agents_called: AgentId[];
+  agent_results: AgentResult[];
+  agent_trace: AgentTrace[];
+  findings: FinalFinding[];
+  recommendations: BrainRecommendation[];
+  unknowns: string[];
+  conflicts: BrainConflict[];
+  cost_guard: CostGuard;
+  /** Bu fazda her zaman false: brain hicbir seye yazmaz. */
+  production_write: false;
+}
+
+export const FINDING_ID_RE = /^[a-z0-9][a-z0-9._-]{2,63}$/i;

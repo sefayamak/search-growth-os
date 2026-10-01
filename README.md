@@ -42,12 +42,13 @@ reports/                     changelog, learning log, dry-run template; runs/ is
 ## Run
 
 ```bash
-npm test                                   # node:test suite, spins a local fixture site (289 tests on 2026-10-01)
+npm test                                   # node:test suite, spins a local fixture site (327 tests on 2026-10-01)
 npm run cli -- audit --site pamistanbul    # registry-gated, read-only, sample crawl
 npm run cli -- audit --site pamistanbul --full   # FULL_BASELINE: every eligible sitemap URL
 npm run cli -- audit https://example.com   # ad-hoc URL (bypasses the registry gate)
 npm run cli -- crawl https://example.com --max-pages 20 --delay 1000
 npm run cli -- compliance path/to/file     # exit 0 PASS · 1 FLAG · 2 REJECT
+npm run cli -- brain-validate config/sites.yaml --site pamistanbul   # cloud Brain, offline (no API call); see docs/brain/cloud-brain.md
 npm run cli -- registry config/sites.example.yaml
 npm run cli -- integrations
 npm run cli -- import-health <snapshotDir>          # validate a site-health-monitor snapshot DIRECTORY (local, no network); --write merges per site

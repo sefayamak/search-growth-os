@@ -14,6 +14,13 @@
 //   clarity-smoke [registry]        OFFLINE: token map shape, site routing and request budget (NO API call, NO token printed)
 //   clarity-measure [registry] [--site id] [--out dir]
 //                                   native Microsoft Clarity export: 3 requests/site/run, numOfDays=1; writes JSON+MD to --out (default clarity-out)
+//   brain-evidence [registry] --site id --clarity <clarity-<site>.json> [--out file]
+//                                   normalize existing collector output into a sgos.brain.evidence-bundle.v1 file (local, no network)
+//   brain-validate [registry] --site id [--evidence file]
+//                                   OFFLINE: load the 9 agents/*.md profiles, validate the evidence bundle, print the routing plan (NO API call)
+//   brain-run [registry] --site id [--evidence file] [--out dir=brain-out] [--write-memory]
+//                                   cloud Brain: route -> <=3 specialists -> Chief -> compliance via the Anthropic API (key + model from env;
+//                                   NOT_CONFIGURED = zero calls). Writes nothing to any site; memory persists only with --write-memory
 //   import-health <snapshotDir> [--registry path] [--site id] [--write]
 //                                   validate a site-health-monitor snapshot DIRECTORY (local path, no network);
 //                                   "no data" never becomes zero; --write merges into sites/<id>/health-import.json
@@ -473,6 +480,77 @@ async function main() {
       if (results.some((r) => r.measurement_state === "ERROR" || r.measurement_state === "PARTIAL") || parsed.problems.length) process.exitCode = 1;
       return;
     }
+    // Brain: bulut akil yuruten katman. Anahtar YALNIZCA ortam degiskeninden okunur; CLI argumani olarak
+    // asla kabul edilmez ve reddedilirken degeri yankilanmaz.
+    case "brain-evidence":
+    case "brain-validate":
+    case "brain-run": {
+      const br = await import("./brain/index.ts");
+      if (args.some((a) => /^--?(api[-_]?)?(key|token|secret|anthropic[-_]?key)\b/i.test(a))) {
+        console.error(`Anahtar CLI argumani olarak kabul edilmez; ${br.ANTHROPIC_KEY_ENV} ortam degiskenini (GitHub Secret) kullan.`);
+        process.exitCode = 1; return;
+      }
+      const siteId = opt("site");
+      if (!siteId) { console.error("--site zorunlu"); process.exitCode = 1; return; }
+      const reg = loadRegistry(args[1] && !args[1].startsWith("--") ? args[1] : "config/sites.yaml");
+      if (!reg.ok || !reg.registry) { console.error(reg.errors.join("\n")); process.exitCode = 1; return; }
+      const site = reg.registry.sites.find((x) => x.id === siteId);
+      if (!site) { console.error(`site bulunamadi: ${siteId}`); process.exitCode = 1; return; }
+      // Tavsiye yalniz onboard edilmis site icin (policies/portfolio-isolation.md).
+      if (!onboardedSites(reg.registry).some((x) => x.id === siteId)) { console.error(`site "${siteId}" onboard edilmemis (${site.onboarding_status}): Brain yalniz onboard edilmis site icin calisir`); process.exitCode = 1; return; }
+      const nowIso = new Date().toISOString();
+
+      if (cmd === "brain-evidence") {
+        const clarityPath = opt("clarity");
+        const items = [br.evidenceFromRegistry(site, nowIso)];
+        if (clarityPath) {
+          const c = JSON.parse(readFileSync(clarityPath, "utf8"));
+          if (c.site_id !== siteId) { console.error(`SITE IZOLASYONU: ${clarityPath} baska bir siteye ait (${String(c.site_id)} != ${siteId}); kanit paketine ALINMADI`); process.exitCode = 1; return; }
+          items.push(br.evidenceFromClarity(c));
+        }
+        const out = opt("out", `brain-evidence-${siteId}.json`);
+        mkdirSync(dirname(out), { recursive: true });
+        writeFileSync(out, JSON.stringify({ schema: br.EVIDENCE_BUNDLE_SCHEMA, site_id: siteId, evidence: items }, null, 2) + "\n");
+        console.log(`Brain kanit paketi: ${items.length} kayit -> ${out}`);
+        return;
+      }
+
+      const cfg = br.loadAnthropicConfig();
+      const secrets = cfg.state === "CONFIGURED" ? [cfg.apiKey] : [];
+      const evPath = opt("evidence");
+      let raw: unknown = { schema: br.EVIDENCE_BUNDLE_SCHEMA, site_id: siteId, evidence: [] };
+      if (evPath) {
+        try { raw = JSON.parse(readFileSync(evPath, "utf8")); } catch { console.error("kanit dosyasi okunamadi ya da JSON degil"); process.exitCode = 1; return; }
+      }
+      // Sitenin KENDI registry gercegi baglam olarak eklenir (paket zaten REGISTRY tasimiyorsa).
+      const list: unknown[] = Array.isArray(raw) ? raw : ((raw as { evidence?: unknown[] }).evidence ?? []);
+      const withReg = list.some((e) => (e as { source?: string })?.source === "REGISTRY") ? list : [br.evidenceFromRegistry(site, nowIso), ...list];
+      const parsed = br.parseEvidenceBundle({ schema: br.EVIDENCE_BUNDLE_SCHEMA, site_id: siteId, evidence: withReg }, siteId, { secrets });
+      const profiles = br.loadAgentProfiles("agents");
+
+      if (cmd === "brain-validate") {
+        console.log(`Brain (offline — API cagrisi YOK): ${profiles.size} ajan profili yuklendi, ${br.ANTHROPIC_KEY_ENV}: ${cfg.state === "CONFIGURED" ? "VAR" : "YOK"}, ${br.ANTHROPIC_MODEL_ENV}: ${cfg.state === "CONFIGURED" ? "VAR" : (cfg.missing.includes(br.ANTHROPIC_MODEL_ENV) ? "YOK" : "VAR")}`);
+        if (!parsed.ok || !parsed.bundle) { console.log(`KANIT REDDEDILDI: ${parsed.errors.join(", ")}`); process.exitCode = 1; return; }
+        console.log(`kanit: ${parsed.bundle.evidence.length} kayit, ${parsed.evidence_bytes} bayt (sinir ${br.MAX_EVIDENCE_BYTES_PER_RUN}); sikistirilan: ${parsed.compaction.length}`);
+        for (const c of br.routeAgents(parsed.bundle.evidence).considered) console.log(`${c.decision.padEnd(14)} ${c.agent_id} — ${c.reason}`);
+        return;
+      }
+
+      const run = !parsed.ok || !parsed.bundle
+        ? br.evidenceRejectedRun(siteId, parsed.errors)
+        : await br.runBrain({ siteId, site, bundle: parsed.bundle, evidenceBytes: parsed.evidence_bytes, config: cfg, profiles });
+      console.log(`Brain ${run.site_id}: ${run.status}${run.status_reason ? ` (${run.status_reason})` : ""} — API ${run.cost_guard.calls_used}/${run.cost_guard.max_calls}, ${run.findings.length} bulgu`);
+      const outDir = opt("out", "brain-out");
+      mkdirSync(outDir, { recursive: true });
+      writeFileSync(join(outDir, `brain-run-${siteId}.json`), JSON.stringify(run, null, 2) + "\n");
+      writeFileSync(join(outDir, `brain-report-${siteId}.md`), br.brainRunToMarkdown(run));
+      const mem = br.memoryEntriesFromRun(run);
+      // Bellek ADAYLARI artifact klasorune yazilir (kalici degil). Kalici yazim yalniz acik --write-memory ile.
+      writeFileSync(join(outDir, `memory-candidates-${siteId}.jsonl`), mem.map((m) => JSON.stringify(m)).join("\n") + (mem.length ? "\n" : ""));
+      if (flag("write-memory")) for (const m of mem) br.appendMemory(".", m, { write: true });
+      if (run.status === "ERROR" || run.status === "PARTIAL") process.exitCode = 1;   // NOT_CONFIGURED yesil kalir (kimlik yok != hata)
+      return;
+    }
     // Snapshot importu: yerel DIZIN okur, ag ve token gerektirmez. Dizinin nereden
     // geldigi (git clone, artifact, elle kopya) bu komutun bilgisi degildir.
     case "import-health": {
@@ -615,7 +693,7 @@ async function main() {
       return;
     }
     default:
-      console.error("commands: crawl | audit | compliance | registry | integrations | measure | detail | topics | smoke | portfolio | llmstxt | import-health | inspect-index | clarity-smoke | clarity-measure");
+      console.error("commands: crawl | audit | compliance | registry | integrations | measure | detail | topics | smoke | portfolio | llmstxt | import-health | inspect-index | clarity-smoke | clarity-measure | brain-evidence | brain-validate | brain-run");
       process.exitCode = 1;
   }
 }
