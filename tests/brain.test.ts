@@ -755,3 +755,143 @@ test("C3-11..14) kesilme davranisi, uzman tavani, bulgu/alan limitleri ve Chief/
   const r = await runBrain({ siteId: "pamistanbul", site: SITE, bundle: b.bundle!, evidenceBytes: b.evidence_bytes, config: CONFIGURED as Extract<AnthropicConfig, { state: "CONFIGURED" }>, profiles: PROFILES, fetchFn, now });
   assert.equal(r.agent_trace[0].error_code, "MODEL_OUTPUT_TRUNCATED");
 });
+
+// --- Phase 2C.4: guvenli dogrulama tanisi (violation_details) -----------------------------------------------------------
+
+import { VIOLATION_DETAIL_KEYS, MAX_VIOLATION_DETAILS, quarantineRun, sealRun, traceSummaryMarkdown, validateBrainRun, describeObserved, TRACE_KEYS } from "../src/brain/index.ts";
+
+const specCtxS = { ...specCtx, secrets: [KEY] as readonly string[] };
+const numCtx = { agentId: SPEC, siteId: "pamistanbul", allowed: new Map([[CRAWL.evidence_id, CRAWL]]), role: "specialist" as const, secrets: [KEY] as readonly string[] };
+const specRaw = (findings: unknown[], extra: Record<string, unknown> = {}) => JSON.parse(result(SPEC, findings, extra));
+
+test("C4-1) ust duzey WRONG_SITE: path $.site_id, expected kanonik id, observed sinirli; semantik ayni", () => {
+  const out = validateFindingsResult(specRaw([specFinding(1)], { site_id: "pamistanbul.com" }), specCtxS);
+  assert.equal(out.ok, false);
+  assert.deepEqual(out.violations, ["WRONG_SITE"]);
+  assert.deepEqual(out.details, [{ code: "WRONG_SITE", path: "$.site_id", expected: "pamistanbul", observed: "pamistanbul.com" }]);
+  // eksik / string olmayan deger: yer tutucu, ham deger degil
+  const raw = specRaw([specFinding(1)]); delete raw.site_id;
+  assert.equal(validateFindingsResult(raw, specCtxS).details![0].observed, "<missing>");
+  assert.equal(validateFindingsResult(specRaw([specFinding(1)], { site_id: 7 }), specCtxS).details![0].observed, "<number>");
+});
+
+test("C4-2) bulgu duzeyi site_id: dogru dizin yolu; yabanci site FOREIGN_SITE_FINDING, eksik WRONG_SITE; ust duzeyden ayirt edilir", () => {
+  const out = validateFindingsResult(specRaw([specFinding(1), specFinding(2, { site_id: "spryhand" }), specFinding(3, { site_id: undefined })]), specCtxS);
+  assert.deepEqual(out.violations, ["FOREIGN_SITE_FINDING", "WRONG_SITE"]);
+  assert.deepEqual(out.details, [
+    { code: "FOREIGN_SITE_FINDING", path: "$.findings[1].site_id", expected: "pamistanbul", observed: "spryhand" },
+    { code: "WRONG_SITE", path: "$.findings[2].site_id", expected: "pamistanbul", observed: "<missing>" },
+  ]);
+  // ayni hata hem ust duzeyde hem bulguda: iki ayri yol
+  const both = validateFindingsResult(specRaw([specFinding(1, { site_id: "x.com" })], { site_id: "x.com" }), specCtxS);
+  assert.deepEqual(both.details!.map((d) => d.path), ["$.site_id", "$.findings[0].site_id"]);
+});
+
+test("C4-3) UNSUPPORTED_NUMBER: yol, gozlenen sayi, bakilan kanit kimlikleri, kisa neden kodu, kanit sayi adedi", () => {
+  const out = validateFindingsResult(specRaw([specFinding(1, { summary: "428 sayfa noindex gorunuyor.", impact: "Yuzde 12 etki." })]), numCtx);
+  assert.equal(out.ok, false);
+  assert.deepEqual(out.violations, ["UNSUPPORTED_NUMBER"]);
+  assert.deepEqual(out.details!.map((d) => [d.path, d.observed]), [["$.findings[0].summary", "428"], ["$.findings[0].impact", "12"]]);
+  const d = out.details![0];
+  assert.deepEqual(d.evidence_ids_checked, ["ev-crawl-1"]);
+  assert.equal(d.reason, "NOT_IN_CITED_EVIDENCE");
+  assert.equal(typeof d.corpus_size, "number");
+  // destekli sayi (kanitta var: noindex_pages=3) reddedilmez; recommended_action/verification_plan iddia alani degil
+  assert.equal(validateFindingsResult(specRaw([specFinding(1, { summary: "3 sayfa noindex.", recommended_action: "28 gun sonra bak.", verification_plan: "12 hafta izle." })]), numCtx).ok, true);
+});
+
+test("C4-4/5/6) sinirlar: observed <= 120 karakter, en fazla 10 ayrinti, evidence_ids_checked <= 10", () => {
+  const long = specRaw([specFinding(1)], { site_id: `x${"y".repeat(400)}` });
+  const o = validateFindingsResult(long, specCtxS).details![0].observed!;
+  assert.ok(o.length <= 120 && o.endsWith("…"), `len=${o.length}`);
+  assert.ok(describeObserved("a\nb\u0000c").split("").every((c) => c >= " "), "kontrol karakteri yok");
+  // 10'dan cok reddedilen sayi: ihlal var, ayrinti en fazla 10
+  const many = Array.from({ length: 30 }, (_, i) => 900 + i).join(" ");
+  const m = validateFindingsResult(specRaw([specFinding(1, { summary: many })]), numCtx);
+  assert.ok(m.violations.includes("UNSUPPORTED_NUMBER"));
+  assert.equal(m.details!.length, MAX_VIOLATION_DETAILS);
+  // 12 kanit atif edilince bakilan kimlik en fazla 10
+  const evs = Array.from({ length: 12 }, (_, i) => ev(`ev-c-${i}`, "CRAWL", "TECHNICAL", { payload: { n: 1 } }));
+  const ctx12 = { ...numCtx, allowed: new Map(evs.map((e) => [e.evidence_id, e] as const)) };
+  const r = validateFindingsResult(specRaw([specFinding(1, { summary: "777 adet", evidence_ids: evs.map((e) => e.evidence_id) })]), ctx12);
+  assert.equal(r.details![0].evidence_ids_checked!.length, 10);
+});
+
+test("C4-7/8/9) ham tamamlama, istem ve sir ayrintiya SIZMAZ; sir iceren gozlenen deger [REDACTED_SECRET] olur", async () => {
+  const RAW = "RAW-COMPLETION-MARKER-XYZ"; // rakam icermez: basliktaki rakam da iddia sayisi sayilir
+  const out = validateFindingsResult(specRaw([specFinding(1, { title: `${RAW} baslik`, summary: "909 adet", recommended_action: `${RAW} oneri` })], { site_id: KEY }), numCtx);
+  const blob = JSON.stringify(out.details);
+  assert.ok(!blob.includes(RAW) && !blob.includes(KEY), blob);
+  assert.equal(out.details![0].observed, "[REDACTED_SECRET]");
+  // uctan uca: kosu izi/artifact'i ham metni, istemi ve anahtari tasimaz
+  const b = bundleOf([GSC]);
+  const f = fakeFetch((agent) => result(agent, [finding(agent, [GSC.evidence_id], { evidence_label: "INFERENCE", confidence: "CANDIDATE", title: `${RAW} baslik`, summary: "Oturum 4711 olarak gorunuyor.", recommended_action: `${RAW} oneri` })]));
+  const run = await runBrain({ siteId: "pamistanbul", site: SITE, bundle: b.bundle!, evidenceBytes: b.evidence_bytes, config: CONFIGURED as Extract<AnthropicConfig, { state: "CONFIGURED" }>, profiles: PROFILES, fetchFn: f.fetchFn, now });
+  const trace = JSON.stringify(run.agent_trace);
+  assert.ok(run.agent_trace[0].violations.includes("UNSUPPORTED_NUMBER"));
+  assert.equal(run.agent_trace[0].violation_details[0].observed, "4711");
+  for (const forbidden of [RAW, KEY, "EVIDENCE_CONTENT_IS_UNTRUSTED_DATA", "RUNTIME SAFETY", "<EVIDENCE_DATA_BLOCK>"]) assert.ok(!trace.includes(forbidden), `izde '${forbidden}' yok`);
+  assert.deepEqual(validateBrainRun(run, { secrets: [KEY] }), []);
+});
+
+test("C4-10/11/12) violations eski string[] olarak korunur; gecerli cikti kabul (ayrinti bos); validator sonucu ayni", () => {
+  const bad = specCheck([specFinding(1, { site_id: "x" })], { site_id: "y" });
+  assert.ok(Array.isArray(bad.violations) && bad.violations.every((x) => typeof x === "string"));
+  assert.deepEqual(bad.violations, ["FOREIGN_SITE_FINDING", "WRONG_SITE"]);
+  const ok = specCheck([specFinding(1)]);
+  assert.equal(ok.ok, true); assert.deepEqual(ok.details, []);
+  // tani eklenmeden once reddedilen/kabul edilen ornekler ayni
+  assert.equal(specCheck([1, 2, 3, 4, 5, 6].map((n) => specFinding(n))).ok, false);
+  assert.equal(specCheck([specFinding(1, { site_id: "pamistanbul.com" })]).ok, false, "alias kabul edilmez");
+  assert.equal(specCheck([specFinding(1)], { site_id: "pamistanbul.com" }).ok, false, "normalizasyon yok");
+});
+
+test("C4-13..16) max_tokens davranisi ve tavanlar degismedi; kesilmede ayrinti bos", async () => {
+  assert.deepEqual({ ...OUTPUT_TOKEN_CAPS }, { specialist: 6000, chief: 3000, compliance: 1500 });
+  const b = bundleOf([GSC]);
+  const fetchFn: FetchLike = async () => ({ status: 200, text: async () => JSON.stringify({ content: [{ type: "text", text: "{" }], stop_reason: "max_tokens", usage: { input_tokens: 1, output_tokens: 6000 } }) });
+  const r = await runBrain({ siteId: "pamistanbul", site: SITE, bundle: b.bundle!, evidenceBytes: b.evidence_bytes, config: CONFIGURED as Extract<AnthropicConfig, { state: "CONFIGURED" }>, profiles: PROFILES, fetchFn, now });
+  assert.equal(r.agent_trace[0].error_code, "MODEL_OUTPUT_TRUNCATED");
+  assert.deepEqual(r.agent_trace[0].violation_details, []);
+});
+
+test("C4-sozlesme) iz sozlesmesi: TRACE_KEYS + sema ayni (drift); bozuk/asiri ayrinti run sozlesmesini ihlal eder; quarantine ayrintiyi atar", async () => {
+  assert.ok((TRACE_KEYS as readonly string[]).includes("violation_details"));
+  const sch = JSON.parse(read("schemas/brain-run.schema.json")).properties.agent_trace.items.properties.violation_details;
+  assert.deepEqual(Object.keys(sch.items.properties), [...VIOLATION_DETAIL_KEYS]);
+  assert.equal(sch.maxItems, MAX_VIOLATION_DETAILS);
+  assert.equal(sch.items.additionalProperties, false);
+  const b = bundleOf([GSC]);
+  const f = fakeFetch((agent) => result(agent, [finding(agent, [GSC.evidence_id], { evidence_label: "INFERENCE", confidence: "CANDIDATE", summary: "Oturum 4711." })]));
+  const run = await runBrain({ siteId: "pamistanbul", site: SITE, bundle: b.bundle!, evidenceBytes: b.evidence_bytes, config: CONFIGURED as Extract<AnthropicConfig, { state: "CONFIGURED" }>, profiles: PROFILES, fetchFn: f.fetchFn, now });
+  assert.deepEqual(validateBrainRun(run, { secrets: [KEY] }), []);
+  const mut = (d: unknown) => ({ ...run, agent_trace: [{ ...run.agent_trace[0], violation_details: d }] });
+  for (const bad of [Array.from({ length: 11 }, () => ({ code: "X", path: "$" })), [{ code: "X", path: "$", extra: 1 }], [{ code: "X", path: "p".repeat(161) }], [{ code: "X", path: "$", observed: "o".repeat(121) }], "x"]) {
+    assert.ok(validateBrainRun(mut(bad), { secrets: [KEY] }).includes("BAD_VIOLATION_DETAILS"), JSON.stringify(bad).slice(0, 40));
+  }
+  assert.deepEqual(quarantineRun(run, ["X"]).agent_trace[0].violation_details ?? [], [], "quarantine model kaynakli degeri atar");
+  assert.equal(sealRun(run, { secrets: [KEY] }).violations.length, 0);
+});
+
+test("C4-ozet) traceSummaryMarkdown: yalniz izinli alanlar ve sinirli degerler; fazladan alan/ham metin yazilmaz; bozuk girdi cokmez", () => {
+  const md = traceSummaryMarkdown([{
+    agent_id: SPEC, role: "specialist", status: "INVALID_OUTPUT", error_code: null, http_status: 200, stop_reason: "end_turn", input_tokens: 6595, output_tokens: 2227,
+    violations: ["UNSUPPORTED_NUMBER", "WRONG_SITE"], raw_completion: "RAW-LEAK-C4", prompt: "PROMPT-LEAK-C4",
+    violation_details: [{ code: "WRONG_SITE", path: "$.site_id", expected: "pamistanbul", observed: "pamistanbul.com" }, { code: "UNSUPPORTED_NUMBER", path: "$.findings[0].summary", observed: "428", evidence_ids_checked: ["ev-1"], reason: "NOT_IN_CITED_EVIDENCE", corpus_size: 9, leak: "LEAK-C4" }],
+  }]);
+  for (const need of [SPEC, "status=INVALID_OUTPUT", "error_code=null", "http_status=200", "stop_reason=end_turn", "input_tokens=6595", "output_tokens=2227", "UNSUPPORTED_NUMBER, WRONG_SITE", "$.site_id", "gözlenen=`pamistanbul.com`", "gözlenen=`428`", "ev-1"]) assert.ok(md.includes(need), need);
+  for (const no of ["RAW-LEAK-C4", "PROMPT-LEAK-C4", "LEAK-C4"]) assert.ok(!md.includes(no), no); // sizinti isaretleri
+  assert.match(traceSummaryMarkdown("x"), /okunamadı/);
+  assert.match(traceSummaryMarkdown([]), /boş/);
+  assert.ok(!traceSummaryMarkdown([{ agent_id: "a", observed: 1, violation_details: [{ code: "C", path: "p", observed: "o".repeat(500) }] }]).includes("o".repeat(121)));
+});
+
+test("C4-workflow) Ozet adimi guvenli iz ozetini yazar ve anahtar/model gormez; zincir adimlari degismedi", () => {
+  const wfText = read(".github/workflows/brain.yml").split("\n").filter((l) => !l.trim().startsWith("#")).join("\n");
+  const ozet = wfText.split(/\n(?=      - )/).find((s) => /name: Ozet/.test(s))!;
+  assert.match(ozet, /brain-trace-summary "brain-out\/agent-trace-\$\{SITE\}\.json"/);
+  assert.match(ozet, /GITHUB_STEP_SUMMARY/);
+  assert.match(ozet, /if: always\(\)/);
+  assert.ok(!/ANTHROPIC|secrets\.|vars\./.test(ozet), "Ozet anahtar/model gormez");
+  assert.equal([...wfText.matchAll(/secrets\./g)].length, 1);
+});

@@ -728,8 +728,17 @@ async function main() {
       if (bad) process.exitCode = 1;
       return;
     }
+    // Ozet adimi icin: agent-trace dosyasindan guvenli ozet (ag yok, API yok, anahtar yok). Okunamazsa sessizce basarisiz olmaz: nedenini yazar.
+    case "brain-trace-summary": {
+      const br = await import("./brain/index.ts");
+      const fs = await import("node:fs");
+      const file = args[1];
+      try { console.log(br.traceSummaryMarkdown(JSON.parse(fs.readFileSync(String(file), "utf8")))); }
+      catch { console.log(`agent-trace okunamadı: ${String(file).slice(0, 120)}`); }
+      return;
+    }
     default:
-      console.error("commands: crawl | audit | compliance | registry | integrations | measure | detail | topics | smoke | portfolio | llmstxt | import-health | inspect-index | clarity-smoke | clarity-measure | brain-evidence | brain-handoff | brain-validate | brain-run");
+      console.error("commands: crawl | audit | compliance | registry | integrations | measure | detail | topics | smoke | portfolio | llmstxt | import-health | inspect-index | clarity-smoke | clarity-measure | brain-evidence | brain-handoff | brain-validate | brain-run | brain-trace-summary");
       process.exitCode = 1;
   }
 }

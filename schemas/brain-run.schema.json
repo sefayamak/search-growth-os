@@ -130,6 +130,50 @@
               "chief",
               "compliance"
             ]
+          },
+          "violation_details": {
+            "type": "array",
+            "maxItems": 10,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "code",
+                "path"
+              ],
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string",
+                  "maxLength": 160
+                },
+                "expected": {
+                  "type": "string",
+                  "maxLength": 120
+                },
+                "observed": {
+                  "type": "string",
+                  "maxLength": 120
+                },
+                "evidence_ids_checked": {
+                  "type": "array",
+                  "maxItems": 10,
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "reason": {
+                  "type": "string",
+                  "maxLength": 60
+                },
+                "corpus_size": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
           }
         }
       }

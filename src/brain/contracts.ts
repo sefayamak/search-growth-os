@@ -67,6 +67,26 @@ export const MAX_FINDINGS_PER_SPECIALIST = 5;
 export const SPECIALIST_FIELD_LIMITS = { title: 120, summary: 500, impact: 300, recommended_action: 300, verification_plan: 300, risk: 120, category: 60 } as const;
 export const MAX_SPECIALIST_UNKNOWNS = 5;
 export const MAX_SPECIALIST_CONFLICTS = 5;
+
+/** Dogrulama tani ayrintisi (Phase 2C.4). YALNIZ sinirli, guvenli alanlar: ham tamamlama/istem/sir YOK. */
+export const MAX_VIOLATION_DETAILS = 10;
+export const MAX_DETAIL_PATH_CHARS = 160;
+export const MAX_DETAIL_OBSERVED_CHARS = 120;
+export const MAX_DETAIL_EVIDENCE_IDS = 10;
+export const VIOLATION_DETAIL_KEYS = ["code", "path", "expected", "observed", "evidence_ids_checked", "reason", "corpus_size"] as const;
+export interface ViolationDetail {
+  code: string;
+  /** JSON yolu, ornek `$.site_id` / `$.findings[0].summary`. */
+  path: string;
+  expected?: string;
+  /** Modelin urettigi deger; en fazla 120 karakter, sir icerirse yazilmaz. */
+  observed?: string;
+  evidence_ids_checked?: string[];
+  /** Kisa kural kodu (ornek NOT_IN_CITED_EVIDENCE); serbest metin degil. */
+  reason?: string;
+  /** Destek aranan kanit zarflarindaki farkli sayi adedi. */
+  corpus_size?: number;
+}
 export const SPECIALIST_UNKNOWN_CHARS = 200;
 export const SPECIALIST_CONFLICT_CHARS = 300;
 
@@ -176,6 +196,8 @@ export interface AgentTrace {
   error_code: string | null;
   /** Reddedilen cikti icin ihlal kodlari (metin icermez). */
   violations: string[];
+  /** `violations`a EK (additive): hangi yol/deger reddedildi. Eski alan `violations: string[]` aynen korunur. */
+  violation_details: ViolationDetail[];
   http_status: number | null;
   /** Yanit alinmadiysa null; alindiysa normalize edilmis durma nedeni. */
   stop_reason: StopReason | null;

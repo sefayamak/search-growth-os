@@ -115,7 +115,7 @@ export async function runBrain(opts: BrainOptions): Promise<BrainRun> {
     const profile = opts.profiles.get(agentId)!;
     const t: AgentTrace = {
       agent_id: agentId, role, started_at: startedAgent, completed_at: startedAgent, status: "SKIPPED", input_evidence_ids: inputIds, output_finding_ids: [],
-      error_code: null, violations: [], http_status: null, stop_reason: null, input_tokens: "UNKNOWN", output_tokens: "UNKNOWN", profile_sha256: profile.body_sha256,
+      error_code: null, violations: [], http_status: null, violation_details: [], stop_reason: null, input_tokens: "UNKNOWN", output_tokens: "UNKNOWN", profile_sha256: profile.body_sha256,
     };
     trace.push(t);
     if (!budget.take()) { t.error_code = "BUDGET_EXHAUSTED"; t.status = "ERROR"; t.completed_at = now().toISOString(); return { t, parsed: null as unknown }; }
@@ -147,7 +147,7 @@ export async function runBrain(opts: BrainOptions): Promise<BrainRun> {
     const { t, parsed } = await callAgent(a, "specialist", { evidence: sent.map((i) => byId.get(i)) }, sent, OUTPUT_TOKEN_CAPS.specialist);
     if (t.status === "ERROR" || parsed === null) { specialistFailed = true; setDecision(a, "CALLED", `${t.status}: ${t.error_code ?? t.violations.join(",")}`); continue; }
     const v = validateFindingsResult(parsed, { agentId: a, siteId: opts.siteId, allowed, secrets, role: "specialist" });
-    if (!v.ok) { t.status = "INVALID_OUTPUT"; t.violations = v.violations; specialistFailed = true; setDecision(a, "CALLED", "cikti reddedildi (dogrulama)"); continue; }
+    if (!v.ok) { t.status = "INVALID_OUTPUT"; t.violations = v.violations; t.violation_details = v.details ?? []; specialistFailed = true; setDecision(a, "CALLED", "cikti reddedildi (dogrulama)"); continue; }
     t.status = "OK"; t.output_finding_ids = v.result!.findings.map((f) => f.finding_id);
     specialistResults.push(v.result!);
   }
@@ -166,7 +166,7 @@ export async function runBrain(opts: BrainOptions): Promise<BrainRun> {
   if (chief.t.status !== "ERROR" && chief.parsed !== null) {
     const v = validateFindingsResult(chief.parsed, { agentId: "chief-search-strategist", siteId: opts.siteId, allowed: byId, secrets });
     if (v.ok) { chiefResult = v.result!; chief.t.status = "OK"; chief.t.output_finding_ids = chiefResult.findings.map((f) => f.finding_id); }
-    else { chief.t.status = "INVALID_OUTPUT"; chief.t.violations = v.violations; }
+    else { chief.t.status = "INVALID_OUTPUT"; chief.t.violations = v.violations; chief.t.violation_details = v.details ?? []; }
   }
   if (!chiefResult) {
     return finish("PARTIAL", "CHIEF_OUTPUT_UNAVAILABLE", { considered, specialistsCalled, agent_results: specialistResults, findings: [] });
@@ -188,7 +188,7 @@ export async function runBrain(opts: BrainOptions): Promise<BrainRun> {
     else {
       const v = validateComplianceResult(c.parsed, { siteId: opts.siteId, findingIds: new Set(needReview.map((f) => f.finding_id)), secrets });
       if (v.ok) { c.t.status = "OK"; for (const r of v.result!) reviews.set(r.finding_id, r); }
-      else { c.t.status = "INVALID_OUTPUT"; c.t.violations = v.violations; complianceFailed = true; }
+      else { c.t.status = "INVALID_OUTPUT"; c.t.violations = v.violations; c.t.violation_details = v.details ?? []; complianceFailed = true; }
     }
   } else setDecision("search-policy-compliance-officer", "SKIPPED", "incelenecek degisiklik onerisi yok");
 

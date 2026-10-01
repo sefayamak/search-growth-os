@@ -204,3 +204,20 @@ Pilot 3 (run 36849150571, 6000 token tavanı): `stop_reason=end_turn`, `output_t
 - Düzeltme: sözleşme ve yeni `SITE ID CONTRACT` bloğu (tüm roller) kimliği çalışma zamanından **aynen** verir: `site_id = "<id>"`; hostname/URL/görünen ad döndürülmez, değer kanıttan türetilmez. Kimlik her çağrıda `runtimeSystemPrompt(..., siteId)` ile gelir; siteye özel sabit yok.
 - Doğrulayıcı gevşetilmedi: takma ad, normalizasyon, bulanık eşleştirme yok. `pamistanbul.com` ≠ `pamistanbul`.
 - Bu düzeltme canlı Anthropic ile henüz doğrulanmadı.
+
+## Phase 2C.4 — doğrulama tanısı (`violation_details`)
+
+Pilot 4 (run 36850293981): `stop_reason=end_turn`, `output_tokens=2227`; uzman çıktısı `UNSUPPORTED_NUMBER` + `WRONG_SITE` ile reddedildi. Artifact'te yalnız kod listesi vardı: hangi yol, hangi değer, ne beklenmişti belli değildi.
+
+- İz'e **additive** alan: `violation_details` (eski `violations: string[]` aynen korunur). Her kayıt: `code`, `path` (≤160), `expected`/`observed` (≤120, kontrol karakteri yok, sır içeriyorsa `[REDACTED_SECRET]`), `evidence_ids_checked` (≤10), `reason` (kısa kod), `corpus_size`. En fazla 10 kayıt. Ham tamamlama, istem, uzun serbest metin yok.
+- `WRONG_SITE`: üst düzey `$.site_id` ile bulgu düzeyi `$.findings[i].site_id` ayrı yollarla görünür; eksik/string olmayan değer `<missing>` / `<number>` gibi yer tutucu olur. `UNSUPPORTED_NUMBER`: reddedilen her sayı için yol + sayı + bakılan kanıt kimlikleri.
+- **Doğrulayıcı anlamı değişmedi:** tam eşitlik, alias/normalizasyon yok, aynı ret kümesi. Yalnız ayrıntı üretilir.
+- GitHub Actions `Ozet` adımı artık `brain-trace-summary` ile güvenli iz özetini (agent_id, status, error_code, violations, violation_details, stop_reason, token) hem loga hem step summary'ye yazar; artifact erişimi olmadan da tanı görünür.
+- `quarantineRun`, sözleşme ihlalinde `violation_details`'i artifact'e yazmaz. `validateBrainRun`, sınır aşan/bozuk ayrıntıyı `BAD_VIOLATION_DETAILS` sayar.
+
+### Sayı kuralı hakkında kod incelemesi (anlam değişmedi; gözlemler)
+- Çıkarıcı `\d+(?:[.,]\d+)*`; **yalnız `title`, `summary`, `impact`** alanlarında çalışır. `recommended_action`, `verification_plan`, `risk` plan alanı sayılır, taranmaz.
+- İzin listesi = atıf yapılan kanıt **zarfının tamamındaki** (`JSON.stringify`) her sayı simgesi: payload sayıları, `measured_at` parçaları (2026/10/01/09/00…), şema sürümü (`v1` → `1`), kanıt kimliğindeki rakam parçaları. Yani üst veri sayıları örtük olarak "destekli"dir; bu tasarlanmış bir izin listesi değil, zarfın yan etkisidir.
+- Eşleşme tam simge eşitliğidir: `2` simgesi `2026` ile desteklenmez. Binlik ayırıcı (`58.071` ↔ `58071`) dışında ondalık biçim farkı (`12,5` ↔ `12.5`) eşleşmez.
+- Kelime sınırı yok: `GA4` içindeki `4` sayı sayılır (kanıtta `4` yoksa reddedilir); `H1` yalnız kanıtta `1` geçtiği için geçer. Yüzde (`%58`) ve türetilmiş aritmetik (`3 + 4 = 7`), kanıtta aynı simge yoksa desteksizdir. Yazıyla yazılan sayılar (`iki`) çıkarılmaz.
+- Gerçek pilot 4 kanıtında hangi sayının reddedildiği artifact okunana kadar bilinmiyor; bu gözlemler `evidenceFromRegistry` zarfı üzerinde deneyle doğrulandı, canlı kanıt üzerinde değil.
