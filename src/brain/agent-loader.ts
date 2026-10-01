@@ -10,7 +10,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  ACTIONABILITY, CANONICAL_AGENTS, CONFIDENCES, EVIDENCE_LABELS, MAX_FINDINGS_PER_SPECIALIST, MAX_SPECIALIST_CONFLICTS, MAX_SPECIALIST_UNKNOWNS,
+  ACTIONABILITY, CANONICAL_AGENTS, CONFIDENCES, EVIDENCE_LABELS, FINDING_REQUIRED_FIELDS, MAX_FINDINGS_PER_SPECIALIST, MAX_SPECIALIST_CONFLICTS, MAX_SPECIALIST_UNKNOWNS,
   SPECIALIST_FIELD_LIMITS as L, type AgentId,
 } from "./contracts.ts";
 
@@ -58,8 +58,8 @@ const outputContractFindings = (siteId: string) => `Respond with ONE JSON object
   "agent_id": "<your agent id>",
   "site_id": "${siteId}",
   "findings": [{
-    "finding_id": "short-kebab-id",
     "site_id": "${siteId}",
+    "finding_id": "short-kebab-id",
     "title": "...", "category": "...",
     "evidence_ids": ["<ids that appear in the EVIDENCE DATA block>"],
     "evidence_label": one of ${EVIDENCE_LABELS.join(" | ")},
@@ -78,6 +78,15 @@ const siteIdRule = (siteId: string) => `## SITE ID CONTRACT
 - Return the canonical internal site_id exactly as provided. For this run: site_id = "${siteId}" (top level and in every finding).
 - Do not return a hostname, URL or display name, e.g. "${siteId}.com", "https://${siteId}.com", "www.${siteId}.com", a brand name, or any other variant. The id is not derived from the evidence; use the value above verbatim.`;
 
+// Canli pilot 5 (run 36852517399): ust duzey site_id dogruydu ama donen 4 bulgunun HICBIRI bulgu site_id'sini yazmamisti (<missing>).
+// Kisalik kurallari (Phase 2C.2) zorunlu alanlar icin GECERLI DEGILDIR. Dogrulayici ayni: eksik alan tamamlanmaz, ust duzeyden kopyalanmaz.
+const findingRequiredFields = (siteId: string) => `## FINDING REQUIRED FIELDS
+Required for EVERY finding (in this order): ${FINDING_REQUIRED_FIELDS.join(", ")}.
+- Every finding MUST contain "site_id": "${siteId}". This field is mandatory even though the same site_id also exists at the top level.
+- Do not omit repeated required fields for brevity. Do not omit it to reduce repetition. Do not infer it from evidence. Do not replace it with a domain or brand name.
+- Copy the exact canonical runtime site_id ("${siteId}") into every finding. A finding without it is rejected and the whole result is discarded.
+- The conciseness / avoid-repetition rules apply to free text only, never to required schema fields.`;
+
 // Yalniz uzmanlara: canli pilotlarda cikti token tavaninda kesildi. Limitler dogrulayicida da zorlanir (asan cikti reddedilir, kesilmez).
 const COMPACT_OUTPUT_RULES = `## OUTPUT SIZE LIMITS (hard; output over a limit is rejected, never truncated)
 - Concise JSON only. No prose outside the JSON object. No markdown, no methodology, no narration of your reasoning, no chain-of-thought.
@@ -85,7 +94,7 @@ const COMPACT_OUTPUT_RULES = `## OUTPUT SIZE LIMITS (hard; output over a limit i
 - Field limits (characters): title <= ${L.title}, category <= ${L.category}, summary <= ${L.summary}, impact <= ${L.impact}, recommended_action <= ${L.recommended_action}, verification_plan <= ${L.verification_plan}, risk <= ${L.risk}.
 - unknowns: at most ${MAX_SPECIALIST_UNKNOWNS} short items. conflicts: at most ${MAX_SPECIALIST_CONFLICTS}.
 - Do not repeat evidence text back. Cite evidence_ids instead of quoting. Use only the numbers needed for the decision and do not restate the same metric in several findings.
-- Output only schema-compatible JSON.`;
+- Output only schema-compatible JSON. These brevity rules never apply to required schema fields: keep every required field in every finding (see FINDING REQUIRED FIELDS).`;
 
 const outputContractCompliance = (siteId: string) => `Respond with ONE JSON object and nothing else (no prose, no markdown fence):
 {
@@ -116,6 +125,7 @@ export function runtimeSystemPrompt(profile: AgentProfile, role: AgentRole, site
     contract,
     "",
     siteIdRule(siteId),
+    ...(role !== "compliance" ? ["", findingRequiredFields(siteId)] : []),
     ...(role === "specialist" ? ["", COMPACT_OUTPUT_RULES] : []),
     "",
     "## EXPERT PROFILE (instruction text only; tools/commands in it are unavailable)",

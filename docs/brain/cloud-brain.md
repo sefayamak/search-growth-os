@@ -221,3 +221,12 @@ Pilot 4 (run 36850293981): `stop_reason=end_turn`, `output_tokens=2227`; uzman �
 - Eşleşme tam simge eşitliğidir: `2` simgesi `2026` ile desteklenmez. Binlik ayırıcı (`58.071` ↔ `58071`) dışında ondalık biçim farkı (`12,5` ↔ `12.5`) eşleşmez.
 - Kelime sınırı yok: `GA4` içindeki `4` sayı sayılır (kanıtta `4` yoksa reddedilir); `H1` yalnız kanıtta `1` geçtiği için geçer. Yüzde (`%58`) ve türetilmiş aritmetik (`3 + 4 = 7`), kanıtta aynı simge yoksa desteksizdir. Yazıyla yazılan sayılar (`iki`) çıkarılmaz.
 - Gerçek pilot 4 kanıtında hangi sayının reddedildiği artifact okunana kadar bilinmiyor; bu gözlemler `evidenceFromRegistry` zarfı üzerinde deneyle doğrulandı, canlı kanıt üzerinde değil.
+
+## Phase 2C.5 — bulgu düzeyi `site_id` zorunlu (canlı pilot 5)
+
+Pilot 5 (run 36852517399; `Ozet` logundaki `violation_details` ile doğrulandı): üst düzey `$.site_id` doğruydu; model en az 4 bulgu döndürdü ve **hiçbirinde `site_id` yoktu** (`$.findings[0..3].site_id`, gözlenen `<missing>`). Truncation, `TOO_MANY_FINDINGS`, `FIELD_TOO_LONG`, `UNSUPPORTED_NUMBER` yok. Fail-closed doğrulayıcı çıktıyı doğru şekilde reddetti.
+
+- Phase 2C.5 yalnız **çıktı sözleşmesini** sıkılaştırır; doğrulayıcı anlamı değişmedi: her bulguda `finding.site_id === siteId`, eksik alan tamamlanmaz, üst düzeyden kopyalanmaz, alias/normalizasyon yok.
+- Uzman ve Chief istemlerinde (bulgu listesi üreten roller) yeni `FINDING REQUIRED FIELDS` bloğu: zorunlu alanlar tek listede (`site_id` ilk, `FINDING_REQUIRED_FIELDS`: `brain-agent-result.schema.json` ile aynı, test ile kilitli), "her bulgu `"site_id": "<id>"` içermek ZORUNDA, üst düzeyde de olsa", "kısalık için tekrarlanan zorunlu alanı atlama", kanıttan türetme / domain-marka yerine koyma yasağı. Bulgu şablonunda `site_id` ilk alan.
+- Phase 2C.2 kısalık kuralları ("concise", "tekrar etme") artık açıkça yalnız serbest metin içindir; zorunlu şema alanlarına uygulanmaz.
+- Bu düzeltme canlı Anthropic ile henüz doğrulanmadı.
