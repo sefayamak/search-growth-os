@@ -16,7 +16,7 @@ export const RUN_REQUIRED_KEYS = [
 
 /** Izde YALNIZ bu alanlar bulunabilir: istem govdesi, yanit govdesi, ham tamamlama icin yer yok. */
 export const TRACE_KEYS = [
-  "agent_id", "role", "started_at", "completed_at", "status", "input_evidence_ids", "output_finding_ids", "error_code", "violations", "http_status", "input_tokens", "output_tokens", "profile_sha256",
+  "agent_id", "role", "started_at", "completed_at", "status", "input_evidence_ids", "output_finding_ids", "error_code", "violations", "http_status", "stop_reason", "input_tokens", "output_tokens", "profile_sha256",
 ] as const;
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);

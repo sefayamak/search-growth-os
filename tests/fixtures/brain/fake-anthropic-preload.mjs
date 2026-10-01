@@ -27,10 +27,14 @@ globalThis.fetch = async (url, init) => {
     modelFromEnv: body.model === MODEL, maxTokens: body.max_tokens, hasDataBlock: user.includes("<EVIDENCE_DATA_BLOCK>"),
     systemHasEvidence: ids.some((i) => body.system.includes(i)),
   }) + "\n");
-  const reply = (status, text) => ({ status, text: async () => (status === 200 ? JSON.stringify({ content: [{ type: "text", text }], usage: { input_tokens: 111, output_tokens: 22 } }) : "{}") });
+  // Varsayilan durma nedeni end_turn; FAKE_MODE "truncated-*" / "unknown-stop" modlari bunu degistirir.
+  const stop = MODE === "truncated-malformed" || MODE === "truncated-valid" ? "max_tokens" : MODE === "unknown-stop" ? "brand_new_reason" : "end_turn";
+  const reply = (status, text) => ({ status, text: async () => (status === 200 ? JSON.stringify({ content: [{ type: "text", text }], stop_reason: stop, usage: { input_tokens: 111, output_tokens: 22 } }) : "{}") });
   if (MODE === "429") return reply(429, "");
   if (MODE === "500") return reply(500, "");
   if (role === "specialist") {
+    if (MODE === "truncated-malformed") return reply(200, `${RAW_MARK} {"schema":"sgos.brain.agent-result.v1","findings":[{"finding_id":"x`);
+    if (MODE === "truncated-valid") return reply(200, result(agent, [findingBase(agent, ids.slice(0, 1))]));
     if (MODE === "malformed") return reply(200, `${RAW_MARK} bu JSON degil sk-ant-LEAKLEAKLEAK1234567890 {`);
     if (MODE === "invented-number") return reply(200, result(agent, [findingBase(agent, ids.slice(0, 1), { summary: "Oturum sayisi 4711 olarak gorunuyor." })]));
     if (MODE === "unknown-id") return reply(200, result(agent, [findingBase(agent, ["ev-uydurma-0001"])]));

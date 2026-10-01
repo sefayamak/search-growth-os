@@ -102,6 +102,18 @@
           "error_code"
         ],
         "properties": {
+          "stop_reason": {
+            "enum": [
+              "end_turn",
+              "max_tokens",
+              "stop_sequence",
+              "tool_use",
+              "pause_turn",
+              "refusal",
+              "UNKNOWN",
+              null
+            ]
+          },
           "status": {
             "type": "string",
             "enum": [

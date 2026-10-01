@@ -17,7 +17,7 @@ export function brainRunToMarkdown(run: BrainRun): string {
   ];
   if (run.agent_trace.length) {
     L.push("## Çağrı izi", "", "| ajan | rol | durum | HTTP | hata | ihlaller | çıktı bulguları |", "|---|---|---|---|---|---|---|");
-    for (const t of run.agent_trace) L.push(`| ${t.agent_id} | ${t.role} | ${t.status} | ${t.http_status ?? "—"} | ${t.error_code ?? "—"} | ${t.violations.join(", ") || "—"} | ${t.output_finding_ids.join(", ") || "—"} |`);
+    for (const t of run.agent_trace) L.push(`| ${t.agent_id} | ${t.role} | ${t.status} | ${t.http_status ?? "—"} | ${t.stop_reason ?? "—"} | ${t.error_code ?? "—"} | ${t.violations.join(", ") || "—"} | ${t.output_finding_ids.join(", ") || "—"} |`);
     L.push("");
   }
   L.push("## Bulgular", "");
