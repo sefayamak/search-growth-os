@@ -11,7 +11,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { loadRegistry } from "../src/registry.ts";
 import { measureSite } from "../src/adapters/clarity.ts";
 import {
-  ANTHROPIC_KEY_ENV, ANTHROPIC_MODEL_ENV, MAX_API_CALLS, RUN_REQUIRED_KEYS, RUN_SCHEMA, TRACE_KEYS, evidenceFromRegistry, loadAgentProfiles, parseEvidenceBundle,
+  ANTHROPIC_KEY_ENV, ANTHROPIC_MODEL_ENV, MAX_API_CALLS, MAX_SPECIALISTS, OUTPUT_TOKEN_CAPS, STOP_REASONS, normalizeStopReason, RUN_REQUIRED_KEYS, RUN_SCHEMA, TRACE_KEYS, evidenceFromRegistry, loadAgentProfiles, parseEvidenceBundle,
   quarantineRun, runBrain, sealRun, validateBrainRun, type BrainRun, type EvidenceEnvelope, type FetchLike,
 } from "../src/brain/index.ts";
 
@@ -382,4 +382,69 @@ test("29) Brain artifact sozlesmeye uyar; ihlalde model metni artifact'e yazilma
   const cliSrc = read("src/cli.ts");
   assert.ok(cliSrc.indexOf("br.sealRun(produced") > 0 && cliSrc.indexOf("br.sealRun(produced") < cliSrc.indexOf("brain-run-${siteId}.json"), "artifact'ten once sealRun");
   assert.ok(!/JSON\.stringify\(produced/.test(cliSrc), "ham (muhurlenmemis) sonuc artifact'e yazilmaz");
+});
+
+// --- Phase 2C.1: model ciktisi kesilmesi (stop_reason=max_tokens) ------------------------------------------------------
+
+test("T1) stop_reason=end_turn + gecerli JSON -> normal gecerli cikti; trace stop_reason tasir (T9)", async () => {
+  const p = pipeline(fixture({ files: await goodFiles() }), { mode: "ok" });
+  const run = runJson(p);
+  assert.equal(run.status, "SUCCESS");
+  const t = run.agent_trace.find((x) => x.role === "specialist")!;
+  assert.equal(t.status, "OK");
+  assert.equal(t.stop_reason, "end_turn");
+  assert.ok((TRACE_KEYS as readonly string[]).includes("stop_reason"));
+  assert.deepEqual(validateBrainRun(run, { secrets: [KEY] }), []);
+});
+
+test("T2-T4, T10) max_tokens: kesik JSON da, parse edilebilir JSON da MODEL_OUTPUT_TRUNCATED; Chief/uyum/yeniden deneme yok; ham metin artifact'e girmez", async () => {
+  for (const [mode, secondary] of [["truncated-malformed", true], ["truncated-valid", false]] as const) {
+    const p = pipeline(fixture({ files: await goodFiles() }), { mode });
+    assert.equal(p.stages.brain.status, 1, mode);
+    const run = runJson(p);
+    assert.equal(run.status, "ERROR", mode);
+    assert.equal(run.status_reason, "NO_VALID_SPECIALIST_OUTPUT", mode);
+    assert.deepEqual(run.findings, [], `${mode}: uydurma bulgu yok`);
+    assert.deepEqual(run.agent_results, [], `${mode}: parse edilebilir JSON bile bulguya donusmez`);
+    const t = run.agent_trace[0];
+    assert.equal(t.status, "INVALID_OUTPUT", mode);
+    assert.equal(t.error_code, "MODEL_OUTPUT_TRUNCATED", mode);
+    assert.equal(t.stop_reason, "max_tokens", mode);
+    assert.equal(t.http_status, 200, mode);
+    assert.ok(t.violations.includes("MODEL_OUTPUT_TRUNCATED"), mode);
+    assert.equal(t.violations.includes("MALFORMED_JSON"), secondary, `${mode}: MALFORMED_JSON ikincil bilgi`);
+    assert.equal(p.calls.length, 1, `${mode}: Chief/uyum cagrilmaz, yeniden deneme yok`);
+    assert.equal(run.cost_guard.calls_used, 1, mode);
+    assert.equal(run.production_write, false, mode);
+    assert.ok(!allText(p.brainOut, p.dir).includes(RAW_MARK), `${mode}: ham tamamlama artifact/log'a girmez`);
+    assert.deepEqual(validateBrainRun(run, { secrets: [KEY] }), [], mode);
+  }
+});
+
+test("T11) bilinmeyen stop_reason guvenle UNKNOWN'a indirgenir ve cikti normal dogrulanir", async () => {
+  const p = pipeline(fixture({ files: await goodFiles() }), { mode: "unknown-stop" });
+  const run = runJson(p);
+  assert.equal(run.agent_trace[0].stop_reason, "UNKNOWN");
+  assert.ok(!allText(p.brainOut).includes("brand_new_reason"), "ham deger artifact'e girmez");
+  assert.deepEqual(validateBrainRun(run, { secrets: [KEY] }), []);
+  for (const [raw, want] of [["end_turn", "end_turn"], ["max_tokens", "max_tokens"], ["stop_sequence", "stop_sequence"], ["tool_use", "tool_use"], ["pause_turn", "pause_turn"], ["refusal", "refusal"], ["x", "UNKNOWN"], [undefined, "UNKNOWN"], [7, "UNKNOWN"], ["UNKNOWN", "UNKNOWN"]] as const) {
+    assert.equal(normalizeStopReason(raw), want, String(raw));
+  }
+});
+
+test("T5-T8) tavanlar: uzman 4000, Chief 3000, uyum 1500, 5 cagri, 3 uzman; cost-guard artifact'i yeni tavani gosterir", async () => {
+  assert.deepEqual({ ...OUTPUT_TOKEN_CAPS }, { specialist: 4000, chief: 3000, compliance: 1500 });
+  assert.equal(MAX_API_CALLS, 5);
+  assert.equal(MAX_SPECIALISTS, 3);
+  const p = pipeline(fixture({ files: await goodFiles() }), { mode: "ok" });
+  const g = JSON.parse(readFileSync(join(p.brainOut, "cost-guard-pamistanbul.json"), "utf8"));
+  assert.deepEqual(g.cost_guard.output_token_caps, { specialist: 4000, chief: 3000, compliance: 1500 });
+  assert.equal(g.cost_guard.estimated_cost_usd, "UNKNOWN");
+  assert.equal(p.calls.find((c) => c.role === "specialist")!.maxTokens, 4000, "istek max_tokens=4000 gonderir");
+});
+
+test("T-schema) brain-run semasi stop_reason'i tanir ve trace sabitleriyle ayni (drift)", () => {
+  const sch = JSON.parse(read("schemas/brain-run.schema.json"));
+  const e = sch.properties.agent_trace.items.properties.stop_reason.enum;
+  assert.deepEqual(e, [...STOP_REASONS, null]);
 });

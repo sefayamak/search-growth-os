@@ -577,7 +577,7 @@ async function main() {
       writeFileSync(join(outDir, `agent-trace-${siteId}.json`), JSON.stringify(run.agent_trace, null, 2) + "\n");
       writeFileSync(join(outDir, `cost-guard-${siteId}.json`), JSON.stringify({
         site_id: run.site_id, run_id: run.run_id, status: run.status, cost_guard: run.cost_guard,
-        per_agent_tokens: run.agent_trace.map((t) => ({ agent_id: t.agent_id, role: t.role, input_tokens: t.input_tokens, output_tokens: t.output_tokens })),
+        per_agent_tokens: run.agent_trace.map((t) => ({ agent_id: t.agent_id, role: t.role, stop_reason: t.stop_reason, input_tokens: t.input_tokens, output_tokens: t.output_tokens })),
       }, null, 2) + "\n");
       const mem = br.memoryEntriesFromRun(run);
       // Bellek ADAYLARI artifact klasorune yazilir (kalici degil). Kalici yazim yalniz acik --write-memory ile.

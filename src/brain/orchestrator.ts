@@ -13,7 +13,7 @@ import type { SiteEntry } from "../registry.ts";
 import { CallBudget, createAnthropicClient, type AnthropicClient, type AnthropicConfig, type FetchLike } from "./anthropic.ts";
 import { runtimeSystemPrompt, type AgentProfile, type AgentRole } from "./agent-loader.ts";
 import {
-  MAX_API_CALLS, MAX_SPECIALISTS, OUTPUT_TOKEN_CAPS, RUN_SCHEMA,
+  MAX_API_CALLS, MAX_SPECIALISTS, MODEL_OUTPUT_TRUNCATED, OUTPUT_TOKEN_CAPS, RUN_SCHEMA,
   type AgentConsidered, type AgentId, type AgentResult, type AgentTrace, type BrainConflict, type BrainFinding, type BrainRecommendation,
   type BrainRun, type ComplianceReview, type CostGuard, type EvidenceBundle, type EvidenceEnvelope, type FinalFinding, type RunStatus, type SpecialistId,
 } from "./contracts.ts";
@@ -115,7 +115,7 @@ export async function runBrain(opts: BrainOptions): Promise<BrainRun> {
     const profile = opts.profiles.get(agentId)!;
     const t: AgentTrace = {
       agent_id: agentId, role, started_at: startedAgent, completed_at: startedAgent, status: "SKIPPED", input_evidence_ids: inputIds, output_finding_ids: [],
-      error_code: null, violations: [], http_status: null, input_tokens: "UNKNOWN", output_tokens: "UNKNOWN", profile_sha256: profile.body_sha256,
+      error_code: null, violations: [], http_status: null, stop_reason: null, input_tokens: "UNKNOWN", output_tokens: "UNKNOWN", profile_sha256: profile.body_sha256,
     };
     trace.push(t);
     if (!budget.take()) { t.error_code = "BUDGET_EXHAUSTED"; t.status = "ERROR"; t.completed_at = now().toISOString(); return { t, parsed: null as unknown }; }
@@ -125,7 +125,14 @@ export async function runBrain(opts: BrainOptions): Promise<BrainRun> {
     t.http_status = res.http_status; t.input_tokens = res.input_tokens; t.output_tokens = res.output_tokens;
     inTokens = inTokens === "UNKNOWN" || res.input_tokens === "UNKNOWN" ? "UNKNOWN" : inTokens + res.input_tokens;
     outTokens = outTokens === "UNKNOWN" || res.output_tokens === "UNKNOWN" ? "UNKNOWN" : outTokens + res.output_tokens;
+    t.stop_reason = res.stop_reason;
     const parsed = parseAgentJson(res.text);
+    // HTTP 200 + max_tokens = kesik cikti. Cikti parse edilebilse bile kabul edilmez (yarim sentez sinyal degildir); yeniden deneme yok.
+    if (res.stop_reason === "max_tokens") {
+      t.status = "INVALID_OUTPUT"; t.error_code = MODEL_OUTPUT_TRUNCATED;
+      t.violations = parsed === null ? [MODEL_OUTPUT_TRUNCATED, "MALFORMED_JSON"] : [MODEL_OUTPUT_TRUNCATED];
+      return { t, parsed: null as unknown };
+    }
     if (parsed === null) { t.status = "INVALID_OUTPUT"; t.violations = ["MALFORMED_JSON"]; }
     return { t, parsed };
   };

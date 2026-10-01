@@ -63,7 +63,7 @@ node --experimental-strip-types src/cli.ts compliance <dosya>
 node --experimental-strip-types src/cli.ts import-health <snapshotDir>   # site-health snapshot DİZİNİ, yerel, ağ yok
 node --experimental-strip-types src/cli.ts inspect-index config/sites.yaml --site pamistanbul   # ÖRNEKLEM, tam coverage değil
 node --experimental-strip-types src/cli.ts brain-validate config/sites.yaml --site pamistanbul   # Cloud Brain, OFFLINE (API çağrısı yok); canlı koşu: brain-run + GitHub Actions
-npm test        # 360 doğrulama (2026-10-01)
+npm test        # 365 doğrulama (2026-10-01)
 npm run typecheck
 ```
 

@@ -1,6 +1,6 @@
 // Brain disa acilan yuzey.
 export * from "./contracts.ts";
-export { ANTHROPIC_KEY_ENV, ANTHROPIC_MODEL_ENV, ANTHROPIC_ENDPOINT, CallBudget, createAnthropicClient, loadAnthropicConfig, type AnthropicClient, type AnthropicConfig, type FetchLike } from "./anthropic.ts";
+export { ANTHROPIC_KEY_ENV, ANTHROPIC_MODEL_ENV, ANTHROPIC_ENDPOINT, CallBudget, createAnthropicClient, loadAnthropicConfig, normalizeStopReason, type AnthropicClient, type AnthropicConfig, type FetchLike } from "./anthropic.ts";
 export { loadAgentProfiles, runtimeSystemPrompt, type AgentProfile } from "./agent-loader.ts";
 export { compactPayload, containsSecret, evidenceFromClarity, evidenceFromRegistry, isUsable, makeEvidenceId, parseEvidenceBundle, validateEnvelope } from "./evidence.ts";
 export { routeAgents } from "./router.ts";

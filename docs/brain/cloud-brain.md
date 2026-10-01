@@ -73,7 +73,7 @@ Serileştirmede `<` kaçırıldığı için kanıt içinde blok sınırı taklit
 
 ## Maliyet koruması
 
-`max_specialists=3`, `max_calls=5`, çağrı başına çıktı token tavanı (uzman 2000 / Chief 3000 / uyum 1500), kanıt boyutu tavanı (`MAX_EVIDENCE_BYTES_PER_RUN=60000` bayt, kayıt başına 8000).
+`max_specialists=3`, `max_calls=5`, çağrı başına çıktı token tavanı (uzman 4000 / Chief 3000 / uyum 1500), kanıt boyutu tavanı (`MAX_EVIDENCE_BYTES_PER_RUN=60000` bayt, kayıt başına 8000).
 Büyük payload'lar deterministik olarak sıkıştırılır ve **işaretlenir** (`<alan>__truncated`); sığmayan paket reddedilir. İstemci hiç yeniden deneme yapmaz (429/5xx tek çağrıdır).
 `cost_guard` çağrı sayısını, bayt'ı ve API'nin kendi `usage` token'larını taşır; **dolar maliyeti `UNKNOWN`** (fiyat tarifesi burada bilinmiyor, tahmin yazılmaz).
 
@@ -166,3 +166,12 @@ Yerel kullanım: `brain-handoff config/sites.yaml --site pamistanbul --run-id <i
   secret/variable tanımlandıktan ve açık onaydan sonra yapılacak. Bu yüzden canlıda doğrulanmayanlar: modelin JSON sözleşmesine uyumu, `usage` alanı, gerçek gecikme ve çağrı sayısı (beklenen 2–3).
 - Kalıcı bulut belleği, schedule, GSC/GA4/index/crawl için artifact devri (yalnız Clarity var), PR açma.
 - Model çıktı kalitesi: sayı kuralı (başlık/özet/etkide yalnız kanıtta geçen sayılar) muhafazakârdır ve gerçek modelde fazla sert çıkabilir; ilk canlı pilot bunu ölçecek.
+
+## Phase 2C.1 — model çıktısı kesilmesi (canlı pilotun bulgusu)
+
+İlk canlı pilot (run 36845827563, pamistanbul) `search-performance-engineer` çağrısında HTTP 200 + `output_tokens=2000` (= o günkü uzman tavanı) döndü; sonuç `MALFORMED_JSON` → `NO_VALID_SPECIALIST_OUTPUT` oldu. İstemci `stop_reason`'ı okumadığı için kesilme izde görünmüyordu.
+
+- İstemci `stop_reason`'ı okur ve normalize eder (`end_turn|max_tokens|stop_sequence|tool_use|pause_turn|refusal`, aksi `UNKNOWN`); ham yanıt saklanmaz. İz alanı: `stop_reason` (yanıt alınmadıysa `null`).
+- `stop_reason=max_tokens` ise HTTP 200 olsa bile çıktı kabul edilmez: `status=INVALID_OUTPUT`, `error_code=MODEL_OUTPUT_TRUNCATED`, `violations` içinde `MODEL_OUTPUT_TRUNCATED` (parse de başarısızsa ikincil `MALFORMED_JSON`). Parse edilebilir yarım JSON da bulguya dönüşmez. Chief/uyum çağrılmaz, yeniden deneme yok.
+- Uzman çıktı tavanı 2000 → 4000. Chief 3000, uyum 1500, `max_calls=5`, `max_specialists=3` aynı. `estimated_cost_usd` `UNKNOWN`.
+- Bu düzeltme canlı Anthropic ile henüz doğrulanmadı.

@@ -58,7 +58,15 @@ export type SpecialistId = Exclude<AgentId, "chief-search-strategist" | "search-
 export const MAX_SPECIALISTS = 3;
 /** 3 uzman + 1 Chief + 1 uyum incelemesi. */
 export const MAX_API_CALLS = 5;
-export const OUTPUT_TOKEN_CAPS = { specialist: 2000, chief: 3000, compliance: 1500 } as const;
+// Uzman tavani canli pilotta (run 36845827563) 2000 token'da kesildi (stop_reason=max_tokens -> MALFORMED_JSON); 4000'e cikarildi.
+// Chief ve uyum tavanlari, cagri sayisi ve uzman sayisi degismedi.
+export const OUTPUT_TOKEN_CAPS = { specialist: 4000, chief: 3000, compliance: 1500 } as const;
+
+/** Anthropic'in bildirdigi durma nedeni. Bilinmeyen/eksik deger "UNKNOWN"a indirgenir; ham yanit saklanmaz. */
+export const STOP_REASONS = ["end_turn", "max_tokens", "stop_sequence", "tool_use", "pause_turn", "refusal", "UNKNOWN"] as const;
+export type StopReason = (typeof STOP_REASONS)[number];
+/** Model ciktisi token tavaninda kesildi: HTTP 200 olsa bile gecerli tamamlama sayilmaz. */
+export const MODEL_OUTPUT_TRUNCATED = "MODEL_OUTPUT_TRUNCATED";
 /** Modele giden sikistirilmis kanit paketinin ust siniri (serilestirilmis bayt). */
 export const MAX_EVIDENCE_BYTES_PER_RUN = 60_000;
 /** Tek bir kanit kaydinin sikistirma sonrasi ust siniri. */
@@ -161,6 +169,8 @@ export interface AgentTrace {
   /** Reddedilen cikti icin ihlal kodlari (metin icermez). */
   violations: string[];
   http_status: number | null;
+  /** Yanit alinmadiysa null; alindiysa normalize edilmis durma nedeni. */
+  stop_reason: StopReason | null;
   input_tokens: number | "UNKNOWN";
   output_tokens: number | "UNKNOWN";
   /** Yuklenen profil govdesinin sha256'si: hangi talimatla kosuldugunun izi, talimatin kendisi degil. */

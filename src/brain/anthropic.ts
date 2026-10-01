@@ -8,6 +8,8 @@
 // retry butceyi gorunmez sekilde ikiye katlardi. Uc nokta koda gomulu (anahtari baska sunucuya
 // yonlendirme yolu olmasin). Anahtar yalniz `x-api-key` basligina girer; hata metnine, rapora,
 // artifact'e, CLI argumanina girmez ve cikan her metin redact edilir.
+import { STOP_REASONS, type StopReason } from "./contracts.ts";
+
 export const ANTHROPIC_KEY_ENV = "SEARCH_GROWTH_ANTHROPIC_API_KEY";
 export const ANTHROPIC_MODEL_ENV = "SEARCH_GROWTH_ANTHROPIC_MODEL";
 export const ANTHROPIC_ENDPOINT = "https://api.anthropic.com/v1/messages";
@@ -32,8 +34,12 @@ export type FetchLike = (url: string, init: { method: string; headers: Record<st
 
 export interface CompleteRequest { system: string; user: string; maxTokens: number }
 export type CompleteResult =
-  | { ok: true; text: string; http_status: number; input_tokens: number | "UNKNOWN"; output_tokens: number | "UNKNOWN" }
+  | { ok: true; text: string; http_status: number; stop_reason: StopReason; input_tokens: number | "UNKNOWN"; output_tokens: number | "UNKNOWN" }
   | { ok: false; error_code: "UNAUTHORIZED" | "FORBIDDEN" | "RATE_LIMITED" | "HTTP_ERROR" | "SERVER_ERROR" | "INVALID_RESPONSE" | "TIMEOUT" | "NETWORK_ERROR" | "REFUSED_OR_EMPTY"; http_status: number | null };
+
+export function normalizeStopReason(v: unknown): StopReason {
+  return typeof v === "string" && (STOP_REASONS as readonly string[]).includes(v) && v !== "UNKNOWN" ? (v as StopReason) : "UNKNOWN";
+}
 
 export interface AnthropicClient { complete(req: CompleteRequest): Promise<CompleteResult> }
 
@@ -63,13 +69,13 @@ export function createAnthropicClient(cfg: Extract<AnthropicConfig, { state: "CO
           return { ok: false, error_code: (e as Error)?.name === "AbortError" ? "TIMEOUT" : "NETWORK_ERROR", http_status: null };
         }
         if (res.status !== 200) return { ok: false, error_code: codeFor(res.status), http_status: res.status };
-        let body: { content?: { type?: string; text?: string }[]; usage?: { input_tokens?: unknown; output_tokens?: unknown } };
+        let body: { content?: { type?: string; text?: string }[]; stop_reason?: unknown; usage?: { input_tokens?: unknown; output_tokens?: unknown } };
         try { body = JSON.parse(await res.text()); } catch { return { ok: false, error_code: "INVALID_RESPONSE", http_status: 200 }; }
         if (!body || !Array.isArray(body.content)) return { ok: false, error_code: "INVALID_RESPONSE", http_status: 200 };
         const text = body.content.filter((c) => c?.type === "text" && typeof c.text === "string").map((c) => c.text).join("");
         if (!text.trim()) return { ok: false, error_code: "REFUSED_OR_EMPTY", http_status: 200 };
         const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : "UNKNOWN" as const);
-        return { ok: true, text, http_status: 200, input_tokens: n(body.usage?.input_tokens), output_tokens: n(body.usage?.output_tokens) };
+        return { ok: true, text, http_status: 200, stop_reason: normalizeStopReason(body.stop_reason), input_tokens: n(body.usage?.input_tokens), output_tokens: n(body.usage?.output_tokens) };
       } finally { clearTimeout(timer); }
     },
   };
