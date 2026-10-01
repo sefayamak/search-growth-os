@@ -109,6 +109,9 @@ jobs:
         env:
           SITE: ${{ inputs.site }}
         run: |
+          # Guvenli iz ozeti (status/error_code/violations/violation_details/stop_reason/token): ham tamamlama, istem, anahtar YOK.
+          TRACE_MD=$(node --experimental-strip-types src/cli.ts brain-trace-summary "brain-out/agent-trace-${SITE}.json" 2>/dev/null || echo "agent-trace ozeti uretilemedi.")
+          echo "$TRACE_MD"
           {
             echo "## Brain kanit devri ve kosu"
             echo '```'
@@ -117,6 +120,8 @@ jobs:
             cat brain-out/brain-run.txt 2>/dev/null || echo "brain-run calismadi."
             cat "brain-out/cost-guard-${SITE}.json" 2>/dev/null || true
             echo '```'
+            echo
+            echo "$TRACE_MD"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Artifact (kanit devri)

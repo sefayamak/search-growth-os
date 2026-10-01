@@ -216,8 +216,9 @@ test("13-17, 21) gecersiz model ciktisi reddedilir; uydurma bulgu yok; ham tamam
   const cases: [string, string, string[]][] = [
     ["malformed", "MALFORMED_JSON", [RAW_MARK, "sk-ant-LEAKLEAKLEAK"]],
     ["unknown-id", "UNKNOWN_EVIDENCE_ID", ["ev-uydurma-0001"]],
-    ["invented-number", "UNSUPPORTED_NUMBER", ["4711"]],
-    ["foreign-site", "FOREIGN_SITE_FINDING", ["spryhand"]],
+    // Phase 2C.4: reddedilen DEGER artik violation_details.observed icinde (sinirli) gorunur; cumlenin/bulgunun kendisi girmez.
+    ["invented-number", "UNSUPPORTED_NUMBER", ["Oturum sayisi", "olarak gorunuyor"]],
+    ["foreign-site", "FOREIGN_SITE_FINDING", ["Davranis kaniti incelendi", "Clarity kaniti davranis sinyali"]],
     ["editorial", "EDITORIAL_LABEL", []],
   ];
   for (const [mode, code, forbidden] of cases) {
@@ -233,6 +234,10 @@ test("13-17, 21) gecersiz model ciktisi reddedilir; uydurma bulgu yok; ham tamam
     const everything = allText(p.brainOut) + p.stages.brain.stdout + p.stages.brain.stderr;
     for (const f of forbidden) assert.ok(!everything.includes(f), `${mode}: '${f}' artifact/log'a girmemeli`);
     assert.deepEqual(validateBrainRun(run, { secrets: [KEY] }), [], mode);
+    const det = run.agent_trace[0].violation_details;
+    if (mode === "invented-number") assert.deepEqual(det.map((d) => [d.code, d.path, d.observed]), [["UNSUPPORTED_NUMBER", "$.findings[0].summary", "4711"]]);
+    if (mode === "foreign-site") assert.deepEqual(det.map((d) => [d.code, d.path, d.expected, d.observed]), [["FOREIGN_SITE_FINDING", "$.findings[0].site_id", "pamistanbul", "spryhand"]]);
+    if (mode === "malformed" || mode === "unknown-id" || mode === "editorial") assert.deepEqual(det, [], `${mode}: ayrinti yok`);
   }
   // Chief gecersizse run SUCCESS gibi gosterilmez
   const c = pipeline(fixture({ files: await goodFiles() }), { mode: "chief-malformed" });

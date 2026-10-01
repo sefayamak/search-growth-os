@@ -5,7 +5,8 @@
 // dogrulanmis cikti olabilir, izlerde istem/yanit govdesi bulunamaz, sir sizamaz ve sayaçlar
 // sert sinirlari asamaz. Ihlal varsa bulgu/sonuc ARTIFACT'e yazilmaz (quarantineRun).
 import {
-  ACTIONABILITY, CANONICAL_AGENTS, CONFIDENCES, EVIDENCE_LABELS, MAX_API_CALLS, MAX_SPECIALISTS, RUN_SCHEMA, RUN_STATUSES, type BrainRun,
+  ACTIONABILITY, CANONICAL_AGENTS, CONFIDENCES, EVIDENCE_LABELS, MAX_API_CALLS, MAX_DETAIL_EVIDENCE_IDS, MAX_DETAIL_OBSERVED_CHARS, MAX_DETAIL_PATH_CHARS, MAX_SPECIALISTS,
+  MAX_VIOLATION_DETAILS, RUN_SCHEMA, RUN_STATUSES, VIOLATION_DETAIL_KEYS, type BrainRun,
 } from "./contracts.ts";
 import { containsSecret } from "./evidence.ts";
 
@@ -16,11 +17,24 @@ export const RUN_REQUIRED_KEYS = [
 
 /** Izde YALNIZ bu alanlar bulunabilir: istem govdesi, yanit govdesi, ham tamamlama icin yer yok. */
 export const TRACE_KEYS = [
-  "agent_id", "role", "started_at", "completed_at", "status", "input_evidence_ids", "output_finding_ids", "error_code", "violations", "http_status", "stop_reason", "input_tokens", "output_tokens", "profile_sha256",
+  "agent_id", "role", "started_at", "completed_at", "status", "input_evidence_ids", "output_finding_ids", "error_code", "violations", "violation_details", "http_status", "stop_reason", "input_tokens", "output_tokens", "profile_sha256",
 ] as const;
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 const oneOf = (v: unknown, list: readonly string[]) => typeof v === "string" && list.includes(v);
+
+/** violation_details sinirli ve yalniz izinli alanlari tasir (eski izlerde alan yoksa da gecerli). */
+function detailsOk(d: unknown): boolean {
+  if (d === undefined) return true;
+  if (!Array.isArray(d) || d.length > MAX_VIOLATION_DETAILS) return false;
+  return d.every((x) => {
+    if (!isObj(x) || Object.keys(x).some((k) => !(VIOLATION_DETAIL_KEYS as readonly string[]).includes(k))) return false;
+    if (typeof x.code !== "string" || typeof x.path !== "string" || x.path.length > MAX_DETAIL_PATH_CHARS) return false;
+    for (const k of ["expected", "observed"] as const) if (x[k] !== undefined && (typeof x[k] !== "string" || (x[k] as string).length > MAX_DETAIL_OBSERVED_CHARS)) return false;
+    if (x.evidence_ids_checked !== undefined && (!Array.isArray(x.evidence_ids_checked) || x.evidence_ids_checked.length > MAX_DETAIL_EVIDENCE_IDS || !x.evidence_ids_checked.every((i) => typeof i === "string"))) return false;
+    return true;
+  });
+}
 
 /** Ihlal KODLARI doner (icerik/sir icermez). Bos liste = sozlesmeye uygun. */
 export function validateBrainRun(run: unknown, opts: { secrets?: readonly string[] } = {}): string[] {
@@ -64,6 +78,7 @@ export function validateBrainRun(run: unknown, opts: { secrets?: readonly string
     if (Object.keys(t).some((k) => !(TRACE_KEYS as readonly string[]).includes(k))) v.add("TRACE_UNKNOWN_KEY");
     if (!oneOf(t.agent_id, CANONICAL_AGENTS)) v.add("BAD_TRACE");
     if (!oneOf(t.status, ["OK", "INVALID_OUTPUT", "ERROR", "SKIPPED"])) v.add("BAD_TRACE_STATUS");
+    if (!detailsOk(t.violation_details)) v.add("BAD_VIOLATION_DETAILS");
   }
 
   const g = run.cost_guard;
@@ -90,7 +105,7 @@ export function quarantineRun(run: BrainRun, codes: readonly string[]): BrainRun
   return {
     ...run, status: "ERROR", status_reason: `RUN_CONTRACT_VIOLATION: ${codes.join(",").slice(0, 300)}`,
     agent_results: [], findings: [], recommendations: [], unknowns: [], conflicts: [],
-    agent_trace: run.agent_trace.map((t) => Object.fromEntries(Object.entries(t).filter(([k]) => (TRACE_KEYS as readonly string[]).includes(k))) as unknown as BrainRun["agent_trace"][number]),
+    agent_trace: run.agent_trace.map((t) => Object.fromEntries(Object.entries(t).filter(([k]) => (TRACE_KEYS as readonly string[]).includes(k) && k !== "violation_details")) as unknown as BrainRun["agent_trace"][number]),
   };
 }
 

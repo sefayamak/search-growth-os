@@ -5,8 +5,8 @@
 // Ihlaller yalniz KOD olarak doner (metin/kanit/sir icermez): izler ve artifact bu kodlari tasir.
 import {
   ACTIONABILITY, AGENT_RESULT_SCHEMA, CONFIDENCES, EVIDENCE_LABELS, FINDING_ID_RE, MAX_FINDINGS_PER_SPECIALIST, MAX_SPECIALIST_CONFLICTS,
-  MAX_SPECIALIST_UNKNOWNS, SPECIALIST_CONFLICT_CHARS, SPECIALIST_FIELD_LIMITS, SPECIALIST_UNKNOWN_CHARS,
-  type AgentId, type AgentResult, type BrainFinding, type ComplianceReview, type ComplianceVerdict, type EvidenceEnvelope,
+  MAX_DETAIL_EVIDENCE_IDS, MAX_DETAIL_OBSERVED_CHARS, MAX_DETAIL_PATH_CHARS, MAX_SPECIALIST_UNKNOWNS, MAX_VIOLATION_DETAILS, SPECIALIST_CONFLICT_CHARS, SPECIALIST_FIELD_LIMITS, SPECIALIST_UNKNOWN_CHARS,
+  type AgentId, type AgentResult, type ViolationDetail, type BrainFinding, type ComplianceReview, type ComplianceVerdict, type EvidenceEnvelope,
 } from "./contracts.ts";
 import { containsSecret, isUsable } from "./evidence.ts";
 
@@ -76,29 +76,59 @@ export interface ValidationContext {
   /** "specialist": Phase 2C.2 kisa-cikti limitleri (en fazla 5 bulgu, alan uzunluklari, unknowns/conflicts <= 5). Verilmezse (Chief) eski genis sinirlar. */
   role?: "specialist" | "chief";
 }
-export interface ValidationOutcome<T> { ok: boolean; violations: string[]; result?: T }
+export interface ValidationOutcome<T> { ok: boolean; violations: string[]; result?: T; details?: ViolationDetail[] }
+
+// --- tani ayrintisi (Phase 2C.4): validator ANLAMI degismez, yalniz neyin reddedildigi sinirli bicimde kaydedilir ------------
+const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+/** Modelin urettigi degeri guvenli, sinirli metne cevirir: kontrol karakteri yok, sir yok, en fazla 120 karakter. */
+export function describeObserved(v: unknown, secrets?: readonly string[]): string {
+  if (v === undefined) return "<missing>";
+  if (v === null) return "<null>";
+  if (typeof v !== "string") return Array.isArray(v) ? "<array>" : `<${typeof v}>`;
+  const flat = v.replace(/[\u0000-\u001f\u007f]+/g, " ");
+  return containsSecret(flat, secrets) ? "[REDACTED_SECRET]" : clip(flat, MAX_DETAIL_OBSERVED_CHARS);
+}
+class DetailSink {
+  readonly list: ViolationDetail[] = [];
+  add(d: ViolationDetail) {
+    if (this.list.length >= MAX_VIOLATION_DETAILS) return;
+    const out: ViolationDetail = { code: d.code, path: clip(d.path, MAX_DETAIL_PATH_CHARS) };
+    if (d.expected !== undefined) out.expected = clip(d.expected, MAX_DETAIL_OBSERVED_CHARS);
+    if (d.observed !== undefined) out.observed = d.observed;
+    if (d.evidence_ids_checked) out.evidence_ids_checked = d.evidence_ids_checked.slice(0, MAX_DETAIL_EVIDENCE_IDS);
+    if (d.reason !== undefined) out.reason = clip(d.reason, 60);
+    if (d.corpus_size !== undefined) out.corpus_size = d.corpus_size;
+    this.list.push(out);
+  }
+}
 
 const isStr = (v: unknown): v is string => typeof v === "string";
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 
 export function validateFindingsResult(raw: unknown, ctx: ValidationContext): ValidationOutcome<AgentResult> {
   const v = new Set<string>();
-  if (!isObj(raw)) return { ok: false, violations: ["BAD_SHAPE"] };
-  if (raw.schema !== AGENT_RESULT_SCHEMA) v.add("BAD_SCHEMA");
-  if (raw.agent_id !== ctx.agentId) v.add("WRONG_AGENT_ID");
-  if (raw.site_id !== ctx.siteId) v.add("WRONG_SITE");
-  if (!Array.isArray(raw.findings) || !Array.isArray(raw.unknowns) || !Array.isArray(raw.conflicts)) return { ok: false, violations: [...v, "BAD_SHAPE"] };
+  const dt = new DetailSink();
+  const fail = (): ValidationOutcome<AgentResult> => ({ ok: false, violations: [...v].sort(), details: dt.list });
+  if (!isObj(raw)) return { ok: false, violations: ["BAD_SHAPE"], details: [] };
+  if (raw.schema !== AGENT_RESULT_SCHEMA) { v.add("BAD_SCHEMA"); dt.add({ code: "BAD_SCHEMA", path: "$.schema", expected: AGENT_RESULT_SCHEMA, observed: describeObserved(raw.schema, ctx.secrets) }); }
+  if (raw.agent_id !== ctx.agentId) { v.add("WRONG_AGENT_ID"); dt.add({ code: "WRONG_AGENT_ID", path: "$.agent_id", expected: ctx.agentId, observed: describeObserved(raw.agent_id, ctx.secrets) }); }
+  if (raw.site_id !== ctx.siteId) { v.add("WRONG_SITE"); dt.add({ code: "WRONG_SITE", path: "$.site_id", expected: ctx.siteId, observed: describeObserved(raw.site_id, ctx.secrets) }); }
+  if (!Array.isArray(raw.findings) || !Array.isArray(raw.unknowns) || !Array.isArray(raw.conflicts)) { v.add("BAD_SHAPE"); return fail(); }
   const spec = ctx.role === "specialist";
   if (raw.findings.length > (spec ? MAX_FINDINGS_PER_SPECIALIST : MAX_FINDINGS)) v.add("TOO_MANY_FINDINGS");
 
   const findings: BrainFinding[] = [];
   const ids = new Set<string>();
-  for (const f of raw.findings.slice(0, MAX_FINDINGS)) {
+  for (const [fi, f] of raw.findings.slice(0, MAX_FINDINGS).entries()) {
     if (!isObj(f)) { v.add("BAD_SHAPE"); continue; }
     if (!isStr(f.finding_id) || !FINDING_ID_RE.test(f.finding_id)) v.add("INVALID_FINDING_ID");
     else if (ids.has(f.finding_id)) v.add("DUPLICATE_FINDING_ID");
     else ids.add(f.finding_id);
-    if (f.site_id !== ctx.siteId) v.add(isStr(f.site_id) && f.site_id !== ctx.siteId ? "FOREIGN_SITE_FINDING" : "WRONG_SITE");
+    if (f.site_id !== ctx.siteId) {
+      const code = isStr(f.site_id) && f.site_id !== ctx.siteId ? "FOREIGN_SITE_FINDING" : "WRONG_SITE";
+      v.add(code);
+      dt.add({ code, path: `$.findings[${fi}].site_id`, expected: ctx.siteId, observed: describeObserved(f.site_id, ctx.secrets) });
+    }
     for (const k of TEXT_FIELDS) {
       if (!isStr(f[k]) || !f[k].trim()) v.add("EMPTY_FIELD");
       else if (f[k].length > (spec ? SPECIALIST_FIELD_LIMITS[k] : MAX_FIELD)) v.add("FIELD_TOO_LONG");
@@ -129,7 +159,14 @@ export function validateFindingsResult(raw: unknown, ctx: ValidationContext): Va
     // Kanitta olmayan sayi uretme.
     if (cited.length) {
       const corpus = numberCorpus(cited);
-      for (const k of CLAIM_FIELDS) if (isStr(f[k]) && numbersIn(f[k] as string).some((n) => !numberSupported(n, corpus))) v.add("UNSUPPORTED_NUMBER");
+      for (const k of CLAIM_FIELDS) {
+        if (!isStr(f[k])) continue;
+        for (const n of numbersIn(f[k] as string)) {
+          if (numberSupported(n, corpus)) continue;
+          v.add("UNSUPPORTED_NUMBER");
+          dt.add({ code: "UNSUPPORTED_NUMBER", path: `$.findings[${fi}].${k}`, observed: n, evidence_ids_checked: cited.map((e) => e.evidence_id), reason: "NOT_IN_CITED_EVIDENCE", corpus_size: corpus.size });
+        }
+      }
     }
 
     for (const k of TEXT_FIELDS) {
@@ -154,9 +191,9 @@ export function validateFindingsResult(raw: unknown, ctx: ValidationContext): Va
     if (containsSecret(c.description, ctx.secrets)) v.add("SECRET_IN_OUTPUT");
   }
 
-  if (v.size) return { ok: false, violations: [...v].sort() };
+  if (v.size) return fail();
   return {
-    ok: true, violations: [],
+    ok: true, violations: [], details: [],
     result: { schema: AGENT_RESULT_SCHEMA, agent_id: ctx.agentId, site_id: ctx.siteId, findings, unknowns: unknowns as string[], conflicts: conflicts as AgentResult["conflicts"] },
   };
 }
@@ -165,9 +202,10 @@ export function validateComplianceResult(raw: unknown, ctx: { siteId: string; fi
   const v = new Set<string>();
   if (!isObj(raw)) return { ok: false, violations: ["BAD_SHAPE"] };
   if (raw.schema !== AGENT_RESULT_SCHEMA) v.add("BAD_SCHEMA");
+  const dt = new DetailSink();
   if (raw.agent_id !== "search-policy-compliance-officer") v.add("WRONG_AGENT_ID");
-  if (raw.site_id !== ctx.siteId) v.add("WRONG_SITE");
-  if (!Array.isArray(raw.reviews)) return { ok: false, violations: [...v, "BAD_SHAPE"] };
+  if (raw.site_id !== ctx.siteId) { v.add("WRONG_SITE"); dt.add({ code: "WRONG_SITE", path: "$.site_id", expected: ctx.siteId, observed: describeObserved(raw.site_id, ctx.secrets) }); }
+  if (!Array.isArray(raw.reviews)) return { ok: false, violations: [...v, "BAD_SHAPE"], details: dt.list };
   const out: ComplianceReview[] = [];
   const seen = new Set<string>();
   for (const r of raw.reviews) {
@@ -180,6 +218,6 @@ export function validateComplianceResult(raw: unknown, ctx: { siteId: string; fi
     if (containsSecret(r.reason, ctx.secrets)) v.add("SECRET_IN_OUTPUT");
     out.push({ finding_id: r.finding_id, verdict: r.verdict as ComplianceVerdict, reason: r.reason, reviewed_by: "search-policy-compliance-officer" });
   }
-  if (v.size) return { ok: false, violations: [...v].sort() };
-  return { ok: true, violations: [], result: out };
+  if (v.size) return { ok: false, violations: [...v].sort(), details: dt.list };
+  return { ok: true, violations: [], details: [], result: out };
 }
