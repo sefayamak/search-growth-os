@@ -73,7 +73,7 @@ Serileştirmede `<` kaçırıldığı için kanıt içinde blok sınırı taklit
 
 ## Maliyet koruması
 
-`max_specialists=3`, `max_calls=5`, çağrı başına çıktı token tavanı (uzman 6000 / Chief 3000 / uyum 1500), kanıt boyutu tavanı (`MAX_EVIDENCE_BYTES_PER_RUN=60000` bayt, kayıt başına 8000).
+`max_specialists=3`, `max_calls=5`, çağrı başına çıktı token tavanı (uzman 6000 / Chief 5000 / uyum 1500), kanıt boyutu tavanı (`MAX_EVIDENCE_BYTES_PER_RUN=60000` bayt, kayıt başına 8000).
 Büyük payload'lar deterministik olarak sıkıştırılır ve **işaretlenir** (`<alan>__truncated`); sığmayan paket reddedilir. İstemci hiç yeniden deneme yapmaz (429/5xx tek çağrıdır).
 `cost_guard` çağrı sayısını, bayt'ı ve API'nin kendi `usage` token'larını taşır; **dolar maliyeti `UNKNOWN`** (fiyat tarifesi burada bilinmiyor, tahmin yazılmaz).
 
@@ -230,3 +230,39 @@ Pilot 5 (run 36852517399; `Ozet` logundaki `violation_details` ile doğrulandı)
 - Uzman ve Chief istemlerinde (bulgu listesi üreten roller) yeni `FINDING REQUIRED FIELDS` bloğu: zorunlu alanlar tek listede (`site_id` ilk, `FINDING_REQUIRED_FIELDS`: `brain-agent-result.schema.json` ile aynı, test ile kilitli), "her bulgu `"site_id": "<id>"` içermek ZORUNDA, üst düzeyde de olsa", "kısalık için tekrarlanan zorunlu alanı atlama", kanıttan türetme / domain-marka yerine koyma yasağı. Bulgu şablonunda `site_id` ilk alan.
 - Phase 2C.2 kısalık kuralları ("concise", "tekrar etme") artık açıkça yalnız serbest metin içindir; zorunlu şema alanlarına uygulanmaz.
 - Bu düzeltme canlı Anthropic ile henüz doğrulanmadı.
+
+## Phase 2C FINAL — Chief + uyum runtime stabilizasyonu ve kapanış
+
+### Canlı pilot 6 (run 36860277917) — zincirin ilk gerçek ilerleyişi
+| Ajan | status | stop_reason | in / out token | not |
+|---|---|---|---|---|
+| uzman (`search-performance-engineer`) | `OK` | `end_turn` | 6908 / 3499 | ihlal yok; bulgu düzeyi `site_id` dahil site sözleşmesi geçti |
+| Chief | `INVALID_OUTPUT` / `MODEL_OUTPUT_TRUNCATED` | `max_tokens` | 9811 / 3000 | tavan 3000'de kesildi |
+| uyum | çağrılmadı | — | — | Chief geçerli çıktı vermedi |
+
+Sonuç `PARTIAL / CHIEF_OUTPUT_UNAVAILABLE`, 2/5 çağrı. Uzman dondurulmuştur (istem, 6000 tavanı, doğrulayıcı, bulgu/alan limitleri değişmedi).
+
+### Chief nihai sözleşmesi
+- Tavan 3000 → **5000**. En fazla **5** nihai bulgu; alan sınırları (karakter): title 120, category 60, summary 500, impact 300, recommended_action 300, verification_plan 300, risk 120; `unknowns` ≤ 3 (≤150), `conflicts` ≤ 2 (açıklama ≤200). Gerçek zorunlu alanların tümü (`FINDING_REQUIRED_FIELDS`), `site_id` tam kanonik id. Aşan çıktı `INVALID_OUTPUT`; sessiz kesme yok.
+- Chief istemi: yalnız JSON, anlatı/yöntem/düşünce zinciri yok, örtüşen bulguları birleştir, kanıtı/uzman metnini tekrar etme, zorunlu alanlar kısalık için atlanamaz.
+- unknowns/conflicts bilinçli dar: 5 bulgu alan tavanlarında + en fazla unknowns/conflicts çıktısı (en kötü durum) 5000 token tavanına **2.5 karakter/token** varsayımıyla sığar (testle kilitli). Karakter/token oranı **ölçülmedi** (artifact içeriği okunamadı); bu varsayım canlı pilotta doğrulanacak.
+
+### Uyum sözleşmesi (henüz canlıda çağrılmadı) ve 1500 tavanı gerekçesi
+- Uyum bulguları yeniden yazmaz: gönderilen **her** bulgu için tam bir `{finding_id, verdict, reason}`; en fazla 5 inceleme (= Chief bulgu tavanı); `reason` ≤ 300 karakter (eskiden 600).
+- Doğrulayıcı sonucu şu durumlarda **bütünüyle** reddeder: eksik inceleme (`MISSING_REVIEW`), fazla inceleme (`TOO_MANY_REVIEWS`), yinelenen/bilinmeyen/yabancı `finding_id`, geçersiz karar, uzun gerekçe, yanlış site/ajan, sır, `max_tokens`, bozuk JSON. Reddedilen uyum sonucu bulguyu asla "uyumlu" yapmaz: `compliance=null`, `execution_candidate=false`, run `PARTIAL / COMPLIANCE_REVIEW_UNAVAILABLE`.
+- **Tavan hesabı:** en kötü geçerli çıktı = 5 inceleme × (64 karakterlik id + `REJECT` + 300 karakterlik gerekçe) = **2186 karakter**. Karamsar 2 karakter/token ile **1093 token**, 3 karakter/token ile 729 token; tavan 1500 → yeterli, bu yüzden **artırılmadı** (keyfi artış yok). Eski `reason ≤ 600` sınırında en kötü durum 3686 karakter = 1843 token (karamsar oranda tavanı aşardı): sorun tavanda değil, sınırsız gerekçeydi; çözüm sınırdır. Test her iki rakamı kilitler.
+
+### Girdi şişmesi incelemesi (ölçüm; kod değişmedi)
+- Chief girdisi = sistem istemi (~7076 karakter) + `EVIDENCE_DATA_BLOCK` içinde `{evidence, specialist_results}`. Kanıt (8933 bayt) **bir kez**, uzman sonucu **bir kez** gönderilir; uzman bulguları kanıtı kimlikle (`evidence_ids`) atıf yapar, metni tekrarlamaz. Canlı 9811 token ≈ sistem + kanıt + uzman çıktısı (3499 token); fark uzman çıktısının kendisidir. Deterministik yinelenme **yok** → değiştirilmedi. Kanıtı Chief'ten çıkarmak sayı kuralı/etiket doğrulamasını ve kimlik izolasyonunu zayıflatırdı.
+- Uyum girdisi = sistem istemi (~3848 karakter) + yalnız öneri alanları (`finding_id, title, category, recommended_action, risk, actionability`; en kötü ~4003 karakter). Kanıt gönderilmez, yinelenme yok → değiştirilmedi.
+
+### Fail-closed matrisi (testle kilitli)
+| Durum | Sonuç |
+|---|---|
+| tüm roller `stop_reason=max_tokens` | `MODEL_OUTPUT_TRUNCATED` → `INVALID_OUTPUT`, yeniden deneme yok; kesik veya ayrıştırılabilir yarım çıktıdan bulgu üretilmez |
+| uzman OK → Chief geçersiz/kesik | `PARTIAL / CHIEF_OUTPUT_UNAVAILABLE`, uyum **çağrılmaz**, bulgu yok |
+| uzman OK → Chief OK → uyum geçersiz/kesik | `PARTIAL / COMPLIANCE_REVIEW_UNAVAILABLE`, bulgular çalıştırılamaz (`execution_candidate=false`) |
+| tam zincir OK | `SUCCESS`, aday yalnız `DRAFT_PR_CANDIDATE` + uyum `PASS` |
+| her durumda | `production_write=false`, ≤5 çağrı, ≤3 uzman, ham tamamlama/istem/sır izde ve artifact'te yok |
+
+Bu PR'dan sonra Phase 2C kapsamı: CI yeşil → merge → tek final canlı pilot → kapanış.

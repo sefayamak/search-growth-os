@@ -60,13 +60,28 @@ export const MAX_SPECIALISTS = 3;
 export const MAX_API_CALLS = 5;
 // Uzman tavani iki canli pilotta kesildi: 2000/2000 (MALFORMED_JSON) ve 4000/4000 (stop_reason=max_tokens, MODEL_OUTPUT_TRUNCATED).
 // Phase 2C.2 = daha fazla token (6000) + SINIRLI cikti (asagidaki uzman limitleri). Chief ve uyum tavanlari, cagri sayisi ve uzman sayisi degismedi.
-export const OUTPUT_TOKEN_CAPS = { specialist: 6000, chief: 3000, compliance: 1500 } as const;
+export const OUTPUT_TOKEN_CAPS = { specialist: 6000, chief: 5000, compliance: 1500 } as const;
 
 /** Uzman ciktisinin deterministik ust sinirlari. Asan cikti INVALID_OUTPUT'tur; sessiz kesme YOK. Chief bu limitlere tabi degildir. */
 export const MAX_FINDINGS_PER_SPECIALIST = 5;
 export const SPECIALIST_FIELD_LIMITS = { title: 120, summary: 500, impact: 300, recommended_action: 300, verification_plan: 300, risk: 120, category: 60 } as const;
 export const MAX_SPECIALIST_UNKNOWNS = 5;
 export const MAX_SPECIALIST_CONFLICTS = 5;
+
+/** Chief nihai sentezi (Phase 2C final): canli pilot 6'da Chief 3000 tokenda kesildi (stop_reason=max_tokens). Tavan 5000 + SINIRLI cikti.
+ *  Alan sinirlari uzmanla ayni sayilardir ama bagimsiz sabitlerdir (uzman donduruldu). Asan cikti INVALID_OUTPUT; sessiz kesme YOK. */
+export const MAX_CHIEF_FINDINGS = 5;
+export const CHIEF_FIELD_LIMITS = { title: 120, summary: 500, impact: 300, recommended_action: 300, verification_plan: 300, risk: 120, category: 60 } as const;
+// unknowns/conflicts bilincli dar tutulur: 5 bulgu alan tavanlarinda iken en kotu durum cikti 5000 token tavanina sigsin (bkz. docs, testle kilitli).
+export const MAX_CHIEF_UNKNOWNS = 3;
+export const MAX_CHIEF_CONFLICTS = 2;
+export const CHIEF_UNKNOWN_CHARS = 150;
+export const CHIEF_CONFLICT_CHARS = 200;
+
+/** Uyum incelemesi KISA karardir (bulgulari yeniden yazmaz): en fazla 5 inceleme (= Chief bulgu tavani), gerekce <= 300 karakter.
+ *  1500 token tavani bu sinirlarla yeterlidir: bkz. docs/brain/cloud-brain.md (en kotu durum hesabi, testle kilitli). */
+export const MAX_COMPLIANCE_REVIEWS = MAX_CHIEF_FINDINGS;
+export const COMPLIANCE_REASON_MAX_CHARS = 300;
 
 /** Her bulgunun ZORUNLU alanlari (BrainFinding + brain-agent-result.schema.json ile ayni; site_id basta). Istem bu listeden uretilir. */
 export const FINDING_REQUIRED_FIELDS = [

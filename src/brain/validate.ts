@@ -5,6 +5,7 @@
 // Ihlaller yalniz KOD olarak doner (metin/kanit/sir icermez): izler ve artifact bu kodlari tasir.
 import {
   ACTIONABILITY, AGENT_RESULT_SCHEMA, CONFIDENCES, EVIDENCE_LABELS, FINDING_ID_RE, MAX_FINDINGS_PER_SPECIALIST, MAX_SPECIALIST_CONFLICTS,
+  CHIEF_CONFLICT_CHARS, CHIEF_FIELD_LIMITS, CHIEF_UNKNOWN_CHARS, COMPLIANCE_REASON_MAX_CHARS, MAX_CHIEF_CONFLICTS, MAX_CHIEF_FINDINGS, MAX_CHIEF_UNKNOWNS, MAX_COMPLIANCE_REVIEWS,
   MAX_DETAIL_EVIDENCE_IDS, MAX_DETAIL_OBSERVED_CHARS, MAX_DETAIL_PATH_CHARS, MAX_SPECIALIST_UNKNOWNS, MAX_VIOLATION_DETAILS, SPECIALIST_CONFLICT_CHARS, SPECIALIST_FIELD_LIMITS, SPECIALIST_UNKNOWN_CHARS,
   type AgentId, type AgentResult, type ViolationDetail, type BrainFinding, type ComplianceReview, type ComplianceVerdict, type EvidenceEnvelope,
 } from "./contracts.ts";
@@ -73,7 +74,7 @@ export interface ValidationContext {
   /** Bu ajanin GORDUGU kanit: izin verilen kimlikler yalniz bunlardir. */
   allowed: ReadonlyMap<string, EvidenceEnvelope>;
   secrets?: readonly string[];
-  /** "specialist": Phase 2C.2 kisa-cikti limitleri (en fazla 5 bulgu, alan uzunluklari, unknowns/conflicts <= 5). Verilmezse (Chief) eski genis sinirlar. */
+  /** "specialist" / "chief": kisa-cikti limitleri (en fazla 5 bulgu, alan uzunluklari, unknowns/conflicts siniri). Verilmezse eski genis sinirlar. */
   role?: "specialist" | "chief";
 }
 export interface ValidationOutcome<T> { ok: boolean; violations: string[]; result?: T; details?: ViolationDetail[] }
@@ -114,8 +115,13 @@ export function validateFindingsResult(raw: unknown, ctx: ValidationContext): Va
   if (raw.agent_id !== ctx.agentId) { v.add("WRONG_AGENT_ID"); dt.add({ code: "WRONG_AGENT_ID", path: "$.agent_id", expected: ctx.agentId, observed: describeObserved(raw.agent_id, ctx.secrets) }); }
   if (raw.site_id !== ctx.siteId) { v.add("WRONG_SITE"); dt.add({ code: "WRONG_SITE", path: "$.site_id", expected: ctx.siteId, observed: describeObserved(raw.site_id, ctx.secrets) }); }
   if (!Array.isArray(raw.findings) || !Array.isArray(raw.unknowns) || !Array.isArray(raw.conflicts)) { v.add("BAD_SHAPE"); return fail(); }
-  const spec = ctx.role === "specialist";
-  if (raw.findings.length > (spec ? MAX_FINDINGS_PER_SPECIALIST : MAX_FINDINGS)) v.add("TOO_MANY_FINDINGS");
+  // Rol sinirlari: uzman ve Chief SIKI (kisa cikti), rol verilmezse eski genis sinirlar (yalniz geriye donuk testler icin).
+  const lim = ctx.role === "specialist"
+    ? { findings: MAX_FINDINGS_PER_SPECIALIST, fields: SPECIALIST_FIELD_LIMITS, unknowns: MAX_SPECIALIST_UNKNOWNS, unknownChars: SPECIALIST_UNKNOWN_CHARS, conflicts: MAX_SPECIALIST_CONFLICTS, conflictChars: SPECIALIST_CONFLICT_CHARS }
+    : ctx.role === "chief"
+      ? { findings: MAX_CHIEF_FINDINGS, fields: CHIEF_FIELD_LIMITS, unknowns: MAX_CHIEF_UNKNOWNS, unknownChars: CHIEF_UNKNOWN_CHARS, conflicts: MAX_CHIEF_CONFLICTS, conflictChars: CHIEF_CONFLICT_CHARS }
+      : null;
+  if (raw.findings.length > (lim ? lim.findings : MAX_FINDINGS)) v.add("TOO_MANY_FINDINGS");
 
   const findings: BrainFinding[] = [];
   const ids = new Set<string>();
@@ -131,7 +137,7 @@ export function validateFindingsResult(raw: unknown, ctx: ValidationContext): Va
     }
     for (const k of TEXT_FIELDS) {
       if (!isStr(f[k]) || !f[k].trim()) v.add("EMPTY_FIELD");
-      else if (f[k].length > (spec ? SPECIALIST_FIELD_LIMITS[k] : MAX_FIELD)) v.add("FIELD_TOO_LONG");
+      else if (f[k].length > (lim ? lim.fields[k] : MAX_FIELD)) v.add("FIELD_TOO_LONG");
     }
     const label = f.evidence_label;
     if (isStr(label) && label.trim().toUpperCase() === "EDITORIAL") v.add("EDITORIAL_LABEL");
@@ -179,14 +185,14 @@ export function validateFindingsResult(raw: unknown, ctx: ValidationContext): Va
   }
 
   const unknowns = raw.unknowns as unknown[];
-  if (unknowns.length > (spec ? MAX_SPECIALIST_UNKNOWNS : 20) || !unknowns.every((u) => isStr(u) && u.length <= (spec ? SPECIALIST_UNKNOWN_CHARS : 300))) v.add("BAD_UNKNOWNS");
+  if (unknowns.length > (lim ? lim.unknowns : 20) || !unknowns.every((u) => isStr(u) && u.length <= (lim ? lim.unknownChars : 300))) v.add("BAD_UNKNOWNS");
   for (const u of unknowns) if (isStr(u) && containsSecret(u, ctx.secrets)) v.add("SECRET_IN_OUTPUT");
   const conflicts = raw.conflicts as unknown[];
-  if (conflicts.length > (spec ? MAX_SPECIALIST_CONFLICTS : 10)) v.add("BAD_CONFLICTS");
+  if (conflicts.length > (lim ? lim.conflicts : 10)) v.add("BAD_CONFLICTS");
   for (const c of conflicts) {
     if (!isObj(c) || !isStr(c.description) || !Array.isArray(c.evidence_ids) || !c.evidence_ids.every(isStr)) { v.add("BAD_CONFLICTS"); continue; }
     if ((c.evidence_ids as string[]).some((id) => !ctx.allowed.has(id))) v.add("UNKNOWN_EVIDENCE_ID");
-    if (spec && c.description.length > SPECIALIST_CONFLICT_CHARS) v.add("BAD_CONFLICTS");
+    if (lim && c.description.length > lim.conflictChars) v.add("BAD_CONFLICTS");
     if (looksLikeProductionWrite(c.description)) v.add("PRODUCTION_WRITE_INSTRUCTION");
     if (containsSecret(c.description, ctx.secrets)) v.add("SECRET_IN_OUTPUT");
   }
@@ -198,26 +204,33 @@ export function validateFindingsResult(raw: unknown, ctx: ValidationContext): Va
   };
 }
 
+/** Uyum sonucu: KISA karar listesi. Her gonderilen bulgu icin TAM BIR inceleme (eksik/fazla/yinelenen/yabanci kimlik reddedilir),
+ *  gerekce <= 300 karakter. Tek ihlal sonucun tamamini reddeder; reddedilen uyum sonucu bulguyu asla "uyumlu" yapmaz. */
 export function validateComplianceResult(raw: unknown, ctx: { siteId: string; findingIds: ReadonlySet<string>; secrets?: readonly string[] }): ValidationOutcome<ComplianceReview[]> {
   const v = new Set<string>();
-  if (!isObj(raw)) return { ok: false, violations: ["BAD_SHAPE"] };
-  if (raw.schema !== AGENT_RESULT_SCHEMA) v.add("BAD_SCHEMA");
   const dt = new DetailSink();
-  if (raw.agent_id !== "search-policy-compliance-officer") v.add("WRONG_AGENT_ID");
+  const fail = (): ValidationOutcome<ComplianceReview[]> => ({ ok: false, violations: [...v].sort(), details: dt.list });
+  if (!isObj(raw)) return { ok: false, violations: ["BAD_SHAPE"], details: [] };
+  if (raw.schema !== AGENT_RESULT_SCHEMA) { v.add("BAD_SCHEMA"); dt.add({ code: "BAD_SCHEMA", path: "$.schema", expected: AGENT_RESULT_SCHEMA, observed: describeObserved(raw.schema, ctx.secrets) }); }
+  if (raw.agent_id !== "search-policy-compliance-officer") { v.add("WRONG_AGENT_ID"); dt.add({ code: "WRONG_AGENT_ID", path: "$.agent_id", expected: "search-policy-compliance-officer", observed: describeObserved(raw.agent_id, ctx.secrets) }); }
   if (raw.site_id !== ctx.siteId) { v.add("WRONG_SITE"); dt.add({ code: "WRONG_SITE", path: "$.site_id", expected: ctx.siteId, observed: describeObserved(raw.site_id, ctx.secrets) }); }
-  if (!Array.isArray(raw.reviews)) return { ok: false, violations: [...v, "BAD_SHAPE"], details: dt.list };
+  if (!Array.isArray(raw.reviews)) { v.add("BAD_SHAPE"); return fail(); }
+  if (raw.reviews.length > MAX_COMPLIANCE_REVIEWS) { v.add("TOO_MANY_REVIEWS"); dt.add({ code: "TOO_MANY_REVIEWS", path: "$.reviews", expected: `<= ${MAX_COMPLIANCE_REVIEWS}`, observed: String(raw.reviews.length) }); }
   const out: ComplianceReview[] = [];
   const seen = new Set<string>();
-  for (const r of raw.reviews) {
-    if (!isObj(r) || !isStr(r.finding_id) || !isStr(r.reason) || !isStr(r.verdict)) { v.add("BAD_SHAPE"); continue; }
-    if (!ctx.findingIds.has(r.finding_id)) v.add("UNKNOWN_FINDING_ID");
+  for (const [ri, r] of raw.reviews.slice(0, MAX_COMPLIANCE_REVIEWS).entries()) {
+    if (!isObj(r) || !isStr(r.finding_id) || !isStr(r.reason) || !isStr(r.verdict)) { v.add("BAD_SHAPE"); dt.add({ code: "BAD_SHAPE", path: `$.reviews[${ri}]`, observed: isObj(r) ? "<missing-or-non-string-field>" : describeObserved(r, ctx.secrets) }); continue; }
+    if (!ctx.findingIds.has(r.finding_id)) { v.add("UNKNOWN_FINDING_ID"); dt.add({ code: "UNKNOWN_FINDING_ID", path: `$.reviews[${ri}].finding_id`, observed: describeObserved(r.finding_id, ctx.secrets) }); }
     if (seen.has(r.finding_id)) v.add("DUPLICATE_FINDING_ID");
     seen.add(r.finding_id);
-    if (!["PASS", "FLAG", "REJECT"].includes(r.verdict)) v.add("INVALID_VERDICT");
-    if (r.reason.length > 600) v.add("FIELD_TOO_LONG");
+    if (!["PASS", "FLAG", "REJECT"].includes(r.verdict)) { v.add("INVALID_VERDICT"); dt.add({ code: "INVALID_VERDICT", path: `$.reviews[${ri}].verdict`, expected: "PASS|FLAG|REJECT", observed: describeObserved(r.verdict, ctx.secrets) }); }
+    if (!r.reason.trim()) v.add("EMPTY_FIELD");
+    if (r.reason.length > COMPLIANCE_REASON_MAX_CHARS) { v.add("FIELD_TOO_LONG"); dt.add({ code: "FIELD_TOO_LONG", path: `$.reviews[${ri}].reason`, expected: `<= ${COMPLIANCE_REASON_MAX_CHARS}`, observed: String(r.reason.length) }); }
     if (containsSecret(r.reason, ctx.secrets)) v.add("SECRET_IN_OUTPUT");
     out.push({ finding_id: r.finding_id, verdict: r.verdict as ComplianceVerdict, reason: r.reason, reviewed_by: "search-policy-compliance-officer" });
   }
-  if (v.size) return { ok: false, violations: [...v].sort(), details: dt.list };
+  // Gonderilen HER bulgu incelenmeli: eksik inceleme "incelenmedi" kalmaz, sonucun tamami reddedilir.
+  for (const id of ctx.findingIds) if (!seen.has(id)) { v.add("MISSING_REVIEW"); dt.add({ code: "MISSING_REVIEW", path: "$.reviews", observed: describeObserved(id, ctx.secrets) }); }
+  if (v.size) return fail();
   return { ok: true, violations: [], details: [], result: out };
 }
