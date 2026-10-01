@@ -364,10 +364,11 @@ test("22) brain.yml schedule/cron icermez", () => { assert.ok(!/schedule:|cron:/
 test("23) brain.yml depoya commit/push etmez ve --write-memory GECMEZ", () => {
   assert.ok(!/git\s+(add|commit|push|config)|stefanzweifel|add-and-commit|--write-memory/.test(wfCode));
 });
-test("24) brain.yml PR acmaz, Vercel'e dokunmaz; Anthropic'e HIC gitmez; yalniz github.token kullanir", () => {
+test("24) brain.yml PR acmaz, Vercel'e dokunmaz; sirlar yalniz Anthropic secrets/vars -> env (tek tek); SHA'ya sabitli", () => {
   assert.ok(!/gh\s+pr|create-pull-request|pulls|vercel|VERCEL/i.test(wfCode));
-  assert.ok(!/anthropic|ANTHROPIC|brain-run|secrets\./i.test(wfCode), "bu surumde model cagrisi/anahtar yok");
-  assert.ok(!/--(api-)?key|--token/.test(wfCode), "anahtar komut satirina girmez");
+  assert.equal([...wfCode.matchAll(/secrets\./g)].length, 1, "yalniz Anthropic anahtari secrets'tan");
+  assert.equal([...wfCode.matchAll(/\bvars\./g)].length, 1, "yalniz model repo variable'indan");
+  assert.ok(!/--(api-)?key|--model|--token/.test(wfCode), "anahtar/model komut satirina girmez");
   for (const m of wfCode.matchAll(/uses: (\S+)/g)) assert.match(m[1], /@[0-9a-f]{40}$/, "action SHA'ya sabitli");
 });
 

@@ -19,7 +19,7 @@ sistemle bir ilgisi yok (o yalnız siteleri yayına alıyor).
 | Eski not (20 Eylül) | Bugün (doğrulandı) |
 |---|---|
 | "GSC/GA4 bağlı değil, UNKNOWN kalır" (bölüm 6) | **Bağlı.** `reports/measure-latest.md` (28 Eylül): 7/7 GSC OK, 7/7 GA4 OK. Service account + Search Console + GA4 erişimi tamamlandı |
-| "65 test" | **345 test**, `npm run typecheck` temiz |
+| "65 test" | **360 test**, `npm run typecheck` temiz |
 | "iki workflow var" | Beş: `measure.yml` (haftalık GSC+GA4), `tests.yml` (her PR'da test), `index-probe.yml` (yalnız elle), `portfolio-check.yml`, `search-audit.yml` |
 | "Sıradaki adım: 3 PR'ı merge et" (pamistanbul-site #89/#90, pamaistudio#40) | Bu depodan **doğrulanamadı**; o repolar bu oturumun kapsamı dışı. Sefa'nın teyidi gerekir |
 | 18 skill | 18 skill (README'deki "15" eskiydi, düzeltildi) |
@@ -73,9 +73,12 @@ uyum. `brain-evidence` / `brain-validate` (offline) / `brain-run`; `.github/work
 model repo variable `SEARCH_GROWTH_ANTHROPIC_MODEL`. **Canlı koşulmadı**; testler sahte istemciyle. Hiçbir şey yazmaz (production_write=false), DRAFT_PR_CANDIDATE yalnız etiket,
 bellek varsayılan salt-okunur. Ayrıntı: `docs/brain/cloud-brain.md`.
 
-**Phase 2B.1 (PR açık, merge edilmedi): kanıt devri.** `brain.yml` artık Clarity artifact'ını açık `clarity_run_id` ile (bu repo, `actions: read`) indirip yalnız seçilen sitenin
-`clarity-<site>.json`'unu doğrular, `sgos.brain.evidence.v1` + additive `provenance` üretir ve `brain-validate` çalıştırır; **Anthropic çağrısı yok**, evidence repoya commit edilmez (7 günlük artifact).
-Yabancı site = FAILED, artifact yok = NOT_AVAILABLE. Ayrıntı: `docs/brain/cloud-brain.md`.
+**Phase 2B.1 (main'de, #20): kanıt devri — canlı doğrulandı.** Brain run 36840181816 (main fbcd37c, site=pamistanbul, clarity_run_id=36835627390): `HANDOFF OK`, 2 kayıtlı paket (REGISTRY + CLARITY),
+`CALLED search-performance-engineer`, Anthropic çağrısı 0, artifact `brain-evidence-36840181816` (id 11150807968). Sahip bildirimi (artifact içeriği bu oturumdan okunamadı): provenance `source_run_id=36835627390`,
+`source_head_sha=b9a0edd…`, `source_artifact_id=11149185865`, `source_measured_at=2026-10-01T08:20:07.400Z`; Clarity kanıtı MEASURED/CONFIRMED, `row_count=428`, `max_metric_row_count=57`.
+
+**Phase 2C (PR açık, merge edilmedi): canlı Brain çalışma zamanı bağlantısı.** `brain.yml` zinciri: handoff → brain-validate → **brain-run** (Anthropic; anahtar `secrets`, model `vars`, yalnız o adımda); ≤5 çağrı,
+yeniden deneme yok; anahtar/model yoksa NOT_CONFIGURED + 0 çağrı; Brain artifact `brain-run-<run_id>` (iz/maliyet sayaçları, ham tamamlama YOK). **Canlı Anthropic ile doğrulanmadı.** Ayrıntı: `docs/brain/cloud-brain.md`.
 
 **Bilinen veri sorunu (FACT):** 28 Eylül'de shm, Clarity'ye 7 sitenin 7'sinde erişemedi (ağ izni) ve
 history'ye sıfır satır yazdı; pamistanbul ve spryhand için aynı güne iki **farklı** satır var. İçe aktarıcı
@@ -105,7 +108,7 @@ içerik taslağı → PR hattı, dashboard.
 cd search-growth-os && git pull && npm test
 ```
 
-345 test yeşil gelmeli (20 Eylül'de 65 idi). Sonra bölüm 2'deki tek adıma geç.
+360 test yeşil gelmeli (20 Eylül'de 65 idi). Sonra bölüm 2'deki tek adıma geç.
 
 Bir şeyin hâlâ geçerli olup olmadığından şüphelenirsen ölçümü tekrarla —
 ama önce bu dosyadaki sayıya bak; çoğu soru orada cevaplı.
@@ -182,7 +185,7 @@ node --experimental-strip-types src/cli.ts portfolio     # içerik ritmi, 7 site
 node --experimental-strip-types src/cli.ts llmstxt       # llms.txt envanteri
 node --experimental-strip-types src/cli.ts audit --site pamistanbul --full
 node --experimental-strip-types src/cli.ts registry config/sites.yaml
-npm test                                                  # 345 test
+npm test                                                  # 360 test
 ```
 
 Bağımlılık yok, sadece Node 24.
