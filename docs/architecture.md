@@ -24,6 +24,7 @@ assumed by any code here.
 | Health-snapshot import | `src/adapters/site-health-import.ts` | reads a **local directory** produced by the separate site-health-monitor routine; "no data" is never zero; idempotent, per-site. See `docs/integrations/site-health-monitor.md` |
 | URL inventory | `src/url-inventory.ts`, `schemas/url-inventory.schema.json` | one record per URL, every field may be `UNKNOWN`; URLs are never merged by guessing |
 | Index probe | `src/index-probe.ts`, CLI `inspect-index` | pamistanbul-locked, read-only URL Inspection **sample** (not full coverage) with a quota guard; 403/429 are `ERROR`, never "not indexed" |
+| Index candidates | `src/index-candidates.ts`, `src/sitemap-universe.ts`, `inspect-index --strategy segmented` | sitemap + GSC split into disjoint risk segments, stateless deterministic daily rotation; an unreadable source is `UNKNOWN`, never an empty set. See `docs/integrations/index-probe.md` |
 | Agents | `agents/*.md` | nine narrow specialists, orchestrated by `chief-search-strategist` |
 | Skills | `skills/*/SKILL.md` | eighteen workflows, each with inputs, evidence requirements, procedure, output and stop conditions |
 | Schemas | `schemas/*.json` | audit report, AI-visibility record, experiment, opportunity, competitor candidate, site registry |
