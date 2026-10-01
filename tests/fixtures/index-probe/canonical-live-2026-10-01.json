@@ -1,0 +1,51 @@
+{
+  "_provenance": "Iki GERCEK canli URL Inspection yaniti: workflow run 36827031582 (main 9a10fa9, strategy=segmented, limit=10), artifact ham JSON'undan. Degerler 2026-10-01'de proje sahibi tarafindan dogrulandi; coverageState tr-TR yerellestirilmis gelir ve bu fixture'da yalnizca 'karar metne bagli degil' testi icin tasinir. lastCrawlTime bu fixture'a tasinmadi.",
+  "cases": [
+    {
+      "name": "A: user canonical baska domain (pamaistudio), Google denetlenen URL'yi canonical sectigi icin INDEXED",
+      "inspected": "https://pamistanbul.com/en/video/bath-loofah-lifestyle",
+      "inspectionResult": {
+        "indexStatusResult": {
+          "verdict": "PASS",
+          "coverageState": "Gönderildi ve dizine eklendi",
+          "indexingState": "INDEXING_ALLOWED",
+          "pageFetchState": "SUCCESSFUL",
+          "robotsTxtState": "ALLOWED",
+          "googleCanonical": "https://pamistanbul.com/en/video/bath-loofah-lifestyle",
+          "userCanonical": "https://pamaistudio.com/en/works/bath-loofah-lifestyle"
+        }
+      },
+      "expected": {
+        "inspected_vs_google": "SAME",
+        "user_vs_google": "DIFFERENT",
+        "user_vs_inspected": "DIFFERENT",
+        "user_cross_domain": true,
+        "google_cross_domain": false,
+        "review_required": true
+      }
+    },
+    {
+      "name": "B: www + .html varyanti Google'da kendi canonical'i; sayfanin bildirdigi canonical temiz apex URL",
+      "inspected": "https://www.pamistanbul.com/pamlab/ucretsiz-ai-gorsel-uretme-araclari-2026.html",
+      "inspectionResult": {
+        "indexStatusResult": {
+          "verdict": "PASS",
+          "coverageState": "Gönderildi ve dizine eklendi",
+          "indexingState": "INDEXING_ALLOWED",
+          "pageFetchState": "SUCCESSFUL",
+          "robotsTxtState": "ALLOWED",
+          "googleCanonical": "https://www.pamistanbul.com/pamlab/ucretsiz-ai-gorsel-uretme-araclari-2026.html",
+          "userCanonical": "https://pamistanbul.com/pamlab/ucretsiz-ai-gorsel-uretme-araclari-2026"
+        }
+      },
+      "expected": {
+        "inspected_vs_google": "SAME",
+        "user_vs_google": "DIFFERENT",
+        "user_vs_inspected": "DIFFERENT",
+        "user_cross_domain": true,
+        "google_cross_domain": false,
+        "review_required": true
+      }
+    }
+  ]
+}

@@ -19,7 +19,7 @@ sistemle bir ilgisi yok (o yalnız siteleri yayına alıyor).
 | Eski not (20 Eylül) | Bugün (doğrulandı) |
 |---|---|
 | "GSC/GA4 bağlı değil, UNKNOWN kalır" (bölüm 6) | **Bağlı.** `reports/measure-latest.md` (28 Eylül): 7/7 GSC OK, 7/7 GA4 OK. Service account + Search Console + GA4 erişimi tamamlandı |
-| "65 test" | **213 test**, `npm run typecheck` temiz |
+| "65 test" | **231 test**, `npm run typecheck` temiz |
 | "iki workflow var" | Beş: `measure.yml` (haftalık GSC+GA4), `tests.yml` (her PR'da test), `index-probe.yml` (yalnız elle), `portfolio-check.yml`, `search-audit.yml` |
 | "Sıradaki adım: 3 PR'ı merge et" (pamistanbul-site #89/#90, pamaistudio#40) | Bu depodan **doğrulanamadı**; o repolar bu oturumun kapsamı dışı. Sefa'nın teyidi gerekir |
 | 18 skill | 18 skill (README'deki "15" eskiydi, düzeltildi) |
@@ -50,6 +50,12 @@ canlı doğrulanmış sayılır. Dikkat: bu 5/5, adaylar yalnız GSC'de görüne
 sağlıklı" demek **değildir**. Phase 1.5a bunu `--strategy segmented` ile ele alır (`docs/integrations/index-probe.md`):
 varsayılan hâlâ `gsc`, `schedule` yok; ilk canlı segmented koşu (limit 10) merge sonrası, ayrı kararla.
 
+**Phase 1.5a canlı doğrulandı (run 36827031582, segmented, limit 10):** 10/10 INSPECTED, 8 INDEXED, 2 NEUTRAL, 0 ERROR; ham alanlar
+(indexingState, pageFetchState, robotsTxtState, lastCrawlTime) uyumlu; dört segment COMPUTED. İki **canonical divergence adayı** çıktı
+(`bath-loofah-lifestyle`: userCanonical pamaistudio.com; `ucretsiz-ai-gorsel-uretme-araclari-2026.html`: Google www+.html varyantını seçmiş).
+Bunlar henüz hata sayılmaz: CONFIRMED ilişki verisi + CANDIDATE / REVIEW_REQUIRED. Phase 1.5b ilk dilim: `canonical_relations` sınıflandırıcısı
+(`docs/integrations/index-probe.md`); fetch tabanlı ön-tarama hâlâ yok.
+
 **Bilinen veri sorunu (FACT):** 28 Eylül'de shm, Clarity'ye 7 sitenin 7'sinde erişemedi (ağ izni) ve
 history'ye sıfır satır yazdı; pamistanbul ve spryhand için aynı güne iki **farklı** satır var. İçe aktarıcı
 bunları `UNKNOWN` sayar. Clarity serisi, shm'nin ağ izni düzelene kadar güvenilmezdir.
@@ -78,7 +84,7 @@ içerik taslağı → PR hattı, dashboard.
 cd search-growth-os && git pull && npm test
 ```
 
-213 test yeşil gelmeli (20 Eylül'de 65 idi). Sonra bölüm 2'deki tek adıma geç.
+231 test yeşil gelmeli (20 Eylül'de 65 idi). Sonra bölüm 2'deki tek adıma geç.
 
 Bir şeyin hâlâ geçerli olup olmadığından şüphelenirsen ölçümü tekrarla —
 ama önce bu dosyadaki sayıya bak; çoğu soru orada cevaplı.
@@ -155,7 +161,7 @@ node --experimental-strip-types src/cli.ts portfolio     # içerik ritmi, 7 site
 node --experimental-strip-types src/cli.ts llmstxt       # llms.txt envanteri
 node --experimental-strip-types src/cli.ts audit --site pamistanbul --full
 node --experimental-strip-types src/cli.ts registry config/sites.yaml
-npm test                                                  # 213 test
+npm test                                                  # 231 test
 ```
 
 Bağımlılık yok, sadece Node 24.
