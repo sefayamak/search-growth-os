@@ -425,10 +425,10 @@ test("22) concurrency/cift-kosu guvenligi: clarity.yml ile AYNI grup, iptal yok;
 test("22b) workflow guvenligi: secret yalniz env, inputs run'a yorumsuz girmez, yazma yalniz data/clarity-history, yalniz main, production/Vercel yok", () => {
   assert.match(WFC, /SEARCH_GROWTH_CLARITY_TOKENS_JSON: \$\{\{ secrets\.SEARCH_GROWTH_CLARITY_TOKENS_JSON \}\}/);
   for (const line of WFC.split("\n").filter((l) => l.includes("${{ inputs."))) assert.match(line, /^\s+[A-Z_]+: \$\{\{ inputs\.\w+ \}\}$/, line);
-  assert.match(WFC, /git add data\/clarity-history\//);
+  assert.match(WFC, /persist-history\.sh -m .*\\\n\s+data\/clarity-history\/\n/); // yazma yolu artik ortak betige arguman (docs/persistence-safety.md)
   assert.ok(!/git add (-A|\.|--all)/.test(WFC));
   assert.match(WFC, /github\.ref == 'refs\/heads\/main'/);
-  assert.match(WFC, /git pull --rebase origin main/);
+  assert.ok(!/git push/.test(WFC)); // fetch+rebase+retry+push artik scripts/persist-history.sh icinde (tests/persist-history.test.ts)
   assert.ok(!/curl\b|vercel|-X\s*(POST|PUT|DELETE|PATCH)|gh\s+(pr|api)|--token|set -x|echo .*TOKEN|ANTHROPIC|brain-run/i.test(WFC));
   assert.match(WFC, /permissions:\s*\n\s*contents: write/);
   assert.match(WFC, /retention-days: 30/);
