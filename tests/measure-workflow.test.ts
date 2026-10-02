@@ -54,7 +54,7 @@ test("JSON adimi fail-safe: continue-on-error, sessiz degil (warning + step summ
   assert.match(code, /::warning::sgos\.measure-report\.v1 JSON üretilemedi/);
   assert.match(code, /UYARI: sgos\.measure-report\.v1 JSON üretilemedi[^\n]*GITHUB_STEP_SUMMARY/);
   // Basarisizlikta mevcut latest'e dokunulmaz (cp yalniz success dalinda).
-  const place = WF.slice(WF.indexOf("JSON'unu yerleştir"), WF.indexOf("- name: Özet"));
+  const place = WF.slice(WF.indexOf("- name: Ölçüm JSON'unu yerleştir"), WF.indexOf("- name: Özet"));
   assert.ok(place.indexOf("cp measure-json") < place.indexOf("else"), "cp yalniz basari dalinda");
   assert.ok(!place.slice(place.indexOf("else")).includes("cp "), "basarisizlik dalinda cp yok");
   // Karar: rolling snapshot. Tarihli JSON kopyasi (append-only gecmis) YOK; tek canonical yol yazilir.
@@ -84,7 +84,7 @@ test("Markdown adimlari dokunulmamis: Olcum adimi ayni komut, rapor derleme ayni
     "if: github.event_name == 'schedule' || inputs.commit_report",
   ]) assert.ok(WF.includes(s), `eksik: ${s}`);
   // Markdown'a JSON girmez: rapor derleme blogu JSON dosyasina referans vermez.
-  const build = WF.slice(WF.indexOf("name: Raporu derle"), WF.indexOf("JSON'unu yerleştir"));
+  const build = WF.slice(WF.indexOf("name: Raporu derle"), WF.indexOf("- name: Ölçüm JSON'unu yerleştir"));
   assert.doesNotMatch(build, /measure-report|measure-json/);
 });
 
