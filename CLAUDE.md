@@ -1,5 +1,21 @@
 # Search Growth OS — devralma notu
 
+## BAŞLANGIÇ PROTOKOLÜ (her yeni oturum; "GitHub'a bak ve devam et" bunu tetikler)
+
+**GitHub canonical kaynaktır; yerel checkout otomatik otorite sayılmaz.** Sırayla:
+
+1. **Depo kimliğini doğrula:** `origin` = `sefayamak/search-growth-os`. Değilse **DUR** (`WRONG_REPOSITORY`). Bu depo PAM CRM / ST10 /
+   staging DB / Supabase `service_role` gibi başka repo bağlamlarından AYRIDIR; hiçbirini buraya taşıma.
+2. **`node --experimental-strip-types bin/project-status.ts --remote`** çalıştır (salt-okunur; bayraksız = yalnız yerel). GitHub uzak `main` durumunu doğrular.
+3. `docs/operations/current-state.json` ve `docs/operations/CURRENT_STATE.md` oku (devir durumu, HOLD PR'lar, owner-gated eylemler, yarının runbook'u).
+4. Yerel ve uzak durumu karşılaştır (araç sınıflandırır: `CLEAN_SYNCED / BEHIND_REMOTE / AHEAD_REMOTE / DIVERGED / DIRTY / WRONG_BRANCH /
+   WRONG_REPOSITORY / GIT_OBJECT_ERROR / REMOTE_UNREACHABLE / UNKNOWN`, ayrıca `STALE_STATE_FILE` uyarısı). Açık PR'ları GitHub'dan oku.
+5. Yerel durum uzakla çelişirse **uzak GitHub durumunu tercih et — ama yerelde commit edilmemiş iş varsa silme/sıfırlama** (`git reset --hard`, `clean`, `checkout .` yok).
+   `GIT_OBJECT_ERROR` / `REMOTE_UNREACHABLE` / `WRONG_REPOSITORY`: **DUR**; pull/merge/rebase/reset yok, otomatik onarım yok.
+6. **Owner-gated eylem yapma** (Clarity dispatch, legacy kapatma, credential rotasyonu, schedule/bayrak, üretim yazımı, feature PR merge).
+7. Sonra `next_action`'ı belirle ve yalnız güvenli işleri yap. Kimlik bilgisi DEĞERİ hiçbir yere yazılmaz (yalnız secret İSMİ).
+
+
 **Bu depoyu açtıysan önce [`DEVAM.md`](DEVAM.md) oku** — hepsini, başka bir şeye
 bakmadan. İşin nerede bırakıldığı, açık PR'lar, verilmiş kararlar, son ölçümler ve
 sıradaki tek adım orada.

@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "sgos.handoff-state.v1 — docs/operations/current-state.json",
+  "description": "Makine-okunur devir durumu. SECRET DEĞERİ YOK: kimlik bilgisi için yalnız metadata (configured, rotation_pending, secret NAME). state_based_on_main_sha dosyanın kendisini içeren commit olmak zorunda DEĞİL; canlı uzak sha bootstrap sırasında ayrıca okunur ve fark varsa STALE_STATE_FILE uyarısı verilir.",
+  "type": "object",
+  "required": ["schema", "repository", "canonical_branch", "state_based_on_main_sha", "generated_at", "phase", "open_prs", "hold_prs", "merged_capabilities", "migration", "schedules", "credentials", "owner_gates", "next_action", "known_risks"],
+  "properties": {
+    "schema": { "const": "sgos.handoff-state.v1" },
+    "repository": { "type": "string", "pattern": "^[\\w.-]+/[\\w.-]+$" },
+    "canonical_branch": { "type": "string", "minLength": 1 },
+    "state_based_on_main_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "phase": { "type": "object" },
+    "open_prs": { "type": "array", "items": { "type": "object", "required": ["number", "title", "hold"], "properties": { "number": { "type": "integer" }, "title": { "type": "string" }, "hold": { "type": "boolean" } } } },
+    "hold_prs": { "type": "array", "items": { "type": "integer" } },
+    "merged_capabilities": { "type": "array" },
+    "migration": { "type": "object", "required": ["clarity", "legacy"], "properties": { "clarity": { "type": "object" }, "legacy": { "type": "object" } } },
+    "schedules": { "type": ["array", "object"] },
+    "credentials": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["configured", "rotation_pending"],
+        "properties": {
+          "configured": { "enum": [true, false, "UNKNOWN"] },
+          "rotation_pending": { "type": "boolean" },
+          "secret_names": { "type": "array", "items": { "type": "string" } },
+          "note": { "type": "string" },
+          "basis": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "owner_gates": { "type": "array" },
+    "next_action": { "type": "object" },
+    "known_risks": { "type": "array" }
+  }
+}
