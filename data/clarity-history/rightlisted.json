@@ -6,7 +6,7 @@
     {
       "site_id": "rightlisted",
       "date": "2026-10-02",
-      "measured_at": "2026-10-02T07:25:42.511Z",
+      "measured_at": "2026-10-02T07:58:23.881Z",
       "measurement_state": "NOT_CONNECTED",
       "confidence": "UNKNOWN",
       "row_count": "UNKNOWN",
@@ -30,7 +30,7 @@
         "total": "UNKNOWN",
         "bot_pct": "UNKNOWN"
       },
-      "source_run_id": "36978486153"
+      "source_run_id": "36981402638"
     }
   ]
 }
