@@ -23,10 +23,24 @@
     "confidence": { "enum": ["CONFIRMED", "CANDIDATE", "FALSE_POSITIVE", "UNKNOWN"] },
     "provider": { "const": "PageSpeed Insights API v5" },
     "error_code": { "type": "string", "maxLength": 60 },
+    "field_category": {
+      "type": "object",
+      "description": "CrUX category (FAST/AVERAGE/SLOW) as reported by the provider; separate from our threshold INFERENCE.",
+      "additionalProperties": { "enum": ["FAST", "AVERAGE", "SLOW"] }
+    },
     "ratings": {
       "type": "object",
-      "required": ["label", "confidence", "values"],
+      "required": ["label", "confidence", "values", "thresholds_ref"],
       "properties": {
+        "thresholds_ref": {
+          "type": "object",
+          "required": ["source", "accessed", "status"],
+          "properties": {
+            "source": { "type": "string" },
+            "accessed": { "type": "string", "description": "NOT_RETRIEVED_THIS_SESSION unless the source was actually fetched." },
+            "status": { "enum": ["DOCUMENTED_ASSUMPTION", "VERIFIED_AGAINST_SOURCE"] }
+          }
+        },
         "label": { "const": "INFERENCE" },
         "confidence": { "enum": ["CANDIDATE", "UNKNOWN"] },
         "values": {

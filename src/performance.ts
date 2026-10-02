@@ -30,14 +30,59 @@ export type PerfState = "MEASURED" | "UNKNOWN" | "NOT_CONNECTED" | "ERROR";
 export type Rating = "GOOD" | "NEEDS_IMPROVEMENT" | "POOR" | "UNKNOWN";
 export type MetricKey = "lcp_ms" | "inp_ms" | "cls" | "ttfb_ms";
 
-/** web.dev esikleri (erisim 2026-10-02): iyi <= good, zayif > poor. TTFB icin web.dev 800/1800 ms onerir
- *  ama CWV degildir; yalnizca ek bilgi olarak siniflanir. */
-export const THRESHOLDS: Record<MetricKey, { good: number; poor: number }> = {
-  lcp_ms: { good: 2500, poor: 4000 },
-  inp_ms: { good: 200, poor: 500 },
-  cls: { good: 0.1, poor: 0.25 },
-  ttfb_ms: { good: 800, poor: 1800 },
+export interface ThresholdProvenance {
+  source: string;
+  /** Erisim tarihi YALNIZ gercekten erisildiyse yazilir; erisilemediyse NOT_RETRIEVED_THIS_SESSION. */
+  accessed: string;
+  status: "DOCUMENTED_ASSUMPTION" | "VERIFIED_AGAINST_SOURCE";
+}
+export interface ThresholdConfig {
+  provenance: ThresholdProvenance;
+  /** iyi <= good, zayif > poor. Birim: LCP/INP/TTFB ms, CLS birimsiz. */
+  metrics: Record<MetricKey, { good: number; poor: number }>;
+}
+/** Esikler bilgiden yazildi; web.dev bu oturumda ULASILAMADI, bu yuzden FACT degil DOCUMENTED_ASSUMPTION.
+ *  Her ratings ciktisi bu kayda referans verir (`thresholds_ref`); parametreyle degistirilebilir.
+ *  TTFB 800/1800 ms web.dev'de CWV degil, yardimci metriktir. */
+export const CWV_THRESHOLDS: ThresholdConfig = {
+  provenance: { source: "web.dev/vitals", accessed: "NOT_RETRIEVED_THIS_SESSION", status: "DOCUMENTED_ASSUMPTION" },
+  metrics: {
+    lcp_ms: { good: 2500, poor: 4000 },
+    inp_ms: { good: 200, poor: 500 },
+    cls: { good: 0.1, poor: 0.25 },
+    ttfb_ms: { good: 800, poor: 1800 },
+  },
 };
+/** Geriye uyumluluk: yalniz sayilar. Kaynak bilgisi icin CWV_THRESHOLDS kullan. */
+export const THRESHOLDS = CWV_THRESHOLDS.metrics;
+
+/** Gecersiz (NaN, good>=poor, <=0) esik ayari sessizce her seyi GOOD/POOR yapardi: fail-closed. */
+export function assertThresholds(c: ThresholdConfig): ThresholdConfig {
+  for (const m of ["lcp_ms", "inp_ms", "cls", "ttfb_ms"] as const) {
+    const t = c?.metrics?.[m];
+    if (!t || !Number.isFinite(t.good) || !Number.isFinite(t.poor) || t.good <= 0 || t.poor <= t.good) throw new Error(`gecersiz esik: ${m}`);
+  }
+  if (!c.provenance?.source || !c.provenance.accessed || !c.provenance.status) throw new Error("esik provenance eksik");
+  return c;
+}
+
+/** Hicbir sey canli dogrulanmadi (ag yok). Rapor ve dokuman bu listeyi tasir; "dogrulandi" iddiasi yoktur. */
+export const VALIDATION_STATUS = {
+  psi_response_shape: "NOT_LIVE_VALIDATED",
+  psi_quota_behaviour: "NOT_LIVE_VALIDATED",
+  crux_availability_7_sites: "NOT_LIVE_VALIDATED",
+  crux_cls_percentile_unit: "NOT_LIVE_VALIDATED",
+  lab_inp_audit_presence: "NOT_LIVE_VALIDATED",
+  cwv_thresholds: "DOCUMENTED_ASSUMPTION",
+} as const;
+
+/** Birim varsayimlari (canli yanitla dogrulanmadi). */
+export const UNIT_ASSUMPTIONS = {
+  lcp_ms: "ms (CrUX percentile ve lab numericValue)",
+  inp_ms: "ms (CrUX percentile)",
+  ttfb_ms: "ms (CrUX percentile ve lab server-response-time numericValue)",
+  cls: "birimsiz. CrUX percentile: tamsayi ise x100 (10 -> 0.10) VARSAYIMI; ondalikli sayi/dizge ise zaten birimsiz. Lab numericValue birimsiz.",
+} as const;
 export const CWV_METRICS: readonly MetricKey[] = ["lcp_ms", "inp_ms", "cls"];
 const ALL_METRICS: readonly MetricKey[] = ["lcp_ms", "inp_ms", "cls", "ttfb_ms"];
 
@@ -62,52 +107,72 @@ export interface PerfRecord {
   provider: "PageSpeed Insights API v5";
   error_code?: string;           // yalniz kod; saglayici mesaji (anahtar yansitabilir) saklanmaz
   /** INFERENCE: esik siniflandirmasi. Olculen degerin kendisi degil, bir kuralin sonucu. */
-  ratings: { label: "INFERENCE"; confidence: "CANDIDATE" | "UNKNOWN"; values: Record<MetricKey, Rating> };
+  /** CrUX `category` (FAST/AVERAGE/SLOW) saglayicinin kendi sinifidir; bizim INFERENCE'imizden ayri tutulur, esik girdisi degildir. */
+  field_category?: Partial<Record<MetricKey, "FAST" | "AVERAGE" | "SLOW">>;
+  /** INFERENCE: esik siniflandirmasi. `thresholds_ref` hangi esik kaynagina/durumuna dayandigini soyler. */
+  ratings: { label: "INFERENCE"; confidence: "CANDIDATE" | "UNKNOWN"; values: Record<MetricKey, Rating>; thresholds_ref: ThresholdProvenance };
 }
 
 // --- siniflandirma ----------------------------------------------------------------------------------------
 
-export function rate(metric: MetricKey, v: number | null): Rating {
+export function rate(metric: MetricKey, v: number | null, cfg: ThresholdConfig = CWV_THRESHOLDS): Rating {
   if (v === null) return "UNKNOWN";
-  const t = THRESHOLDS[metric];
+  const t = cfg.metrics[metric];
   return v <= t.good ? "GOOD" : v <= t.poor ? "NEEDS_IMPROVEMENT" : "POOR";
 }
 const RANK: Record<Rating, number> = { GOOD: 0, NEEDS_IMPROVEMENT: 1, POOR: 2, UNKNOWN: -1 };
 
 /** Gecerli sayi degilse null. Sifir/negatif sure "olcum yok" demektir (sifir LCP fiziksel olarak yok);
- *  CLS icin 0 gecerli ve en iyi degerdir. */
+ *  CLS icin 0 gecerli ve en iyi degerdir. Sayisal DIZGE ("2500") kabul edilir (bazi CrUX yuklerinde percentile dizge);
+ *  "", "abc", "1e3x", "Infinity" null olur — bos dizge 0 sayilmaz. */
 function num(v: unknown, metric: MetricKey): number | null {
-  if (typeof v !== "number" || !Number.isFinite(v)) return null;
-  if (metric === "cls") return v >= 0 ? v : null;
-  return v > 0 ? v : null;
+  let n: number;
+  if (typeof v === "number") n = v;
+  else if (typeof v === "string" && /^\s*-?\d+(\.\d+)?\s*$/.test(v)) n = Number(v);
+  else return null;
+  if (!Number.isFinite(n)) return null;
+  if (metric === "cls") return n >= 0 ? n : null;
+  return n > 0 ? n : null;
+}
+
+/** CrUX CLS percentile birimi (VARSAYIM, canli dogrulanmadi): PSI v5 belgesi tamsayi x100 verir (10 -> 0.10).
+ *  Bazi yuklerde dizge gelir. Kural, tahmin yerine acik ve testli:
+ *   - tamsayi (sayi ya da "5") -> /100;
+ *   - ondalikli ("0.05" ya da 0.05) -> zaten birimsiz, oldugu gibi.
+ *  Belirsiz tek durum: tamsayi 0 (iki yorumda da 0) ve 1 ("1" = 0.01 mi, 1.0 mi?) -> x100 yorumu esas alinir. */
+export function cruxClsFromPercentile(p: unknown): number | null {
+  const n = num(p, "cls");
+  if (n === null) return null;
+  const decimalText = typeof p === "string" ? /\./.test(p) : !Number.isInteger(p as number);
+  return decimalText ? n : n / 100;
 }
 const obj = (v: unknown): Record<string, unknown> | null => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null);
 
 // --- PSI ayristirma ---------------------------------------------------------------------------------------
 
-export interface ParseCtx { site: string; url: string; strategy: Strategy; measuredAt: string }
+export interface ParseCtx { site: string; url: string; strategy: Strategy; measuredAt: string; thresholds?: ThresholdConfig }
 
 function base(ctx: ParseCtx): PerfRecord {
   return {
     schema: RECORD_SCHEMA, site: ctx.site, url: ctx.url, strategy: ctx.strategy, measured_at: ctx.measuredAt, date: ctx.measuredAt.slice(0, 10),
     lcp_ms: null, inp_ms: null, cls: null, ttfb_ms: null, perf_score: null, source: "none", field_scope: null,
     state: "UNKNOWN", evidence: "FACT", confidence: "UNKNOWN", provider: "PageSpeed Insights API v5",
-    ratings: { label: "INFERENCE", confidence: "UNKNOWN", values: { lcp_ms: "UNKNOWN", inp_ms: "UNKNOWN", cls: "UNKNOWN", ttfb_ms: "UNKNOWN" } },
+    ratings: { label: "INFERENCE", confidence: "UNKNOWN", values: { lcp_ms: "UNKNOWN", inp_ms: "UNKNOWN", cls: "UNKNOWN", ttfb_ms: "UNKNOWN" }, thresholds_ref: (ctx.thresholds ?? CWV_THRESHOLDS).provenance },
   };
 }
 
-function finish(r: PerfRecord): PerfRecord {
+function finish(r: PerfRecord, cfg: ThresholdConfig = CWV_THRESHOLDS): PerfRecord {
   const vals = {} as Record<MetricKey, Rating>;
-  for (const m of ALL_METRICS) vals[m] = rate(m, r[m]);
+  for (const m of ALL_METRICS) vals[m] = rate(m, r[m], cfg);
   const any = ALL_METRICS.some((m) => r[m] !== null) || r.perf_score !== null;
-  r.ratings = { label: "INFERENCE", confidence: ALL_METRICS.some((m) => r[m] !== null) ? "CANDIDATE" : "UNKNOWN", values: vals };
+  r.ratings = { label: "INFERENCE", confidence: ALL_METRICS.some((m) => r[m] !== null) ? "CANDIDATE" : "UNKNOWN", values: vals, thresholds_ref: cfg.provenance };
   if (r.state !== "ERROR" && r.state !== "NOT_CONNECTED") { r.state = any ? "MEASURED" : "UNKNOWN"; r.confidence = any ? "CONFIRMED" : "UNKNOWN"; }
   r.source = ALL_METRICS.some((m) => r[m] !== null) ? r.source : (r.perf_score !== null ? "lab" : "none");
   return r;
 }
 
 export function errorRecord(ctx: ParseCtx, code: string, state: "ERROR" | "NOT_CONNECTED" = "ERROR"): PerfRecord {
-  const r = base(ctx); r.state = state; r.confidence = "UNKNOWN"; r.error_code = code.slice(0, 60); return finish(r);
+  const r = base(ctx); r.state = state; r.confidence = "UNKNOWN"; r.error_code = code.slice(0, 60); return finish(r, ctx.thresholds);
 }
 
 /** Asla atmaz: bozuk/eksik govde ERROR ya da UNKNOWN kaydidir, sifir degil. */
@@ -126,32 +191,52 @@ export function parsePsiResponse(status: number, body: unknown, ctx: ParseCtx): 
   const r = base(ctx);
 
   // 1) Field (CrUX). Varsa lab ile KARISTIRILMAZ: kayit field'dir.
+  //    `loadingExperience` URL duzeyidir (veri yoksa PSI ayni alana origin verip origin_fallback:true yazar).
+  //    `originLoadingExperience` BILEREK okunmaz: onu URL kaydina geri-dusus olarak koymak olcumsuz bir sayfaya
+  //    site ortalamasi yazmak olur; scope'u yalniz saglayicinin kendi origin_fallback bayragi belirler.
   const le = obj(b.loadingExperience);
   const fm = obj(le?.metrics);
   if (fm) {
-    const pct = (k: string): unknown => obj(fm[k])?.percentile;
+    const mo = (...keys: string[]): Record<string, unknown> | null => { for (const k of keys) { const o = obj(fm[k]); if (o) return o; } return null; };
+    const SRC: Record<MetricKey, Record<string, unknown> | null> = {
+      lcp_ms: mo("LARGEST_CONTENTFUL_PAINT_MS"),
+      inp_ms: mo("INTERACTION_TO_NEXT_PAINT"),
+      cls: mo("CUMULATIVE_LAYOUT_SHIFT_SCORE"),
+      // Yeni adlandirma TIME_TO_FIRST_BYTE olabilir; ikisi de kabul, "EXPERIMENTAL_" onceligi eski sozlesme.
+      ttfb_ms: mo("EXPERIMENTAL_TIME_TO_FIRST_BYTE", "TIME_TO_FIRST_BYTE"),
+    };
     const f = {
-      lcp_ms: num(pct("LARGEST_CONTENTFUL_PAINT_MS"), "lcp_ms"),
-      inp_ms: num(pct("INTERACTION_TO_NEXT_PAINT"), "inp_ms"),
-      // PSI CLS percentile'ini 100 ile carpilmis tamsayi verir (10 -> 0.10).
-      cls: ((): number | null => { const p = pct("CUMULATIVE_LAYOUT_SHIFT_SCORE"); return typeof p === "number" && Number.isFinite(p) && p >= 0 ? p / 100 : null; })(),
-      ttfb_ms: num(pct("EXPERIMENTAL_TIME_TO_FIRST_BYTE"), "ttfb_ms"),
+      lcp_ms: num(SRC.lcp_ms?.percentile, "lcp_ms"),
+      inp_ms: num(SRC.inp_ms?.percentile, "inp_ms"),
+      cls: cruxClsFromPercentile(SRC.cls?.percentile),
+      ttfb_ms: num(SRC.ttfb_ms?.percentile, "ttfb_ms"),
     };
     if (ALL_METRICS.some((m) => f[m] !== null)) {
       Object.assign(r, f); r.source = "field"; r.field_scope = le?.origin_fallback === true ? "origin" : "url";
+      const cat: NonNullable<PerfRecord["field_category"]> = {};
+      for (const m of ALL_METRICS) { const c = SRC[m]?.category; if (f[m] !== null && (c === "FAST" || c === "AVERAGE" || c === "SLOW")) cat[m] = c; }
+      if (Object.keys(cat).length) r.field_category = cat;
     }
   }
-  // 2) Lab yalniz field yoksa metrik kaynagidir.
+  // 2) Lab yalniz field yoksa metrik kaynagidir. Denetim "error"/"notApplicable"/"manual" ise numericValue guvenilmez
+  //    (Lighthouse bazen yine de bir sayi tasir): yok sayilir, 0'a cevrilmez.
   const audits = obj(lh?.audits);
   if (r.source !== "field" && audits) {
-    const av = (id: string): unknown => obj(audits[id])?.numericValue;
-    const l = { lcp_ms: num(av("largest-contentful-paint"), "lcp_ms"), cls: num(av("cumulative-layout-shift"), "cls"), ttfb_ms: num(av("server-response-time"), "ttfb_ms") };
-    if (l.lcp_ms !== null || l.cls !== null || l.ttfb_ms !== null) { Object.assign(r, l); r.source = "lab"; }
+    const av = (id: string): unknown => {
+      const a = obj(audits[id]); if (!a) return undefined;
+      const mode = a.scoreDisplayMode;
+      if (mode === "error" || mode === "notApplicable" || mode === "manual") return undefined;
+      return a.numericValue;
+    };
+    // Lab INP: navigation kosusunda genelde YOK (timespan denetimi); varsa okunur, yoksa null.
+    const l = { lcp_ms: num(av("largest-contentful-paint"), "lcp_ms"), inp_ms: num(av("interaction-to-next-paint"), "inp_ms"), cls: num(av("cumulative-layout-shift"), "cls"), ttfb_ms: num(av("server-response-time"), "ttfb_ms") };
+    if (ALL_METRICS.some((m) => l[m] !== null)) { Object.assign(r, l); r.source = "lab"; }
   }
-  // 3) perf_score her zaman lab kategorisinden; 0-1 -> 0-100.
+  // 3) perf_score her zaman lab kategorisinden; 0-1 -> 0-100. Sinir disi (ornegin zaten 0-100 gelmis 91) yok sayilir:
+  //    91 -> 9100 yazmaktansa null.
   const sc = obj(obj(lh?.categories)?.performance)?.score;
   if (typeof sc === "number" && Number.isFinite(sc) && sc >= 0 && sc <= 1) r.perf_score = Math.round(sc * 100);
-  return finish(r);
+  return finish(r, ctx.thresholds);
 }
 
 // --- URL planlama + butce ---------------------------------------------------------------------------------
@@ -160,6 +245,23 @@ export interface UrlPlan { urls: string[]; rejected: { url: string; reason: stri
 
 const hostOf = (u: string): string | null => { try { const x = new URL(u); return x.protocol === "https:" || x.protocol === "http:" ? x.hostname.toLowerCase() : null; } catch { return null; } };
 const stripWww = (h: string) => h.replace(/^www\./, "");
+export const MAX_URL_LENGTH = 2048;
+
+/** Host eslesmesi tek basina yetmez: `user:pw@` (kimlik bilgisi PSI'ye ve kayda sizar), varsayilan disi port
+ *  (baska bir servis) ve asiri uzun URL de reddedilir. `new URL` IDN'i punycode'a, `evil.com\\@site` ve
+ *  `site@evil.com` kaliplarini gercek host'a cevirir; karar ayristirilmis host uzerinden verilir, dizge uzerinden degil. */
+function urlProblem(raw: string, own: Set<string>): { href?: string; reason?: string } {
+  if (typeof raw !== "string" || raw.length > MAX_URL_LENGTH) return { reason: "gecersiz URL" };
+  let x: URL;
+  try { x = new URL(raw); } catch { return { reason: "gecersiz URL" }; }
+  if (x.protocol !== "https:" && x.protocol !== "http:") return { reason: "gecersiz URL" };
+  const h = x.hostname.toLowerCase();
+  if (!own.has(stripWww(h))) return { reason: `host ${h} bu sitenin degil (izolasyon)` };
+  if (x.username || x.password) return { reason: "URL kimlik bilgisi (user:pass@) tasiyor" };
+  if (x.port) return { reason: `varsayilan disi port :${x.port}` };
+  x.hash = "";
+  return { href: x.href };
+}
 
 /** Izolasyon: URL yalniz bu sitenin canonical/production host'unda (www varyanti dahil). Baska site ya da
  *  ucuncu parti URL reddedilir — "ayni kisinin sitesi" gerekce degildir. */
@@ -169,10 +271,9 @@ export function planUrls(site: SiteEntry, requested: string[] | undefined, perSi
   const input = requested && requested.length ? requested : [`https://${site.canonical_hostname}/`];
   const urls: string[] = []; const rejected: UrlPlan["rejected"] = []; const truncated: string[] = []; const seen = new Set<string>();
   for (const raw of input) {
-    const h = hostOf(raw);
-    if (!h) { rejected.push({ url: raw, reason: "gecersiz URL" }); continue; }
-    if (!own.has(stripWww(h))) { rejected.push({ url: raw, reason: `host ${h} bu sitenin degil (izolasyon)` }); continue; }
-    const key = raw.split("#")[0];
+    const chk = urlProblem(raw, own);
+    if (!chk.href) { rejected.push({ url: typeof raw === "string" ? raw.slice(0, 200) : String(raw), reason: chk.reason! }); continue; }
+    const key = chk.href;
     if (seen.has(key)) continue;
     seen.add(key);
     if (urls.length >= cap) { truncated.push(key); continue; }
@@ -184,7 +285,8 @@ export function planUrls(site: SiteEntry, requested: string[] | undefined, perSi
 /** Her PSI cagrisi 1 birimdir (URL x strateji). Tukenince cagri YAPILMAZ; sessizce yarim kalmaz, skipped olarak yazilir. */
 export class RequestBudget {
   readonly limit: number; used = 0;
-  constructor(limit: number) { this.limit = Math.max(0, Math.floor(limit)); }
+  // NaN/Infinity/sayi-disi: Math.max(0, NaN) NaN verir ve `used >= NaN` hep false -> SINIRSIZ butce. Fail-closed: 0.
+  constructor(limit: number) { this.limit = typeof limit === "number" && Number.isFinite(limit) ? Math.max(0, Math.floor(limit)) : 0; }
   tryTake(): boolean { if (this.used >= this.limit) return false; this.used++; return true; }
   get remaining(): number { return this.limit - this.used; }
 }
@@ -297,7 +399,7 @@ export function selectBaseline(h: { records: PerfRecord[] }, cur: PerfRecord, me
   return best;
 }
 
-export function detectRegressions(cur: PerfRecord, h: { records: PerfRecord[] }, onboarded: boolean): Regression[] {
+export function detectRegressions(cur: PerfRecord, h: { records: PerfRecord[] }, onboarded: boolean, cfg: ThresholdConfig = CWV_THRESHOLDS): Regression[] {
   if (cur.state !== "MEASURED" || (cur.source !== "field" && cur.source !== "lab")) return [];
   const out: Regression[] = [];
   const action = onboarded ? "REVIEW_REQUIRED" : "OBSERVE_ONLY";
@@ -307,7 +409,7 @@ export function detectRegressions(cur: PerfRecord, h: { records: PerfRecord[] },
     const b = selectBaseline(h, cur, m); if (!b) continue;
     const was = b[m] as number;
     const rel = (now - was) / Math.max(was, FLOOR[m]);
-    const rb = rate(m, was), rc = rate(m, now);
+    const rb = rate(m, was, cfg), rc = rate(m, now, cfg);
     const crossed = RANK[rc] > RANK[rb] && rel >= MIN_RELATIVE_WORSENING[src];
     const escalated = rb === "POOR" && rc === "POOR" && rel >= POOR_ESCALATION;
     if (!crossed && !escalated) continue;
@@ -323,7 +425,7 @@ export function detectRegressions(cur: PerfRecord, h: { records: PerfRecord[] },
     const b = selectBaseline(h, cur, "perf_score");
     if (b && (b.perf_score as number) - cur.perf_score >= SCORE_DROP_POINTS) {
       out.push({
-        label: "INFERENCE", confidence: "CANDIDATE", action, site: cur.site, url: cur.url, strategy: cur.strategy, metric: "perf_score", source: src,
+        label: "INFERENCE", confidence: "CANDIDATE", action, site: cur.site, url: cur.url, strategy: cur.strategy, metric: "perf_score", source: "lab", // perf_score HER ZAMAN lab; kayit field olsa da "field" yazmak yanlis etiket olurdu
         baseline_date: b.date, baseline: b.perf_score as number, current: cur.perf_score, baseline_rating: null, current_rating: null,
         relative_change: null, causal_claim: "NONE",
         note: `perf_score: ${b.perf_score} -> ${cur.perf_score}. Lab skoru tek kosu gurultusu icerir; nedeni bilinmiyor.`,
@@ -343,6 +445,8 @@ export interface RunOptions {
   urlsPerSite?: number;
   strategies?: Strategy[];
   maxRequests?: number;
+  /** Esik ayari (varsayilan CWV_THRESHOLDS = DOCUMENTED_ASSUMPTION). Gecersizse atar. */
+  thresholds?: ThresholdConfig;
   fetcher?: PsiFetcher | null;      // verilmezse env'den kurulur; anahtar yoksa NOT_CONNECTED
   env?: Record<string, string | undefined>;
   now?: Date;
@@ -360,6 +464,10 @@ export interface SiteOutcome {
 export interface PerfReport {
   schema: typeof REPORT_SCHEMA; generated_at: string;
   budget: { limit: number; used: number; unit: "psi_requests" };
+  /** Esiklerin kaynagi/durumu: raporu okuyan, siniflarin neye dayandigini gorur. */
+  thresholds_ref: ThresholdProvenance;
+  validation_status: typeof VALIDATION_STATUS;
+  unit_assumptions: typeof UNIT_ASSUMPTIONS;
   sites: SiteOutcome[];
 }
 
@@ -368,6 +476,7 @@ export async function runPerformance(o: RunOptions): Promise<PerfReport> {
   const strategies = o.strategies?.length ? o.strategies : (["mobile"] as Strategy[]);
   const fetcher = o.fetcher !== undefined ? o.fetcher : createPsiFetcher(o.env ?? process.env);
   const budget = new RequestBudget(o.maxRequests ?? DEFAULT_MAX_REQUESTS);
+  const cfg = assertThresholds(o.thresholds ?? CWV_THRESHOLDS);
   const sites: SiteOutcome[] = [];
   for (const s of o.sites) {
     if (o.siteFilter && !o.siteFilter.includes(s.id)) continue;
@@ -384,23 +493,26 @@ export async function runPerformance(o: RunOptions): Promise<PerfReport> {
       }
     }
     for (const url of plan.urls) for (const strategy of strategies) {
-      const ctx: ParseCtx = { site: s.id, url, strategy, measuredAt: at };
+      const ctx: ParseCtx = { site: s.id, url, strategy, measuredAt: at, thresholds: cfg };
       if (!fetcher) { out.records.push(errorRecord(ctx, "NOT_CONNECTED", "NOT_CONNECTED")); out.action = "NOT_CONNECTED"; continue; }
       if (hist && hasMeasuredFor(hist, at.slice(0, 10), url, strategy)) { out.skipped.push({ url, strategy, reason: "ALREADY_MEASURED_TODAY" }); continue; }
       if (!budget.tryTake()) { out.skipped.push({ url, strategy, reason: "BUDGET_EXHAUSTED" }); continue; }
       let rec: PerfRecord;
       try { const res = await fetcher({ url, strategy }); rec = parsePsiResponse(res.status, res.body, ctx); }
-      catch { rec = errorRecord(ctx, "FETCH_FAILED"); } // mesaj tasinmaz: anahtar sizma riski
+      catch (e) {
+        // Mesaj tasinmaz (anahtar sizma riski); yalniz beyaz-listeli kod: timeout ag hatasindan ayrilir.
+        rec = errorRecord(ctx, (e as { code?: unknown })?.code === "TIMEOUT" ? "FETCH_TIMEOUT" : "FETCH_FAILED");
+      }
       out.records.push(rec);
       if (rec.state === "MEASURED" && hist) {
-        out.regressions.push(...detectRegressions(rec, hist, onboarded)); // merge'den ONCE: bugun baz olamaz
+        out.regressions.push(...detectRegressions(rec, hist, onboarded, cfg)); // merge'den ONCE: bugun baz olamaz
         const m = mergeRecord(hist, rec); hist = m.file; out.history_actions.push(m.action);
       }
     }
     if (hist && o.writeHistory !== false && o.historyDir && out.history_actions.includes("ADDED")) saveHistory(o.historyDir, hist);
     sites.push(out);
   }
-  return { schema: REPORT_SCHEMA, generated_at: at, budget: { limit: budget.limit, used: budget.used, unit: "psi_requests" }, sites };
+  return { schema: REPORT_SCHEMA, generated_at: at, budget: { limit: budget.limit, used: budget.used, unit: "psi_requests" }, thresholds_ref: cfg.provenance, validation_status: VALIDATION_STATUS, unit_assumptions: UNIT_ASSUMPTIONS, sites };
 }
 
 // --- markdown ---------------------------------------------------------------------------------------------
@@ -410,6 +522,8 @@ export function reportMarkdown(r: PerfReport): string {
   const L: string[] = [];
   L.push("# Performans / Core Web Vitals", "", `Üretim: ${r.generated_at} · PSI isteği: ${r.budget.used}/${r.budget.limit}`, "");
   L.push("Ölçülen değerler FACT'tir (saglayici: PageSpeed Insights). Eşik sınıfları ve regresyonlar INFERENCE / CANDIDATE'tir; neden iddiası yoktur.", "");
+  L.push(`Eşik kaynağı: ${r.thresholds_ref.source} · erişim: ${r.thresholds_ref.accessed} · durum: ${r.thresholds_ref.status}.`, "");
+  L.push(`Doğrulama durumu: gerçek PSI yanıt şekli ${r.validation_status.psi_response_shape}; kota davranışı ${r.validation_status.psi_quota_behaviour}; 7 site için CrUX varlığı ${r.validation_status.crux_availability_7_sites}.`, "");
   for (const s of r.sites) {
     L.push(`## ${s.site} — ${s.action}`, "");
     if (s.note) L.push(`> ${s.note}`, "");
