@@ -28,8 +28,13 @@ Hata kipleri (eski):
 
 1. **İzin listesi (fail-closed):** `data/clarity-history/`, `reports/`, `content/topic-ledger.json`. Herhangi bir yol dışındaysa (mutlak yol, `..`, boş dâhil) **hiçbir şey stage edilmeden** çıkış 3.
    Önce hepsi doğrulanır, sonra eklenir: kısmi add yok. Var olmayan yol atlanır (ledger henüz yoksa hata değil).
+   **Ad/uzantı filtresi (stage sonrası):** izinli dizin altına düşen her dosya `git add -- dizin/` ile alınır; yanlışlıkla bırakılmış gizli-görünümlü bir dosya main'e gitmesin diye,
+   uzantısı `.md`/`.json` olmayan **veya** adı `secret|credential|token|passw|.env|.pem|.key|id_rsa|.p12` desenine uyan dosya stage'den çıkarılır, stderr'e `persist: UYARI` yazılır, iş **düşmez**
+   (kalıcılık işi gizli dosya yüzünden kaybolmasın). Normal çıktılar (`data/clarity-history/<site>.json`, `reports/*.md|json`, `content/topic-ledger.json`) etkilenmez.
+   Bilinen yan etki: meşru ama adında "token" geçen bir dosya (ör. `reports/x-token-analysis.md`) uyarıyla atlanır. `.gitignore` yalnız `.env*`'i korur; bu filtre onu tamamlar.
 2. Stage edilmiş fark yoksa **commit yok**, çıkış 0.
-3. Commit, sonra **en fazla 3 deneme** (sert tavan; `PERSIST_MAX_ATTEMPTS` yalnız aşağı çeker): `git fetch origin <dal>` -> `git rebase origin/<dal>` -> düz `git push`. Denemeler arası 5 sn, 10 sn.
+3. Commit, sonra **en fazla 3 deneme** (sert tavan; `PERSIST_MAX_ATTEMPTS` yalnız aşağı çeker): `git fetch origin <dal>` -> `git rebase --autostash origin/<dal>` -> düz `git push`. Denemeler arası 5 sn, 10 sn.
+   `--autostash`: izin listesi dışındaki izlenen bir dosya kirliyse düz `git rebase` "unstaged changes" diye reddeder ve bu yanlışlıkla çatışma (çıkış 2) sayılırdı; veri push edilemezdi.
    **`--force` / `--force-with-lease` yok** (test betiği tarar).
 4. **Rebase çatışması:** `git rebase --abort`, çıkış 2. Otomatik çözüm yok (`-X ours/theirs`, `reset --hard` yok), yeniden deneme yok (çatışma deterministik). Yerel commit korunur, push edilmez.
 5. **Denemeler tükendi:** çıkış 1. İş kırmızı. Yerel commit korunur.
@@ -47,6 +52,9 @@ Hata kipleri (eski):
 | Aynı dosyada çatışma | 2 | **değişmez** | korunur, rebase abort | **kırmızı** | artifact'ta |
 | 3 ret | 1 | değişmez | korunur | **kırmızı** | artifact'ta |
 | İzin dışı yol | 3 | değişmez | yok, stage yok | **kırmızı** | artifact'ta |
+| İzinli dizinde gizli-görünümlü/`.md`-`.json` dışı dosya | 0 (diğer dosyalar push) | ilerler, o dosya olmadan | var (o dosya yok) | yeşil + `persist: UYARI` | o dosya kalıcı değil |
+| İzin dışı izlenen dosya kirli | 0 (autostash) | ilerler | var | yeşil | kalıcı |
+| Git kimliği yok | 128 (0/1/2/3 sözleşmesi dışı; yalnız belgelendi) | değişmez | yok, dosya stage'de | **kırmızı** | artifact'ta |
 
 ## 4. Neden ortak concurrency grubu YOK
 
