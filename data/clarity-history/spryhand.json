@@ -6,7 +6,7 @@
     {
       "site_id": "spryhand",
       "date": "2026-10-02",
-      "measured_at": "2026-10-02T07:58:23.881Z",
+      "measured_at": "2026-10-02T08:08:07.778Z",
       "measurement_state": "NOT_CONNECTED",
       "confidence": "UNKNOWN",
       "row_count": "UNKNOWN",
@@ -30,7 +30,7 @@
         "total": "UNKNOWN",
         "bot_pct": "UNKNOWN"
       },
-      "source_run_id": "36981402638"
+      "source_run_id": "36982317979"
     }
   ]
 }
