@@ -70,31 +70,32 @@ jobs:
           set -o pipefail
           node --experimental-strip-types src/cli.ts smoke config/sites.yaml | tee smoke.txt
 
+      # TEK GSC CAGRISI: Markdown (stdout -> measure.txt) ve makine-okunur JSON (`--out`, sgos.measure-report.v1,
+      # docs/measure-report.md) AYNI kosunun AYNI bellek-ici sonuclarindan uretilir; ikinci bir `measure` kosusu YOK
+      # (ikinci kosu GSC'yi site basina 4 yerine 8 kez cagirir ve iki dosyanin donem/zaman damgasi ayrisabilirdi).
+      # Stdout bayt-bayt eskisiyle ayni (golden testi); `--out` yalniz `measure-json/` dizinine yazar.
+      #
+      # JSON hatasi: Markdown zaten tamamen basildi ve measure.txt'e yazildi; kosu burada DURMAZ (rapor, commit,
+      # artifact devam eder) ama SESSIZ DA DEGIL — `measure-report.error.txt` isareti varsa json_failed=true yazilir ve
+      # isin SON adimi ("Olcum JSON kapisi") kosuyu KIRMIZI yapar. Isaret yoksa (kayit/registry/cokme) eskisi gibi kirmizi.
       - name: Ölçüm
+        id: measure
         env:
           SEARCH_GROWTH_GSC_CREDENTIALS_JSON: ${{ secrets.SEARCH_GROWTH_GSC_CREDENTIALS_JSON }}
           SEARCH_GROWTH_GA4_CREDENTIALS_JSON: ${{ secrets.SEARCH_GROWTH_GA4_CREDENTIALS_JSON }}
         run: |
-          set -o pipefail
-          node --experimental-strip-types src/cli.ts measure config/sites.yaml | tee measure.txt
-
-      # Makine-okunur ölçüm raporu (`sgos.measure-report.v1`, docs/measure-report.md §Workflow).
-      # NİYE AYRI ADIM: yukarıdaki "Ölçüm" adımı Markdown'ın tek kaynağıdır ve bayt-bayt
-      # aynı kalmalı; JSON üretimi orada patlarsa Markdown yolu da kırmızı olurdu. Bu adım
-      # `continue-on-error`: başarısızlık ASLA sessiz değil ("JSON'unu yerleştir / durumu bildir"
-      # adımı uyarı + step summary yazar), ama Markdown raporunu ve commit'i engellemez.
-      # Stdout atılır (Markdown'a zaten "Ölçüm" adımı girdi); yalnız dosya önemli.
-      - name: Ölçüm raporu (JSON)
-        id: measure_json
-        continue-on-error: true
-        env:
-          SEARCH_GROWTH_GSC_CREDENTIALS_JSON: ${{ secrets.SEARCH_GROWTH_GSC_CREDENTIALS_JSON }}
-          SEARCH_GROWTH_GA4_CREDENTIALS_JSON: ${{ secrets.SEARCH_GROWTH_GA4_CREDENTIALS_JSON }}
-        run: |
-          set -o pipefail
           rm -rf measure-json
-          node --experimental-strip-types src/cli.ts measure config/sites.yaml --out measure-json > /dev/null
-          test -s measure-json/measure-report.json
+          mkdir -p measure-json
+          node --experimental-strip-types src/cli.ts measure config/sites.yaml --out measure-json | tee measure.txt
+          rc=${PIPESTATUS[0]}
+          if [ "$rc" -ne 0 ]; then
+            if [ -f measure-json/measure-report.error.txt ]; then
+              echo "json_failed=true" >> "$GITHUB_OUTPUT"
+              echo "::warning::sgos.measure-report.v1 JSON üretilemedi; Markdown ölçümü tamam ve rapora girecek. Sebep: $(head -c 300 measure-json/measure-report.error.txt)"
+            else
+              exit "$rc"
+            fi
+          fi
 
       # Gelir siteleri icin kirilim. Toplam sayi sorunun VARLIGINI gosterir,
       # sebebini gostermez: 58.071 gosterim / 204 tik, agirlikli sira 3,5 iken
@@ -180,21 +181,20 @@ jobs:
           cp reports/measure-latest.md "reports/runs/$(date -u +%Y-%m-%d)-measure.md" 2>/dev/null \
             || { mkdir -p reports/runs; cp reports/measure-latest.md "reports/runs/$(date -u +%Y-%m-%d)-measure.md"; }
 
-      # JSON'u kanonik yola koyar (ROLLING SNAPSHOT: dosya her hafta üzerine yazılır; tarihli
-      # kopya YOK — 7 site x 500 sorgu haftalık MB'larca JSON; sürüm geçmişini git zaten tutar).
-      # YALNIZ bu workflow yazar (tek yazıcı); commit'i aşağıdaki TEK kalıcılık betiği çağrısı yapar. Üretim başarısızsa mevcut latest'e DOKUNULMAZ:
-      # eski dosya yaşlanır ve skorkart tazelik eşiğinde (10 gün) UNKNOWN-STALE der — bayat
-      # veri taze gibi görünmez, boş dosya da yazılmaz.
-      - name: Ölçüm JSON'unu yerleştir / durumu bildir
-        if: always()
+      # JSON'u kanonik yola koyar (ROLLING SNAPSHOT: dosya her hafta üzerine yazılır; tarihli kopya YOK —
+      # 7 site x 500 sorgu haftalık MB'larca JSON; sürüm geçmişini git zaten tutar). YALNIZ bu workflow yazar
+      # (tek yazıcı); commit'i aşağıdaki TEK kalıcılık betiği çağrısı yapar. JSON üretilemediyse mevcut latest'e
+      # DOKUNULMAZ: eski dosya yaşlanır, skorkart tazelik eşiğinde (10 gün) UNKNOWN-STALE der; bayat veri taze
+      # görünmez, boş/yarım dosya yazılmaz.
+      - name: Ölçüm JSON'unu yerleştir
+        if: always() && steps.measure.outcome == 'success'
         run: |
-          if [ "${{ steps.measure_json.outcome }}" = "success" ] && [ -s measure-json/measure-report.json ]; then
+          if [ "${{ steps.measure.outputs.json_failed }}" != "true" ] && [ -s measure-json/measure-report.json ]; then
             mkdir -p reports
             cp measure-json/measure-report.json reports/measure-report-latest.json
             echo "- sgos.measure-report.v1 JSON: yazıldı (reports/measure-report-latest.json)" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "::warning::sgos.measure-report.v1 JSON üretilemedi (adım sonucu: ${{ steps.measure_json.outcome }}). Markdown raporu etkilenmedi; reports/measure-report-latest.json güncellenmedi."
-            echo "- **UYARI: sgos.measure-report.v1 JSON üretilemedi** (sonuç: ${{ steps.measure_json.outcome }}). Markdown raporu etkilenmedi; reports/measure-report-latest.json GÜNCELLENMEDİ, skorkart bu dosyayı tazelik eşiğinden sonra UNKNOWN-STALE okur." >> "$GITHUB_STEP_SUMMARY"
+            echo "- **UYARI: sgos.measure-report.v1 JSON üretilemedi.** Markdown raporu etkilenmedi; reports/measure-report-latest.json GÜNCELLENMEDİ, skorkart bu dosyayı tazelik eşiğinden sonra UNKNOWN-STALE okur. Koşu sonunda kırmızı olacak." >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Özet
@@ -222,6 +222,7 @@ jobs:
             reports/measure-latest.md
             reports/measure-report-latest.json
             measure-json/measure-report.json
+            measure-json/measure-report.error.txt
             smoke.txt
             measure.txt
             detail.txt
@@ -229,3 +230,15 @@ jobs:
             content/topic-ledger.json
           retention-days: 30
           if-no-files-found: warn
+
+      # SON adim: JSON anlık görüntüsü üretilemediyse kosu KIRMIZI biter — ama rapor, commit ve artifact (yukarıda)
+      # zaten tamamlandi; hicbir sey kaybolmaz. Olcumun kendisi cokmusse (steps.measure basarisiz) bu adim calismaz:
+      # o zaten kirmizi, iki kez bildirmeye gerek yok.
+      - name: Ölçüm JSON kapısı
+        if: always() && steps.measure.outcome == 'success'
+        run: |
+          if [ "${{ steps.measure.outputs.json_failed }}" = "true" ] || [ ! -s measure-json/measure-report.json ]; then
+            echo "::error::sgos.measure-report.v1 JSON anlık görüntüsü üretilemedi (reports/measure-report-latest.json güncellenmedi). Markdown raporu ve ledger commit edildi."
+            exit 1
+          fi
+          node -e 'const r=JSON.parse(require("fs").readFileSync("measure-json/measure-report.json","utf8")); if(r.schema!=="sgos.measure-report.v1"||!r.sites||!Object.keys(r.sites).length){console.error("JSON gecersiz");process.exit(1)}'

@@ -37,17 +37,41 @@ kapılar değişmedi; tek yazıcı `measure.yml`, tek commit adımı mevcut `scr
   insan okuyacaksa Markdown arşivi (`reports/runs/<tarih>-measure.md`) durur. Gerçek bir zaman serisi ihtiyacı doğarsa ayrı, sahipli ve
   boyutu sınırlı bir tarihçe (history-ownership kaydıyla) tasarlanır; bu karar onu engellemez.
 - `reports/` öneki `persist-history.sh` izin listesinde zaten var; **izin listesi genişletilmedi**. Çağrıya yalnız `reports/measure-report-latest.json` eklendi.
-- Üretim: ayrı adım `Ölçüm raporu (JSON)` aynı `measure ... --out measure-json` komutunu (CLI `measure-json/measure-report.json` yazar)
-  `continue-on-error` ile çalıştırır. "Ölçüm" adımı (Markdown kaynağı) bayt-bayt aynı kaldı. Maliyet: `measure` günde bir kez yerine iki kez
-  GSC çağırır (aynı salt-okunur çağrılar); iki koşu arasında saniyeler olduğu için fark anlamsız, JSON kendi `period`/`generated_at`'ini taşır.
-- Hata davranışı (fail-safe, sessiz değil): JSON üretimi patlarsa **Markdown raporu ve commit yolu kırmızıya dönmez** (JSON ikincil çıktı; owner
-  kırmızı isterse adımdan `continue-on-error` kaldırılır). Ama `::warning::` ve step summary'ye "UYARI: JSON üretilemedi" yazılır, mevcut
-  `latest` dosyasına DOKUNULMAZ: bayat dosya 10 gün sonra skorkartta `UNKNOWN-STALE` olur; bozuk/boş dosya yazılmaz, taze görünen bayat veri olmaz.
+- **Üretim: TEK GSC fetch.** `Ölçüm` adımı `measure config/sites.yaml --out measure-json | tee measure.txt` komutunu **bir kez** çalıştırır.
+  CLI GSC'yi site başına 4 kez çağırır (sorgu + boyutsuz toplam, bu dönem + yıl önce), sonuçları bellek-içi `reportInputs`
+  (`SiteMeasureInput[]`, kanonik normalize ölçüm nesnesi) olarak tutar; Markdown satırlarını bu sonuçlardan basar, JSON'u aynı
+  nesneden `buildMeasureReport` ile üretir. Dönemler, `generated_at` ve `retrieved_at` tek `runNow` damgasından türer; ikinci çağrı yok.
+  Konu fırsatı (`topics` + ledger), kırılım (`detail`) ve duman testi (`smoke`) **mevcut, ayrı komutlar olarak aynen kalır** (kendi çağrıları var; bu PR'da değişmedi).
+
+  ```
+  GSC fetch (1x) -> reportInputs ─┬─ Markdown (stdout, bayt-bayt eski) -> measure.txt -> reports/measure-latest.md
+                                  └─ sgos.measure-report.v1 (--out)    -> reports/measure-report-latest.json
+  ```
+  (Eski #45 taslağı ikinci bir `measure` koşusu yapıyordu: site başına 8 çağrı ve iki dosyanın ayrışabilen dönem/zaman damgası. Testle kanıtlı: `tests/measure-single-fetch.test.ts` A/A2.)
+- **Bozuk upstream yanıtı fail-closed:** sayısal olmayan/eksik alan (`impressions` yok, `"abc"`, NaN) olan site ERROR olur
+  (`state_reason: beklenmeyen GSC yaniti ...`, metrikler `null`), Markdown'da `veri : HATA — ...`; diğer siteler etkilenmez. Geçerli yanıtta çıktı değişmez.
+- **Hata matrisi** (hangi artifact korunur / kırmızı mı / commit olur mu):
+
+  | Durum | Markdown | JSON snapshot | İş | Commit (Markdown+ledger / JSON) |
+  |---|---|---|---|---|
+  | GSC kimliği yok | NOT_CONNECTED satırları | yazılır (NOT_CONNECTED, null) | yeşil | evet / evet |
+  | Bir sitede GSC hatası (403, ağ) | o site `HATA` | yazılır (o site ERROR) | yeşil (mevcut davranış) | evet / evet |
+  | Bir sitede bozuk yanıt / normalizasyon hatası | o site `HATA` | yazılır (o site ERROR) | yeşil | evet / evet |
+  | Registry geçersiz / `measure` çöker (işaret yok) | yok | yok | **kırmızı**, sonraki adımlar atlanır | hayır / hayır (mevcut davranış) |
+  | JSON yazımı/render hatası | **tam basılır, measure.txt tam** | **güncellenmez** (eski dosya korunur, yarım/tmp artığı yok) | adım geçer + `::warning::`; **SON adım `Ölçüm JSON kapısı` kırmızı** | evet / hayır |
+  | Konu fırsatı (ledger) hatası | etkilenmez | etkilenmez | adım `continue-on-error` (mevcut) | ledger yok / JSON evet |
+  | Persist hatası (exit 1/2/3) | artifact'ta | artifact'ta | **kırmızı** | hayır (3 deneme, force yok); `if: always()` artifact yine yüklenir |
+
+  Karar: **JSON hatası fail-LATE** (fail-open değil): Markdown ölçümü ve commit kaybolmaz, ama koşu sessizce yeşil kalmaz; kapı adımı işin sonunda kırmızı yapar.
+  Ölçüm çökmesi (JSON işareti yok) **gizlenmez**: `Ölçüm` adımı `continue-on-error` DEĞİL, aynı çıkış koduyla kırmızı. JSON üretilemediğinde
+  CLI `measure-json/measure-report.error.txt` yazar ve exit 1 verir; workflow bu işaretle "JSON yok" ile "ölçüm çöktü"yü ayırır (`tests/measure-single-fetch.test.ts` K1–K5 gerçek bash adımlarını sahte `node` ile koşar).
+- `latest` dosyasına JSON üretilemediğinde DOKUNULMAZ: bayat dosya 10 gün sonra skorkartta `UNKNOWN-STALE` olur; bozuk/boş/yarım dosya yazılmaz, taze görünen bayat veri olmaz.
 - Artifact (`measure-<run_id>`) hem `reports/measure-report-latest.json` hem ham `measure-json/measure-report.json`'ı içerir.
 - Skorkart bağlantısı: `--measure-report reports/measure-report-latest.json`.
-- Testler: `tests/measure-workflow.test.ts` (cron/izin/concurrency değişmezleri, tek persist çağrısı ve yollarının betikten okunan
-  izin listesine uyması, satır içi git yazımı yok, fail-safe, artifact, Markdown adımlarının dokunulmazlığı; CLI'yi sahte Google ile koşup
-  skorkartın dosyayı okuduğunu doğrular).
+- Testler: `tests/measure-workflow.test.ts` (cron/izin/concurrency değişmezleri, tek `measure` çağrısı, tek persist çağrısı ve yollarının betikten
+  okunan izin listesine uyması, satır içi git yazımı yok, artifact, kapı sırası) ve `tests/measure-single-fetch.test.ts` (A–Q: çağrı sayısı, Markdown golden,
+  aynı dönem/zaman damgası, ölçülmüş sıfır/UNKNOWN, marka ayrımı eşitliği, sınırlı satır, yanlış site, bozuk upstream, JSON hata semantiği,
+  #43 `persist-history.sh` ile gerçek yerel remote'a push, skorkart: OK / ATTENTION / UNKNOWN-STALE / UNKNOWN).
 - İlk canlı koşuda `persist-history.sh` ilk kez gerçek workflow'da çalışacak (ilk planlı koşu 2026-10-05); beklenen: `reports/measure-report-latest.json` yeni dosya olarak commit'lenir.
 
 ## Tek dosya, site anahtarlı `sites{}`

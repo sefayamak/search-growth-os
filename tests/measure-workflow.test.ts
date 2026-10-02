@@ -44,21 +44,41 @@ test("tek yazici: tam bir persist-history.sh cagrisi, yollari izin listesinde, s
   assert.equal((code.match(/GITHUB_TOKEN|git remote|gh (pr|api)/g) ?? []).length, 0);
 });
 
-test("JSON adimi fail-safe: continue-on-error, sessiz degil (warning + step summary), yalniz --out ile uretir", () => {
-  const i = WF.indexOf("id: measure_json");
-  assert.ok(i > 0);
+test("TEK fetch: workflow'da tam bir `measure` cagrisi; Markdown (tee) ve JSON (--out) ayni kosudan", () => {
+  const calls = code.match(/src\/cli\.ts measure\b[^\n]*/g) ?? [];
+  assert.equal(calls.length, 1, `measure tam bir kez cagrilmali (ikinci kosu = ikinci GSC cagrisi): ${calls.join(" || ")}`);
+  assert.match(calls[0], /--out measure-json \| tee measure\.txt$/);
+  assert.equal((code.match(/--out\b/g) ?? []).length, 1);
+  assert.doesNotMatch(code, /name: Ölçüm raporu \(JSON\)/, "ayri ikinci olcum adimi kalmamali");
+  assert.doesNotMatch(code, /measure_json/);
+});
+
+test("JSON hatasi: Markdown yolu durmaz ama SESSIZ degil (isaret + warning + son adimda kirmizi); olcum cokmesi eskisi gibi kirmizi", () => {
+  const i = WF.indexOf("      - name: Ölçüm\n");
   const block = WF.slice(i, WF.indexOf("      # Gelir siteleri", i));
-  assert.match(block, /continue-on-error: true/);
-  assert.match(block, /measure config\/sites\.yaml --out measure-json/);
-  assert.match(code, /steps\.measure_json\.outcome/);
-  assert.match(code, /::warning::sgos\.measure-report\.v1 JSON üretilemedi/);
-  assert.match(code, /UYARI: sgos\.measure-report\.v1 JSON üretilemedi[^\n]*GITHUB_STEP_SUMMARY/);
-  // Basarisizlikta mevcut latest'e dokunulmaz (cp yalniz success dalinda).
+  assert.match(block, /id: measure\n/);
+  assert.doesNotMatch(block, /continue-on-error/, "olcum adimi continue-on-error OLMAMALI (cokme gizlenmez)");
+  assert.match(block, /rc=\$\{PIPESTATUS\[0\]\}/);
+  assert.match(block, /measure-json\/measure-report\.error\.txt/);
+  assert.match(block, /json_failed=true/);
+  assert.match(block, /::warning::sgos\.measure-report\.v1 JSON üretilemedi/);
+  assert.match(block, /else\n\s+exit "\$rc"/, "isaret yoksa kod aynen iletilir");
+  // Yerlestirme: yalniz olcum basariliysa; cp yalniz basari dalinda ve TEK.
   const place = WF.slice(WF.indexOf("- name: Ölçüm JSON'unu yerleştir"), WF.indexOf("- name: Özet"));
+  assert.match(place, /if: always\(\) && steps\.measure\.outcome == 'success'/);
   assert.ok(place.indexOf("cp measure-json") < place.indexOf("else"), "cp yalniz basari dalinda");
   assert.ok(!place.slice(place.indexOf("else")).includes("cp "), "basarisizlik dalinda cp yok");
-  // Karar: rolling snapshot. Tarihli JSON kopyasi (append-only gecmis) YOK; tek canonical yol yazilir.
   assert.equal((place.match(/\bcp /g) ?? []).length, 1);
+  assert.match(place, /UYARI: sgos\.measure-report\.v1 JSON üretilemedi[^\n]*GITHUB_STEP_SUMMARY/);
+  // Kapi: isin SON adimi, kalici/artifact adimlarindan SONRA; json_failed ya da bos dosyada exit 1.
+  const gateAt = WF.indexOf("- name: Ölçüm JSON kapısı");
+  assert.ok(gateAt > WF.indexOf("name: Artifact") && gateAt > WF.indexOf("persist-history.sh"), "kapi commit ve artifact'tan sonra");
+  assert.equal((WF.slice(gateAt).match(/- name:/g) ?? []).length, 1, "kapi son adim");
+  const gate = WF.slice(gateAt);
+  assert.match(gate, /if: always\(\) && steps\.measure\.outcome == 'success'/);
+  assert.match(gate, /json_failed \}\}" = "true" \] \|\| \[ ! -s measure-json\/measure-report\.json \]/);
+  assert.match(gate, /exit 1/);
+  // Karar: rolling snapshot. Tarihli JSON kopyasi (append-only gecmis) YOK; tek canonical yol yazilir.
   assert.doesNotMatch(code, /runs\/\S*measure-report/);
 });
 
@@ -66,11 +86,13 @@ test("artifact listesi JSON'u icerir", () => {
   const art = WF.slice(WF.indexOf("name: Artifact"));
   assert.match(art, /^\s+reports\/measure-report-latest\.json$/m);
   assert.match(art, /^\s+measure-json\/measure-report\.json$/m);
+  assert.match(art, /^\s+measure-json\/measure-report\.error\.txt$/m);
   assert.match(art, /if: always\(\)/);
 });
 
 test("Markdown adimlari dokunulmamis: Olcum adimi ayni komut, rapor derleme ayni cikti", () => {
-  assert.match(WF, /      - name: Ölçüm\n        env:\n(?:.*\n){2}        run: \|\n          set -o pipefail\n          node --experimental-strip-types src\/cli\.ts measure config\/sites\.yaml \| tee measure\.txt\n/);
+  // Olcum adimi: stdout hala `| tee measure.txt`'e gider (Markdown bayt-bayt ayni: tests/measure-report.test.ts golden); yalniz `--out measure-json` eklendi.
+  assert.match(WF, /      - name: Ölçüm\n        id: measure\n        env:\n(?:.*\n){2}        run: \|\n(?:.*\n)*?          node --experimental-strip-types src\/cli\.ts measure config\/sites\.yaml --out measure-json \| tee measure\.txt\n/);
   for (const s of [
     "} > reports/measure-latest.md",
     `cp reports/measure-latest.md "reports/runs/$(date -u +%Y-%m-%d)-measure.md"`,

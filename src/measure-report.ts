@@ -193,6 +193,26 @@ function unmeasuredGsc(state: Exclude<MeasureState, "MEASURED">, reason: string,
   };
 }
 
+/**
+ * GSC satirlari sayisal olarak gecerli mi? (sonlu, negatif olmayan clicks/impressions; sonlu ctr/position.)
+ * Gecersizse sebep dondurur, gecerliyse null. Neden: adapter API yanitini oldugu gibi gecirir; eksik/NaN alan toplama girer,
+ * JSON.stringify NaN'i `null` yazar ve sonuc "MEASURED ama null" gibi tutarsiz/uydurma bir olcume donusur. Bozuk yanit olculmus sayilmaz.
+ */
+export function invalidGscRows(rows: unknown): string | null {
+  if (!Array.isArray(rows)) return "satir listesi degil";
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i] as Record<string, unknown> | null;
+    if (r === null || typeof r !== "object") return `satir ${i} nesne degil`;
+    for (const k of ["clicks", "impressions", "ctr", "position"] as const) {
+      const v = r[k];
+      if (typeof v !== "number" || !Number.isFinite(v)) return `satir ${i}: ${k} sayi degil`;
+      if ((k === "clicks" || k === "impressions") && v < 0) return `satir ${i}: ${k} negatif`;
+    }
+    if (r.query !== undefined && typeof r.query !== "string") return `satir ${i}: query metin degil`;
+  }
+  return null;
+}
+
 export function buildSiteReport(input: SiteMeasureInput, o: BuildOptions): SiteReport {
   const max = o.maxQueryRows ?? DEFAULT_MAX_QUERY_ROWS;
   const generated_at = o.now.toISOString();
@@ -213,6 +233,10 @@ export function buildSiteReport(input: SiteMeasureInput, o: BuildOptions): SiteR
       query_page_rows: { state: "NOT_MEASURED", rows: null, reason: "sorgu×sayfa kırılımı mevcut ölçümde yok" },
     };
   } else {
+    for (const [label, rows] of [["sorgu satirlari", oc.current], ["site toplami", oc.currentTotal], ["onceki donem sorgu satirlari", oc.yearAgo], ["onceki donem site toplami", oc.yearAgoTotal]] as const) {
+      const bad = rows ? invalidGscRows(rows) : null;
+      if (bad) throw new Error(`beklenmeyen GSC yaniti (${label}): ${bad}`);
+    }
     const cur = totalsFrom(oc.currentTotal);
     const prev = oc.yearAgoTotal ? totalsFrom(oc.yearAgoTotal) : null;
     const split = splitByBrand(oc.current, input.patterns);
@@ -294,7 +318,11 @@ export function buildSiteReport(input: SiteMeasureInput, o: BuildOptions): SiteR
 
 export function buildMeasureReport(inputs: SiteMeasureInput[], o: BuildOptions): MeasureReport {
   const sites: Record<string, SiteReport> = {};
-  for (const i of inputs) sites[i.siteId] = buildSiteReport(i, o);
+  for (const i of inputs) {
+    // Tek sitenin normalizasyonu patlarsa YALNIZ o site ERROR olur (null + sebep); diger siteler ve rapor etkilenmez.
+    try { sites[i.siteId] = buildSiteReport(i, o); }
+    catch (e) { sites[i.siteId] = buildSiteReport({ ...i, outcome: { kind: "error", message: (e as Error).message } }, o); }
+  }
   return {
     schema: MEASURE_REPORT_SCHEMA,
     generated_at: o.now.toISOString(),
