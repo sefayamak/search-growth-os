@@ -19,7 +19,7 @@ sistemle bir ilgisi yok (o yalnız siteleri yayına alıyor).
 | Eski not (20 Eylül) | Bugün (doğrulandı) |
 |---|---|
 | "GSC/GA4 bağlı değil, UNKNOWN kalır" (bölüm 6) | **Bağlı.** `reports/measure-latest.md` (28 Eylül): 7/7 GSC OK, 7/7 GA4 OK. Service account + Search Console + GA4 erişimi tamamlandı |
-| "65 test" | **442 test**, `npm run typecheck` temiz |
+| "65 test" | **459 test**, `npm run typecheck` temiz |
 | "iki workflow var" | Beş: `measure.yml` (haftalık GSC+GA4), `tests.yml` (her PR'da test), `index-probe.yml` (yalnız elle), `portfolio-check.yml`, `search-audit.yml` |
 | "Sıradaki adım: 3 PR'ı merge et" (pamistanbul-site #89/#90, pamaistudio#40) | Bu depodan **doğrulanamadı**; o repolar bu oturumun kapsamı dışı. Sefa'nın teyidi gerekir |
 | 18 skill | 18 skill (README'deki "15" eskiydi, düzeltildi) |
@@ -87,6 +87,10 @@ bunları `UNKNOWN` sayar. Clarity serisi, shm'nin ağ izni düzelene kadar güve
 **Legacy SHM çıkış PR'ı (draft, 2026-10-02): LEGACY SHM = STILL ACTIVE UNTIL LIVE CUTOVER.** Denetim kararı `LEGACY_DISABLE_NOT_SAFE_YET`; P0-1 (7 site günlük Clarity + kalıcılık) ve P0-2 (minimum alert) bu PR'da
 **uygulandı, canlı doğrulanmadı** (`docs/integrations/clarity-daily.md`, cutover sırası orada). Zamanlanmış koşu `SEARCH_GROWTH_CLARITY_DAILY_ENABLED` bayrağı olmadan atlanır. Credential rotation legacy kapandıktan SONRA zorunlu (owner action). Canonical conflict'ler ayrı backlog.
 
+**Clarity başarı ölçütü (owner kararı, 2026-10-02; draft PR):** takeover/migrasyon başarısı `measurement_success`'e (MEASURED + CONFIRMED + rows_complete; doğrulanmış sıfır dahil) bakar, `usable`'a değil
+(`usable` yalnız baz/trend/friction-alert uygunluğu). Ayni-gün guard'ı doğrulanmış sıfırı da tanır. İki ardışık tam takeover doğrulaması: 7/7 `measurement_success=true`, bu koşuda 7/7 taze ölçüm.
+2026-10-02 run 36983089184 + PAM run 36978486153 = measurement_success 7/7 → `COVERAGE_VALIDATION_SUCCESS` (FULL_TAKEOVER_SUCCESS_1_OF_2 DEĞİL: PAM taze ölçülmedi). Legacy hâlâ açık. Ayrıntı: `docs/integrations/clarity-daily.md`.
+
 **Phase 2'ye kalanlar:** Clarity client'ı, shm OAuth yolunun emekliliği, Lighthouse/CWV, deploy geçmişi,
 içerik taslağı → PR hattı, dashboard.
 
@@ -111,7 +115,7 @@ içerik taslağı → PR hattı, dashboard.
 cd search-growth-os && git pull && npm test
 ```
 
-442 test yeşil gelmeli (20 Eylül'de 65 idi). Sonra bölüm 2'deki tek adıma geç.
+459 test yeşil gelmeli (20 Eylül'de 65 idi). Sonra bölüm 2'deki tek adıma geç.
 
 Bir şeyin hâlâ geçerli olup olmadığından şüphelenirsen ölçümü tekrarla —
 ama önce bu dosyadaki sayıya bak; çoğu soru orada cevaplı.
@@ -188,7 +192,7 @@ node --experimental-strip-types src/cli.ts portfolio     # içerik ritmi, 7 site
 node --experimental-strip-types src/cli.ts llmstxt       # llms.txt envanteri
 node --experimental-strip-types src/cli.ts audit --site pamistanbul --full
 node --experimental-strip-types src/cli.ts registry config/sites.yaml
-npm test                                                  # 442 test
+npm test                                                  # 459 test
 ```
 
 Bağımlılık yok, sadece Node 24.

@@ -42,7 +42,7 @@ reports/                     changelog, learning log, dry-run template; runs/ is
 ## Run
 
 ```bash
-npm test                                   # node:test suite, spins a local fixture site (442 tests on 2026-10-02)
+npm test                                   # node:test suite, spins a local fixture site (459 tests on 2026-10-02)
 npm run cli -- audit --site pamistanbul    # registry-gated, read-only, sample crawl
 npm run cli -- audit --site pamistanbul --full   # FULL_BASELINE: every eligible sitemap URL
 npm run cli -- audit https://example.com   # ad-hoc URL (bypasses the registry gate)

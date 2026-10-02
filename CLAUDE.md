@@ -64,7 +64,7 @@ node --experimental-strip-types src/cli.ts import-health <snapshotDir>   # site-
 node --experimental-strip-types src/cli.ts inspect-index config/sites.yaml --site pamistanbul   # ÖRNEKLEM, tam coverage değil
 node --experimental-strip-types src/cli.ts clarity-daily config/sites.yaml   # günlük Clarity + geçmiş + alert (cutover bayrağı: docs/integrations/clarity-daily.md)
 node --experimental-strip-types src/cli.ts brain-validate config/sites.yaml --site pamistanbul   # Cloud Brain, OFFLINE (API çağrısı yok); canlı koşu: brain-run + GitHub Actions
-npm test        # 442 doğrulama (2026-10-02)
+npm test        # 459 doğrulama (2026-10-02)
 npm run typecheck
 ```
 
