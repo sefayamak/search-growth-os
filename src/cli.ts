@@ -511,6 +511,7 @@ async function main() {
       }
       for (const a of out.alerts) console.log(`ALERT ${a.site_id} ${a.kind} — ${a.note}`);
       for (const p of parsed.problems) console.log(`SORUN ${p}`);
+      console.log(`ölçüm başarısı ${out.coverage.measurement_success}/${out.coverage.total_sites} (taze ${out.coverage.fresh_measurement_success}) · usable ${out.coverage.usable}/${out.coverage.total_sites} (yalniz analiz uygunlugu)`);
       console.log(`alert ${out.alerts.length} · HTTP denemesi ${out.http_attempts}`);
       // ERROR / PARTIAL / bozuk gecmis gorunur kalsin (is kirmizi); NOT_CONNECTED, alert ve atlanan site degildir.
       if (out.results.some((r) => r.measurement_state === "ERROR" || r.measurement_state === "PARTIAL") || out.sites.some((s) => s.action === "HISTORY_ERROR") || parsed.problems.length) process.exitCode = 1;

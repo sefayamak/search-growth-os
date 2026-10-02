@@ -12,6 +12,30 @@
 Bu PR yalnız denetimde (2026-10-02) kanıtlanan iki P0'u kapatır: **P0-1** 7 site günlük Clarity toplama + kalıcılık, **P0-2** minimum Clarity alert.
 **P0-SEC** (legacy routine prompt'undaki düz metin credential'lar) bu PR'ın konusu değildir.
 
+## Başarı ölçütü: `measurement_success` (owner kararı, 2026-10-02)
+
+> **Clarity takeover success measures observability coverage, not traffic volume.**
+> **Confirmed complete zero response counts as a successful measurement.**
+> **`usable` is an analysis/baseline eligibility concept, not a migration success criterion.**
+> **Two consecutive full takeover validations require 7/7 `measurement_success=true`.**
+
+`measurement_success = true` **yalnızca** `status == MEASURED` **ve** `confidence == CONFIRMED` **ve** `rows_complete == true` ise. `is_zero` bunu değiştirmez.
+`usable = measurement_success && !is_zero` (yalnız analiz uygunluğu: baz, trend, friction alert).
+
+| Durum | measurement_success | usable | is_zero | Baz | Friction alert | Bot alert |
+|---|---|---|---|---|---|---|
+| MEASURED + CONFIRMED + complete + sıfır değil | true | true | false | evet | evet | evet (koşullar sağlanırsa) |
+| MEASURED + CONFIRMED + complete + **sıfır** | **true** | **false** | **true** | hayır | hayır | hayır (`total_sessions=0` ise `bot_pct` UNKNOWN) |
+| NOT_CONNECTED | false | false | false | hayır | hayır | hayır |
+| ERROR | false | false | false | hayır | hayır | hayır |
+| PARTIAL / `rows_complete=false` | false | false | false | hayır | hayır | hayır |
+
+Doğrulanmış sıfır: başarısızlık değildir, UNKNOWN değildir (sayılar gerçek 0; oturum alanları Traffic metriği yanıtta yoksa UNKNOWN kalır), baz olmaz, friction/bot alert üretmez.
+
+Takeover'ın "taze" koşusu: o koşuda her site gerçekten API ile ölçülmüş olmalı (`fresh_measurement_success`). Aynı-gün guard'ı ile atlanan site önceki başarılı ölçümden miras kalır ve **taze sayılmaz** (`coverage` çıktısı ikisini ayrı verir).
+
+**Geriye uyumluluk:** 2026-10-02 öncesi kayıtlarda `measurement_success` alanı yoktur; aynı kuraldan türetilir (`measurementSuccessOf`). Alan yazılıysa kuraldan türetilenle birebir aynı olmalıdır, değilse geçmiş dosyası bozuk sayılır (koşu kırmızı, üzerine yazılmaz).
+
 ## Ne yapar
 
 `clarity-daily` (CLI) ve `.github/workflows/clarity-daily.yml`:
@@ -33,20 +57,20 @@ Bu PR yalnız denetimde (2026-10-02) kanıtlanan iki P0'u kapatır: **P0-1** 7 s
 | Bir istek düştü | `PARTIAL`; `usable=false` |
 | Bir metrik 1000 satıra ulaştı | `rows_complete=false`; friction/oturum `UNKNOWN`; `usable=false` |
 | Yanıtta bir friction metriği HİÇ yok | O metrik `UNKNOWN` (canlı yanıtlarda 9 metrik sıfır satırlarıyla hep döner; yokluk sıfır değildir) |
-| 200 ve gerçekten satır yok (`is_zero`) | Kaydedilir, `usable=false` (baz/alert olmaz) |
+| 200 ve gerçekten satır yok (`is_zero`) | **Başarılı ölçüm** (`measurement_success=true`), `usable=false` (baz/alert olmaz) |
 
-`usable=true` ⇔ `MEASURED` + `CONFIRMED` + `rows_complete` + gerçek-sıfır değil. **Yalnız kullanılabilir kayıt baz olabilir ve alert üretebilir.**
+`usable=true` ⇔ `measurement_success` + gerçek-sıfır değil. **Yalnız usable kayıt baz olabilir ve alert üretebilir.** Takeover başarısı `usable`'a değil `measurement_success`'e bakar (yukarı).
 
 ## Ayni gün / duplicate
 
 (site, UTC gün) başına **tek kayıt**. Birleştirme kuralı:
 
 - gün yoksa ekle;
-- mevcut kayıt kullanılabilirse **dokunma** (ilk güvenilir ölçüm kazanır; ikinci koşu bazı oynatamaz);
-- mevcut kullanılamazsa yeni kayıt yerini alır;
-- kullanılamaz kayıt kullanılabilir kaydı **asla** ezmez.
+- mevcut kayıt **başarılı bir ölçümse** (`measurement_success`, doğrulanmış sıfır dahil) **dokunma** (ilk başarılı ölçüm kazanır; ikinci koşu geçmişi oynatamaz);
+- mevcut kayıt başarısızsa (NOT_CONNECTED / ERROR / PARTIAL / kesik) yeni kayıt yerini alır;
+- başarısız kayıt başarılı kaydı (doğrulanmış sıfır dahil) **asla** ezmez.
 
-Kota koruması: aynı UTC günde kullanılabilir kaydı olan site için **API çağrısı yapılmaz** (`SKIPPED_ALREADY_MEASURED_TODAY`). Elle tekrar ve zamanlanmış koşu birbirinin kotasını yemez. `force` bunu bilerek aşar (kota harcar; kayıt yine değişmez).
+Kota koruması: aynı UTC günde **başarılı ölçümü** (`measurement_success`, sıfır dahil) olan site için **API çağrısı yapılmaz** (`SKIPPED_ALREADY_MEASURED_TODAY`). NOT_CONNECTED / ERROR / PARTIAL / `rows_complete=false` aynı gün başarılı yeniden denemeyi **engellemez**. Elle tekrar ve zamanlanmış koşu birbirinin kotasını yemez. `force` bunu bilerek aşar (kota harcar; başarılı kayıt yine değişmez).
 Bozuk geçmiş dosyası **yalnız kendi sitesini** durdurur (kota harcanmaz, üzerine yazılmaz, iş kırmızı); diğer siteler ölçülür.
 
 ## Alert eşikleri (legacy `daily_health_check.py`'den koddan doğrulandı)
@@ -78,6 +102,8 @@ Legacy'nin GSC click-drop alert'i **taşınmadı**: denetimde ölü kod olduğu 
 6. Repo değişkeni `SEARCH_GROWTH_CLARITY_DAILY_ENABLED=true` ayarla (zamanlanmış koşuyu açar).
 7. Sonraki **zamanlanmış** koşuyu doğrula (07:20 UTC; history'ye yeni gün eklendi, çift kayıt yok).
 8. Ancak bundan sonra legacy takeover COMPLETE.
+
+Başarı ölçütü her adımda `measurement_success`'tir (7/7); `usable` değil. İki ardışık **tam** takeover doğrulaması: her biri 7/7 `measurement_success=true` ve bu koşuda 7/7 taze ölçüm.
 
 ## Bu PR'ın dokunmadıkları
 

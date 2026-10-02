@@ -13,6 +13,11 @@
  * Esik anlamlari legacy `daily_health_check.py`'den KODDAN dogrulanip tasindi:
  *   friction: RageClick/ScriptError/ErrorClick/DeadClick icin `bugun > 0 ve bugun > onceki` (kesin artis);
  *   bot: `bot_pct > 50 ve (gercek+bot oturum) >= 5`. Toplam = gercek + bot (legacy ile ayni tanim).
+ *
+ * IKI AYRI KAVRAM (owner karari, 2026-10-02; karistirilmaz):
+ *   measurement_success = MEASURED + CONFIRMED + rows_complete. Gozlenebilirlik kapsami: takeover/migrasyon basarisi BUNA bakar.
+ *     Dogrulanmis TAM SIFIR yanit basarili bir olcumdur (is_zero bunu degistirmez); basarisizlik de UNKNOWN da degildir.
+ *   usable = measurement_success && !is_zero. YALNIZ analiz uygunlugu: baz, trend, friction alert. Takeover olcutu DEGILDIR.
  * Bilincli fark: onceki guvenilir olcum YOKSA friction icin "ilk kez gorulen deger" alert'i uretilmez
  *   (NO_BASELINE); bot kontrolu mutlak oldugu icin baz gerektirmez.
  */
@@ -54,7 +59,9 @@ export interface DailyRecord {
   max_metric_row_count: Num;
   rows_complete: boolean | "UNKNOWN";
   is_zero: boolean;
-  /** Alert icin baz/guncel olabilir mi: MEASURED + CONFIRMED + rows_complete + gercek-sifir degil. */
+  /** Takeover olcutu: MEASURED + CONFIRMED + rows_complete. is_zero bunu DEGISTIRMEZ. Eski kayitlarda yoktur: measurementSuccessOf() turetir. */
+  measurement_success?: boolean;
+  /** YALNIZ analiz uygunlugu (baz / trend / friction alert): measurement_success && !is_zero. Takeover olcutu DEGILDIR. */
   usable: boolean;
   friction: Record<FrictionKey, Num>;
   friction_total: Num;
@@ -106,8 +113,15 @@ export function computeSessions(r: ClaritySiteResult): DailyRecord["sessions"] {
   return { real, bot, total, bot_pct: total > 0 ? Math.round((1000 * bot) / total) / 10 : "UNKNOWN" };
 }
 
+/** Tek kaynak: acik alan varsa o, yoksa (2026-10-02 oncesi kayitlar) ayni kuraldan turetilir. parseHistory ikisinin tutarliligini zorlar. */
+export function measurementSuccessOf(r: Pick<DailyRecord, "measurement_state" | "confidence" | "rows_complete"> & { measurement_success?: boolean }): boolean {
+  if (typeof r.measurement_success === "boolean") return r.measurement_success;
+  return r.measurement_state === "MEASURED" && r.confidence === "CONFIRMED" && r.rows_complete === true;
+}
+
 export function toRecord(r: ClaritySiteResult, sourceRunId?: string): DailyRecord {
   const { friction, total } = computeFriction(r);
+  const success = r.measurement_state === "MEASURED" && r.confidence === "CONFIRMED" && r.rows_complete === true;
   const rec: DailyRecord = {
     site_id: r.site_id,
     date: r.measured_at.slice(0, 10),
@@ -119,7 +133,8 @@ export function toRecord(r: ClaritySiteResult, sourceRunId?: string): DailyRecor
     max_metric_row_count: r.max_metric_row_count,
     rows_complete: r.rows_complete,
     is_zero: r.is_zero,
-    usable: r.measurement_state === "MEASURED" && r.confidence === "CONFIRMED" && r.rows_complete === true && !r.is_zero,
+    measurement_success: success,
+    usable: success && !r.is_zero,
     friction, friction_total: total,
     sessions: computeSessions(r),
   };
@@ -148,6 +163,12 @@ function recordProblem(r: unknown, siteId: string): string | null {
   const s = x.sessions as DailyRecord["sessions"] | undefined;
   if (!s) return "sessions yok";
   for (const k of ["real", "bot", "total", "bot_pct"] as const) if (s[k] !== "UNKNOWN" && !isNum(s[k])) return `sessions.${k} gecersiz`;
+  // measurement_success acik yazildiysa kuraldan turetilenle BIREBIR ayni olmali (usable ile karistirilmasin diye).
+  if (x.measurement_success !== undefined) {
+    if (typeof x.measurement_success !== "boolean") return "measurement_success gecersiz";
+    const derived = x.measurement_state === "MEASURED" && x.confidence === "CONFIRMED" && x.rows_complete === true;
+    if (x.measurement_success !== derived) return "measurement_success kuraldan turetilenle uyusmuyor";
+  }
   // usable bayragi olcum durumuyla tutarli olmali; tek tek UNKNOWN metrikler alert'te metrik bazinda elenir.
   if (x.usable && (x.measurement_state !== "MEASURED" || x.confidence !== "CONFIRMED" || x.rows_complete !== true || x.is_zero)) return "usable=true ama olcum eksiksiz degil";
   return null;
@@ -199,21 +220,25 @@ export type MergeAction = "ADDED" | "REPLACED" | "KEPT_EXISTING";
 /**
  * Ayni (site, UTC gun) icin deterministik kural:
  *   - gun yoksa ekle;
- *   - mevcut kullanilabilirse DOKUNMA (ilk guvenilir olcum kazanir; ayni gunun ikinci kosusu baz/gecmisi oynatamaz);
- *   - mevcut kullanilamazsa yeni kayit yerini alir (kullanilabilir ya da daha yeni hata).
- * Kullanilamaz kayit kullanilabilir kaydi ASLA ezmez.
+ *   - mevcut kayit BASARILI bir olcumse (measurement_success; dogrulanmis sifir dahil) DOKUNMA
+ *     (ilk basarili olcum kazanir; ayni gunun ikinci kosusu gecmisi oynatamaz);
+ *   - mevcut kayit basarisizsa (NOT_CONNECTED / ERROR / PARTIAL / kesik) yeni kayit yerini alir.
+ * Basarisiz ya da analiz-disi kayit basarili kaydi ASLA ezmez. Dogrulanmis sifir gunu olgusal bir olcumdur ve korunur.
  */
 export function mergeRecord(h: HistoryFile, rec: DailyRecord): { file: HistoryFile; action: MergeAction } {
   if (rec.site_id !== h.site_id) throw new Error(`izolasyon ihlali: ${h.site_id} gecmisine ${rec.site_id} kaydi yazilamaz`);
   const i = h.records.findIndex((r) => r.date === rec.date);
   let records: DailyRecord[]; let action: MergeAction;
   if (i < 0) { records = [...h.records, rec]; action = "ADDED"; }
-  else if (h.records[i].usable) { return { file: h, action: "KEPT_EXISTING" }; }
+  else if (measurementSuccessOf(h.records[i])) { return { file: h, action: "KEPT_EXISTING" }; }
   else { records = h.records.map((r, j) => (j === i ? rec : r)); action = "REPLACED"; }
   records.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
   return { file: { ...h, max_records: HISTORY_MAX_RECORDS, records: records.slice(-HISTORY_MAX_RECORDS) }, action };
 }
 
+/** Ayni-gun guard'i: tamamlanmis dogrulanmis olcum (sifir dahil) varsa o gun icin tekrar API cagrisi YAPILMAZ. */
+export const hasMeasurementSuccessForDate = (h: HistoryFile, date: string): boolean => h.records.some((r) => r.date === date && measurementSuccessOf(r));
+/** Analiz uygunlugu (baz/alert) icin; guard icin KULLANILMAZ. */
 export const hasUsableForDate = (h: HistoryFile, date: string): boolean => h.records.some((r) => r.date === date && r.usable);
 
 /** Baz: guncelden ESKI gunlerin en yenisi, kullanilabilir olan. Ayni gunun kaydi baz olamaz. */
@@ -255,6 +280,7 @@ export interface Evaluation {
 export function evaluateAlerts(current: DailyRecord, history: { records: DailyRecord[] }): { evaluation: Evaluation; alerts: Alert[] } {
   const ev: Evaluation = { site_id: current.site_id, status: "NOT_EVALUATED", reasons: [], baseline_date: null };
   if (!current.usable) {
+    if (measurementSuccessOf(current) && current.is_zero) ev.reasons.push("CONFIRMED_ZERO: olcum basarili, analiz uygun degil (baz/friction/bot alert yok)");
     ev.reasons.push(`CURRENT_NOT_USABLE:${current.measurement_state}${current.error_code ? `/${current.error_code}` : ""}${current.is_zero ? "/is_zero" : ""}${current.rows_complete !== true ? `/rows_complete=${String(current.rows_complete)}` : ""}`);
     return { evaluation: ev, alerts: [] };
   }
@@ -296,15 +322,22 @@ export interface SiteOutcome {
   action: "MEASURED" | "SKIPPED_ALREADY_MEASURED_TODAY" | "HISTORY_ERROR";
   measurement_state?: ClaritySiteResult["measurement_state"];
   history_action?: MergeAction | "NOT_WRITTEN";
+  /** Bugunun (UTC) gecerli kaydi: bu kosuda yazilan ya da (atlanan sitede) onceden var olan. */
   record?: DailyRecord;
+  /** true: bu kosuda gercekten API ile olculdu; atlanan site false (onceki olcumden miras). */
+  fresh?: boolean;
   note?: string;
 }
+
+/** Takeover olcutu measurement_success'tir; usable yalniz analiz uygunlugudur. */
+export interface Coverage { total_sites: number; measurement_success: number; usable: number; fresh_measurement_success: number }
 
 export interface DailyOutcome {
   schema: typeof ALERTS_SCHEMA;
   date: string;
   generated_at: string;
   sites: SiteOutcome[];
+  coverage: Coverage;
   evaluations: Evaluation[];
   alerts: Alert[];
   http_attempts: number;
@@ -325,7 +358,10 @@ export async function runDaily(o: DailyOptions): Promise<DailyOutcome> {
     try {
       const h = loadHistory(o.historyDir, id);
       histories.set(id, h);
-      if (!o.force && hasUsableForDate(h, date)) sites.push({ site_id: id, action: "SKIPPED_ALREADY_MEASURED_TODAY", note: "ayni UTC gun icin kullanilabilir kayit var; API cagrisi YOK (--force ile asilir)" });
+      if (!o.force && hasMeasurementSuccessForDate(h, date)) {
+        const today = h.records.find((r) => r.date === date && measurementSuccessOf(r));
+        sites.push({ site_id: id, action: "SKIPPED_ALREADY_MEASURED_TODAY", record: today, fresh: false, note: "ayni UTC gun icin basarili olcum (measurement_success) var; API cagrisi YOK (--force ile asilir)" });
+      }
       else toMeasure.push(id);
     } catch (e) {
       if (!(e instanceof HistoryError)) throw e;
@@ -343,19 +379,29 @@ export async function runDaily(o: DailyOptions): Promise<DailyOutcome> {
     const { evaluation, alerts: a } = evaluateAlerts(rec, h);
     evaluations.push(evaluation); alerts.push(...a);
     let historyAction: SiteOutcome["history_action"] = "NOT_WRITTEN";
-    if (writeHistory) { const m = mergeRecord(h, rec); saveHistory(o.historyDir, m.file); historyAction = m.action; }
-    sites.push({ site_id: r.site_id, action: "MEASURED", measurement_state: r.measurement_state, history_action: historyAction, record: rec });
+    let effective = rec;
+    if (writeHistory) {
+      const m = mergeRecord(h, rec); saveHistory(o.historyDir, m.file); historyAction = m.action;
+      effective = m.file.records.find((x) => x.date === rec.date) ?? rec;
+    }
+    sites.push({ site_id: r.site_id, action: "MEASURED", measurement_state: r.measurement_state, history_action: historyAction, record: effective, fresh: measurementSuccessOf(rec), note: effective !== rec ? "bugunun daha once yazilmis basarili olcumu korundu" : undefined });
     writeFileSync(join(o.outDir, `clarity-${r.site_id}.json`), JSON.stringify(r, null, 2) + "\n");
   }
   sites.sort((a, b) => o.siteIds.indexOf(a.site_id) - o.siteIds.indexOf(b.site_id));
 
+  const coverage: Coverage = {
+    total_sites: o.siteIds.length,
+    measurement_success: sites.filter((x) => x.record && measurementSuccessOf(x.record)).length,
+    usable: sites.filter((x) => x.record?.usable).length,
+    fresh_measurement_success: sites.filter((x) => x.fresh === true).length,
+  };
   const outcome: DailyOutcome = {
-    schema: ALERTS_SCHEMA, date, generated_at: nowDate.toISOString(), sites, evaluations, alerts,
+    schema: ALERTS_SCHEMA, date, generated_at: nowDate.toISOString(), sites, coverage, evaluations, alerts,
     http_attempts: results.reduce((n, r) => n + r.requests.reduce((m, q) => m + q.attempts, 0), 0),
     ignored_token_sites: ignoredTokenSites, results,
   };
   // Ham site sonuclari zaten clarity-<site>.json'da; alert dosyasi yalniz karar ozeti tasir.
-  const publishable = { schema: outcome.schema, date, generated_at: outcome.generated_at, sites: outcome.sites.map(({ record: _r, ...s }) => s), evaluations, alerts, http_attempts: outcome.http_attempts, ignored_token_sites: ignoredTokenSites };
+  const publishable = { schema: outcome.schema, date, generated_at: outcome.generated_at, sites: outcome.sites.map(({ record: _r, ...s }) => ({ ...s, measurement_success: _r ? measurementSuccessOf(_r) : false, usable: _r?.usable ?? false, is_zero: _r?.is_zero ?? false })), coverage, evaluations, alerts, http_attempts: outcome.http_attempts, ignored_token_sites: ignoredTokenSites };
   writeFileSync(join(o.outDir, "clarity-alerts.json"), JSON.stringify(publishable, null, 2) + "\n");
   writeFileSync(join(o.outDir, "clarity-summary.md"), resultsToMarkdown(results, ignoredTokenSites));
   writeFileSync(join(o.outDir, "clarity-daily.md"), dailyMarkdown(outcome));
@@ -372,10 +418,11 @@ export function dailyMarkdown(o: DailyOutcome): string {
   const L: string[] = [`# Clarity günlük toplama — ${o.date} (UTC)`, "",
     "Salt-okunur. `UNKNOWN` = ölçülemedi, **sıfır DEĞİLDİR**. Hatalı/eksik ölçüm baz olamaz ve alert üretmez. Alert bir **sapma bildirimidir**: kök neden iddia etmez, `REVIEW_REQUIRED`.", "",
     `HTTP denemesi: ${o.http_attempts} (site başına en fazla 4; Microsoft limiti proje başına 10/gün).`, "",
-    "| site | eylem | durum | kullanılabilir | gerçek / bot oturum | bot % | friction toplamı | geçmiş |", "|---|---|---|---|---|---|---|---|"];
+    `**Takeover ölçütü = ölçüm başarısı (measurement_success)**: ${o.coverage.measurement_success}/${o.coverage.total_sites} site (bu koşuda taze: ${o.coverage.fresh_measurement_success}). Analiz uygunluğu (usable, baz/alert için; takeover ölçütü DEĞİL): ${o.coverage.usable}/${o.coverage.total_sites}.`, "",
+    "| site | eylem | durum | ölçüm başarısı | sıfır | analiz uygun (usable) | gerçek / bot oturum | bot % | friction toplamı | geçmiş |", "|---|---|---|---|---|---|---|---|---|---|"];
   for (const s of o.sites) {
     const r = s.record;
-    L.push(`| ${s.site_id} | ${s.action} | ${cell(s.measurement_state)} | ${r ? (r.usable ? "evet" : "hayır") : "–"} | ${r ? `${r.sessions.real} / ${r.sessions.bot}` : "–"} | ${r ? r.sessions.bot_pct : "–"} | ${r ? r.friction_total : "–"} | ${cell(s.history_action)} |`);
+    L.push(`| ${s.site_id} | ${s.action} | ${cell(s.measurement_state ?? r?.measurement_state)} | ${r ? (measurementSuccessOf(r) ? "evet" : "hayır") : "–"} | ${r ? (r.is_zero ? "evet" : "hayır") : "–"} | ${r ? (r.usable ? "evet" : "hayır") : "–"} | ${r ? `${r.sessions.real} / ${r.sessions.bot}` : "–"} | ${r ? r.sessions.bot_pct : "–"} | ${r ? r.friction_total : "–"} | ${cell(s.history_action)} |`);
   }
   L.push("", "## Alertler", "");
   if (!o.alerts.length) L.push("Alert yok (yalnız değerlendirilen siteler için; aşağıya bak).");
