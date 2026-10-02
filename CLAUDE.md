@@ -64,9 +64,15 @@ node --experimental-strip-types src/cli.ts import-health <snapshotDir>   # site-
 node --experimental-strip-types src/cli.ts inspect-index config/sites.yaml --site pamistanbul   # ÖRNEKLEM, tam coverage değil
 node --experimental-strip-types src/cli.ts clarity-daily config/sites.yaml   # günlük Clarity + geçmiş + alert (cutover bayrağı: docs/integrations/clarity-daily.md)
 node --experimental-strip-types src/cli.ts brain-validate config/sites.yaml --site pamistanbul   # Cloud Brain, OFFLINE (API çağrısı yok); canlı koşu: brain-run + GitHub Actions
-npm test        # 459 doğrulama (2026-10-02)
+npm test        # tüm testler geçmeli; güncel sayı için CI çıktısına bak (sayı bu dosyada tutulmaz)
 npm run typecheck
 ```
+
+**CLI'da henüz olmayan komutlar (PR #39'te, main'de değil):** `clarity-takeover-status`, `deployment-timeline`, `deployment-ingest`,
+`content-validate`, `content-classify`, `index-alarms`, `agent-contracts-validate`, `performance-measure`,
+`change-eval`, `change-lint`, `scorecard`, `orchestration-check`. Modülleri main'de, CLI'ya **bağlı değil**;
+bağlama PR #39 (draft; owner merge edene kadar geçerli). Şimdilik yalnız `bin/clarity-takeover-status.ts`
+ve `bin/scorecard.ts` doğrudan çalışır. Durum tablosu: `DEVAM.md`.
 
 Çalışma bağımlılığı yok — sadece Node 24. Yalnız `typescript` ve `@types/node`
 geliştirme bağımlılığı var.
@@ -93,6 +99,11 @@ secret gerektirmiyor.
 ## Üretim sitelerine dokunma kuralları
 
 Yapılabilir: salt-okunur tarama, ölçüm, rapor, PR önerisi.
+
+Owner yokken ASLA OTOMATİK (açık, o anki onay olmadan): feature PR merge etmek, legacy
+`site-health-monitor` rutinini kapatmak, credential rotation, schedule cutover
+(`SEARCH_GROWTH_CLARITY_DAILY_ENABLED`), production mutation, `force=true` Clarity koşusu.
+Ayrıntı: `docs/OWNER-OFFLINE-RUNBOOK.md`.
 
 Yapılamaz: doğrudan push, deploy, toplu sayfa üretimi, toplu indeksleme talebi,
 `robots.txt` / canonical / hreflang / structured data değişikliğini onaysız
