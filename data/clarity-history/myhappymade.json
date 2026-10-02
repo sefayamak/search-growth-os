@@ -6,31 +6,31 @@
     {
       "site_id": "myhappymade",
       "date": "2026-10-02",
-      "measured_at": "2026-10-02T08:08:07.778Z",
-      "measurement_state": "NOT_CONNECTED",
-      "confidence": "UNKNOWN",
-      "row_count": "UNKNOWN",
-      "metric_row_count_total": "UNKNOWN",
-      "max_metric_row_count": "UNKNOWN",
-      "rows_complete": "UNKNOWN",
+      "measured_at": "2026-10-02T08:16:30.081Z",
+      "measurement_state": "MEASURED",
+      "confidence": "CONFIRMED",
+      "row_count": 29,
+      "metric_row_count_total": 29,
+      "max_metric_row_count": 2,
+      "rows_complete": true,
       "is_zero": false,
-      "usable": false,
+      "usable": true,
       "friction": {
-        "dead_click_count": "UNKNOWN",
-        "rage_click_count": "UNKNOWN",
-        "script_error_count": "UNKNOWN",
-        "error_click_count": "UNKNOWN",
-        "excessive_scroll": "UNKNOWN",
-        "quickback_click": "UNKNOWN"
+        "dead_click_count": 0,
+        "rage_click_count": 0,
+        "script_error_count": 0,
+        "error_click_count": 0,
+        "excessive_scroll": 0,
+        "quickback_click": 0
       },
-      "friction_total": "UNKNOWN",
+      "friction_total": 0,
       "sessions": {
-        "real": "UNKNOWN",
-        "bot": "UNKNOWN",
-        "total": "UNKNOWN",
-        "bot_pct": "UNKNOWN"
+        "real": 1,
+        "bot": 0,
+        "total": 1,
+        "bot_pct": 0
       },
-      "source_run_id": "36982317979"
+      "source_run_id": "36983089184"
     }
   ]
 }
