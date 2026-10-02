@@ -68,11 +68,9 @@ npm test        # tüm testler geçmeli; güncel sayı için CI çıktısına ba
 npm run typecheck
 ```
 
-**CLI'da henüz olmayan komutlar (PR #39'te, main'de değil):** `clarity-takeover-status`, `deployment-timeline`, `deployment-ingest`,
-`content-validate`, `content-classify`, `index-alarms`, `agent-contracts-validate`, `performance-measure`,
-`change-eval`, `change-lint`, `scorecard`, `orchestration-check`. Modülleri main'de, CLI'ya **bağlı değil**;
-bağlama PR #39 (draft; owner merge edene kadar geçerli). Şimdilik yalnız `bin/clarity-takeover-status.ts`
-ve `bin/scorecard.ts` doğrudan çalışır. Durum tablosu: `DEVAM.md`.
+**Entegrasyon komutları (main'de, PR #39):** `clarity-takeover-status`, `deployment-timeline`, `deployment-ingest`, `content-validate`,
+`content-classify`, `index-alarms`, `agent-contracts-validate`, `performance-measure`, `change-eval`, `change-lint`, `scorecard`,
+`orchestration-check`. Hepsi salt-okunur/yerel; yazma yalnız `--write`/`--out` ile ve cwd içinde. Tek ağ yolu `performance-measure` (PageSpeed). Tablo: `docs/integration/cli-wiring-plan.md`.
 
 Çalışma bağımlılığı yok — sadece Node 24. Yalnız `typescript` ve `@types/node`
 geliştirme bağımlılığı var.

@@ -111,11 +111,17 @@ içerik taslağı → PR hattı, dashboard.
 | #38 | Kanonik orkestrasyon modeli + site başı scorecard | `a2c8700` |
 | #40 | Güvenli persistence betiği (`scripts/persist-history.sh`; rebase + sınırlı retry, fail-closed) | `8e3e831` |
 | #41 | `sgos.measure-report.v1` makine-okunur measure çıktısı (`measure --out`; Markdown değişmez) | `d13c9a5` |
+| #42 | Zaman bağımlı test düzeltmesi (`tests/change-safety.test.ts`; yalnız test) | `dfed8d5` |
+| #43 | Persistence hardening: gizli-görünümlü dosya filtresi, `--autostash`, yerel bare-remote testleri; `docs/persistence-safety.md` güncel | `d08bd51` |
+| #39 | CLI bağlama: 12 salt-okunur/yerel komut + entegrasyon planı (`src/cli.ts`) | `488d1a6` |
+| #44 | Takeover status uçtan uca testleri (yalnız test) | `e7bcde9` |
 
-**Açık:** PR #39 — CLI bağlama (draft). 12 komut **PR #39'te, main'de değil**: `clarity-takeover-status`, `deployment-timeline`,
-`deployment-ingest`, `content-validate`, `content-classify`, `index-alarms`, `agent-contracts-validate`, `performance-measure`,
-`change-eval`, `change-lint`, `scorecard`, `orchestration-check`. Owner merge edene kadar bu komutlar `src/cli.ts`'te yok
-(`bin/clarity-takeover-status.ts` ve `bin/scorecard.ts` doğrudan çalışır). Plan: `docs/integration/cli-wiring-plan.md` (PR #39 dalında).
+**CLI (main'de, #39):** 12 komut `src/cli.ts`'te: `clarity-takeover-status`, `deployment-timeline`, `deployment-ingest`, `content-validate`,
+`content-classify`, `index-alarms`, `agent-contracts-validate`, `performance-measure`, `change-eval`, `change-lint`, `scorecard`, `orchestration-check`.
+Hiçbiri üretim sitesine yazmaz; tek ağ yolu `performance-measure` → PageSpeed (anahtar yoksa istek yok). Plan: `docs/integration/cli-wiring-plan.md`.
+
+**Açık:** PR #45 — `measure.yml` içinde measure JSON adımı. **HOLD**: workflow değişikliği; ilk canlı koşusu Pzt 2026-10-05. Tek-fetch refactor ihtiyacı açık.
+PR #46 — bu docs senkronu.
 
 **Durum gerçekleri:**
 
@@ -124,7 +130,7 @@ içerik taslağı → PR hattı, dashboard.
 - Legacy `site-health-monitor` rutini **hâlâ ENABLED** (son bilinen; bu oturumda yeniden okunmadı).
 - `SEARCH_GROWTH_CLARITY_DAILY_ENABLED` **ayarlı değil** (zamanlanmış koşu kapılı). Değer repodan okunamaz; owner beyanı, repodan UNKNOWN.
 - Credential rotation **bekliyor** (owner; yalnız legacy kapandıktan sonra).
-- Yeni modüller (#31–#38) **uygulandı ama bağlı değil**; çoğu `NOT_LIVE_VALIDATED`: PSI yanıt şekli/kota (#36), canlı SHA probe (#32; kodda yok),
+- Yeni modüller (#31–#38) CLI'ya bağlı (#39) ama **workflow'lara bağlı değil**; çoğu `NOT_LIVE_VALIDATED`: PSI yanıt şekli/kota (#36), canlı SHA probe (#32; kodda yok),
   index alarm yeniden gözlemi (#34), measure JSON'un workflow'da kullanımı (#41), scorecard'ın gerçek artifact'larla koşusu (#38), change safety'nin yazıcıya bağlanması (#37; yazıcı yok).
 - `persist-history.sh` ilk canlı kullanımı: yarınki `clarity-daily` dispatch'i **veya** Pazartesi 2026-10-05 `measure.yml`. Bugüne dek canlı koşmadı.
 
@@ -145,7 +151,7 @@ içerik taslağı → PR hattı, dashboard.
 | Scorecard / orkestrasyon | IMPLEMENTED_NOT_LIVE_VALIDATED | #38 |
 | Ajan sözleşmeleri (link/schema) | IMPLEMENTED_NOT_LIVE_VALIDATED | #35 |
 | İçerik pipeline | IMPLEMENTED_NOT_LIVE_VALIDATED | #33; eşikler `DEFAULT_ASSUMPTION` |
-| CLI bağlama | DRAFT | PR #39 |
+| CLI bağlama | DONE (main) | #39; workflow bağlantısı yok |
 | Aylık döngü | MISSING | kod yok |
 | Dashboard | MISSING | kod yok |
 
@@ -209,9 +215,8 @@ ama önce bu dosyadaki sayıya bak; çoğu soru orada cevaplı.
 
 ## 1. Tek cümleyle nerede kaldık
 
-Search Growth OS kuruldu ve çalışıyor; 7 sitenin içerik ritmi ve `llms.txt`
-durumu ölçüldü; bulunan iki gerçek hata için üç PR açıldı ve **üçü de yeşil,
-merge edilmeyi bekliyor**.
+Search Growth OS kuruldu ve çalışıyor; sprint modülleri, CLI bağlama ve persistence hardening main'de (2 Ekim tablosu).
+FULL_TAKEOVER doğrulaması koşulmadı; owner adımları (legacy, rotation, bayrak) bekliyor.
 
 ---
 
@@ -220,7 +225,7 @@ merge edilmeyi bekliyor**.
 **2026-10-03 (UTC): FULL_TAKEOVER 1/2 için tek `clarity-daily` dispatch'i** — adım adım runbook yukarıda ("YARIN"). Koştuktan sonra
 `bin/clarity-takeover-status.ts` ile oku. Sonraki ayrı UTC gün: 2/2. Ardından owner: legacy kapat, rotation, bayrak (`docs/OWNER-OFFLINE-RUNBOOK.md` §6).
 
-Bekleyen owner işi: PR #39'u (CLI bağlama, draft) incelemek/merge etmek.
+Bekleyen owner işi: PR #45 (measure JSON workflow adımı, HOLD) kararı; docs PR #46.
 
 Eski (20 Eylül) adım — pamistanbul-site #89/#90, pamaistudio#40 merge'i — bu depodan **doğrulanamadı, UNKNOWN**; Sefa teyit etmeli.
 
@@ -248,9 +253,8 @@ Tam gerekçe ve kaynaklar: `policies/references/llms-txt.md`.
 2018 yanlış. `entity-truth.mjs`'teki `AI_UNIT_WRONG_YEAR` kuralı bu yüzden
 değiştirilmedi.
 
-**Owner kararları (2 Ekim sprinti; tekrar tartışılmaz):** K1=A, K2=A, K3=A, K4=B, K5=B (şimdilik). Konu eşlemesi yalnız iki yerde repodan doğrulandı:
-K1=A → persistence güvenliği (`docs/persistence-safety.md`), K4=B → measure JSON (`docs/measure-report.md`). K2, K3, K5'in konusu bu depoda tutarlı biçimde
-yazılı değil (`cli-wiring-plan.md` K1–K4'ü başka konulara atıfla kullanıyor) → **UNKNOWN**, owner teyidi gerekir.
+**Owner kararları (2 Ekim sprinti; tekrar tartışılmaz):** persistence güvenliği = A (`docs/persistence-safety.md`); içerik politikası eşikleri `DEFAULT_ASSUMPTION` olarak korunur;
+measure JSON = rolling snapshot, workflow adımı HOLD (`docs/measure-report.md`). Sprint mesajındaki diğer iki karar kodunun konusu bu depoda tutarlı yazılı değil → **UNKNOWN**, owner teyidi gerekir.
 
 **NEVER AUTO (owner'ın açık, o anki onayı olmadan yapılmaz):** feature PR merge, legacy `site-health-monitor` kapatma, credential rotation,
 schedule cutover (`SEARCH_GROWTH_CLARITY_DAILY_ENABLED`), production mutation, `force=true` Clarity koşusu. Önceden verilmiş genel onay kapsamaz.
