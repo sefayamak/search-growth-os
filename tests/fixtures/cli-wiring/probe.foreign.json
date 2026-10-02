@@ -1,0 +1,47 @@
+{
+  "probe": {
+    "site": "pamaistudio",
+    "mode": "SAMPLE",
+    "candidate_source": "fixture",
+    "candidates": 1,
+    "attempted": 1,
+    "limit": 5,
+    "stopped": null,
+    "results": [
+      {
+        "url": "https://pamistanbul.com/",
+        "summary": {
+          "state": "INSPECTED",
+          "index_verdict": "INDEXED",
+          "coverage_state": "UNKNOWN",
+          "indexing_state": "INDEXING_ALLOWED",
+          "page_fetch_state": "SUCCESSFUL",
+          "robots_txt_state": "ALLOWED",
+          "google_canonical": "https://pamistanbul.com/",
+          "user_canonical": "https://pamistanbul.com/",
+          "last_crawl_time": "2026-10-01T10:00:00Z",
+          "label": "FACT",
+          "confidence": "CONFIRMED"
+        },
+        "segment": "SITEMAP_AND_GSC",
+        "canonical_relations": {
+          "inspected_vs_google": "SAME",
+          "user_vs_google": "SAME",
+          "user_vs_inspected": "SAME",
+          "user_cross_domain": false,
+          "google_cross_domain": false,
+          "review_required": false,
+          "review_status": "NO_DIVERGENCE_OBSERVED",
+          "reasons": [],
+          "canonical_pattern": "INSPECTED_USER_GOOGLE_ALIGNED"
+        }
+      }
+    ],
+    "skipped": [],
+    "coverage_notice": "ÖRNEKLEM (SAMPLE) — TAM COVERAGE DEĞİL. 1 aday URL'den 1 tanesi denetlendi; sitedeki toplam URL sayısı bu ölçümde BİLİNMİYOR. Adaylar sitemap evreni ile son 28 günlük GSC page dataset'inden segmentlere ayrılarak seçildi (\"fixture\"); ikisinde de bulunmayan URL'ler TEMSİL EDİLMEZ. Seçim stateless ve deterministik bir günlük rotasyondur: YAKLAŞIK bir turdur, segment boyu değişirse pencere kayar ve tam tur garantisi yoktur.",
+    "canonical_candidate_count": 0,
+    "canonical_conflict_count": 0,
+    "canonical_convergence_count": 0,
+    "strategy": "segmented"
+  }
+}
