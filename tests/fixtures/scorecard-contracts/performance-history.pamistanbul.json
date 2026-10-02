@@ -1,0 +1,94 @@
+{
+  "schema": "sgos.performance-history.v1",
+  "site": "pamistanbul",
+  "max_records": 120,
+  "records": [
+    {
+      "schema": "sgos.performance.v1",
+      "site": "pamistanbul",
+      "url": "https://www.pamistanbul.com/",
+      "strategy": "mobile",
+      "measured_at": "2026-09-24T06:00:00.000Z",
+      "date": "2026-09-24",
+      "lcp_ms": 2000,
+      "inp_ms": 180,
+      "cls": 0.05,
+      "ttfb_ms": 600,
+      "perf_score": 80,
+      "source": "field",
+      "field_scope": "url",
+      "state": "MEASURED",
+      "evidence": "FACT",
+      "confidence": "CONFIRMED",
+      "provider": "PageSpeed Insights API v5",
+      "ratings": {
+        "label": "INFERENCE",
+        "confidence": "CANDIDATE",
+        "values": {
+          "lcp_ms": "GOOD",
+          "inp_ms": "GOOD",
+          "cls": "GOOD",
+          "ttfb_ms": "GOOD"
+        }
+      }
+    },
+    {
+      "schema": "sgos.performance.v1",
+      "site": "pamistanbul",
+      "url": "https://www.pamistanbul.com/",
+      "strategy": "mobile",
+      "measured_at": "2026-10-01T06:00:00.000Z",
+      "date": "2026-10-01",
+      "lcp_ms": 2900,
+      "inp_ms": 180,
+      "cls": 0.05,
+      "ttfb_ms": 600,
+      "perf_score": 80,
+      "source": "field",
+      "field_scope": "url",
+      "state": "MEASURED",
+      "evidence": "FACT",
+      "confidence": "CONFIRMED",
+      "provider": "PageSpeed Insights API v5",
+      "ratings": {
+        "label": "INFERENCE",
+        "confidence": "CANDIDATE",
+        "values": {
+          "lcp_ms": "NEEDS_IMPROVEMENT",
+          "inp_ms": "GOOD",
+          "cls": "GOOD",
+          "ttfb_ms": "GOOD"
+        }
+      }
+    },
+    {
+      "schema": "sgos.performance.v1",
+      "site": "pamistanbul",
+      "url": "https://www.pamistanbul.com/",
+      "strategy": "desktop",
+      "measured_at": "2026-10-01T06:00:00.000Z",
+      "date": "2026-10-01",
+      "lcp_ms": 3300,
+      "inp_ms": null,
+      "cls": 0.02,
+      "ttfb_ms": 400,
+      "perf_score": 60,
+      "source": "lab",
+      "field_scope": null,
+      "state": "MEASURED",
+      "evidence": "FACT",
+      "confidence": "CONFIRMED",
+      "provider": "PageSpeed Insights API v5",
+      "ratings": {
+        "label": "INFERENCE",
+        "confidence": "CANDIDATE",
+        "values": {
+          "lcp_ms": "NEEDS_IMPROVEMENT",
+          "inp_ms": "UNKNOWN",
+          "cls": "GOOD",
+          "ttfb_ms": "GOOD"
+        }
+      }
+    }
+  ]
+}

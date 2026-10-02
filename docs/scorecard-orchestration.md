@@ -52,8 +52,8 @@ Kurallar (hepsi testli):
 1. **Girdi yok → UNKNOWN, asla OK.** Bozuk JSON, yanlış şema kimliği, boş kayıt da UNKNOWN.
 2. **Bayat girdi → UNKNOWN-STALE** (varsayılan sınır: clarity/index 3 gün, performans/ölçüm/deployment 10 gün; `buildScorecard(..., maxAge)` ile ayarlanır). Gelecek tarihli kayıt bayatlık testini kandıramaz (UNKNOWN).
 3. **Tek skor yok.** Özet yalnız `counts` (durum sayımı).
-4. **İzolasyon.** Başka siteye ait dosya/olay/rapor girişi hiçbir boyuta girmez (`site_id` uyuşmazlığı → UNKNOWN; deployment olayları site'ye göre süzülür, sayısı basis'e yazılır).
-5. **Çıkarım onaylanmış gibi raporlanmaz.** Doğrudan okuma (Clarity `measurement_success`, NOT_CONNECTED, doğrulanmamış deploy) = `FACT/CONFIRMED`. Eşik/yorum gerektiren her `OK/ATTENTION` (friction, performans, index, firsat, "deploy yok") = `INFERENCE/CANDIDATE`. UNKNOWN durumları `confidence=UNKNOWN`. `dimensionInvariantProblems()` bunu zorlar.
+4. **İzolasyon.** Başka siteye ait dosya/olay/rapor girişi hiçbir boyuta girmez (Clarity'de `site_id`, üretici dosyalarında `site` uyuşmazlığı ya da alanın YOKLUĞU → UNKNOWN; deployment çizelgesinde tek yabancı olay tüm çizelgeyi reddeder).
+5. **Çıkarım onaylanmış gibi raporlanmaz.** Doğrudan okuma (Clarity `measurement_success`, NOT_CONNECTED, MISMATCH deploy, VERIFIED deploy) = `FACT/CONFIRMED`; UNVERIFIED deploy = UNKNOWN. Eşik/yorum gerektiren her `OK/ATTENTION` (friction, performans, index, firsat, "deploy yok") = `INFERENCE/CANDIDATE`. UNKNOWN durumları `confidence=UNKNOWN`. `dimensionInvariantProblems()` bunu zorlar.
 6. **"Bulunamadı" ile "baktık, yok" ayrılır:** `basis` neye baktığını yazar (örn. "ÖRNEKLEM 20 URL, tam coverage değil").
 
 Boyuta özel yanlış-negatif korumaları: `ux_friction` yalnız `usable` Clarity kaydını kullanır (hata/sıfır/eksik gün friction=0 sayılmaz); gerçek oturum < 5 ise UNKNOWN; `UNKNOWN` metrik sıfır sayılmaz. `dead_click` tek başına eşik değildir (taban çizgisi olmadan; trend `clarity-daily` alert'inin işi). `performance` eksik metrikle OK vermez. `index_health` ERROR/PARTIAL'ı "indexli değil" saymaz; örneklem 0 → UNKNOWN.
@@ -65,24 +65,25 @@ Kayıtlı ama onboard edilmemiş site için kart üretilir (ölçüm her kayıtl
 Dosya düzeni: `<dizin>/<site_id>.json`. Okunan **asgari** alanlar (fazlası yok sayılır):
 
 - `sgos.clarity-history.v1` — `src/clarity-daily.ts` ile birebir (`records[]`: `date, measured_at, measurement_state, confidence, rows_complete, usable, friction, sessions, error_code`). Gerçek: `data/clarity-history/`.
-- `sgos.performance-history.v1` — `records[]`: `date|measured_at`, `measurement_state` (MEASURED/NOT_CONNECTED/…), `lcp_ms`, `cls`, `inp_ms`. Eşikler web.dev Core Web Vitals "good": LCP ≤ 2500 ms, CLS ≤ 0.1, INP ≤ 200 ms.
-- `sgos.index-history.v1` — `records[]`: `date|measured_at`, `measurement_state`, `sample_size`, `not_indexed_count`.
-- `sgos.deployment-event.v1` — dosya `{generated_at, events[]}` ya da olay dizisi; olay: `schema, site_id, deployed_at, verification_state` (`VERIFIED` değilse ATTENTION). Tazelik dosyanın `generated_at`'inden gelir (olay olmaması bayatlık değildir).
+- `sgos.performance-history.v1` (#36) — **üreticinin gerçek şeması**: `site`, `records[]` (`sgos.performance.v1`: `state=MEASURED`, `source`, `date`, `measured_at`, `url`, `strategy`, `lcp_ms`, `inp_ms`, `cls`). Son GÜNÜN tüm kayıtları, field varken yalnız field. Eşikler web.dev: LCP ≤ 2500 ms, CLS ≤ 0.1, INP ≤ 200 ms.
+- `sgos.index-history.v1` (#34) — `site`, `snapshots[]` (`taken_at`, `sample_size`, `entries[]`: `state`, `verdict`, uygunluk alanları). Opsiyonel alarm raporu (`index_alarms.status`).
+- `sgos.deployment-timeline.v1` (#32) — `{site, events[]}`; olay `sgos.deployment-event.v1`: `site`, `environment`, `commit_sha`, `deployed_at`, `verification_state`, `provenance.retrieved_at`. Yalnız `production`; `MISMATCH` = ATTENTION, `UNVERIFIED` = UNKNOWN.
 - `sgos.measure-report.v1` — `{generated_at, sites: {<id>: {gsc_state, opportunity_count, generated_at?}}}`.
 
-**Önemli varsayım:** performance/index/deployment/measure şemalarının yukarıdaki alanları bu PR'ın **okuma sözleşmesidir**; diğer sprint'lerin birleşmemiş üreticileri farklı alan adı yazarsa ilgili boyut güvenle `UNKNOWN` döner (yanlış OK vermez) ve burada hizalanır. Bugün `measure` yalnız Markdown (`reports/measure-latest.md`) üretiyor; JSON çıktısı yazılana kadar `search_opportunity` UNKNOWN kalır.
+**Sözleşme (güncellendi):** performance / index / deployment için üreticilerin GERÇEK şemaları kanoniktir; scorecard bir adaptör katmanıyla onları okur, ikinci veri modeli kurmaz. Okunan alanların TAM listesi, boyut eşlemesi, kararlar ve kalan boşluklar: [`docs/scorecard-contracts.md`](scorecard-contracts.md). İlk sürümün uydurma alanları (`site_id`, `records[].measurement_state`, `not_indexed_count`, `{generated_at, events}`) kaldırıldı. Taninmayan şekil güvenle `UNKNOWN` döner. `sgos.measure-report.v1` için bilinen üretici yok (`search_opportunity` UNKNOWN kalır). Bugün `measure` yalnız Markdown (`reports/measure-latest.md`) üretiyor; JSON çıktısı yazılana kadar `search_opportunity` UNKNOWN kalır.
 
 ### Kullanım
 
 ```bash
 node --experimental-strip-types bin/scorecard.ts config/sites.yaml [--site ID] [--json] \
-  [--clarity data/clarity-history] [--performance DIR] [--index DIR] [--deployments DIR] [--measure FILE]
+  [--clarity data/clarity-history] [--performance DIR] [--index DIR] [--deployments DIR] [--measure FILE] [--performance-report FILE] [--index-report DIR]
 ```
 
 Şema: `schemas/scorecard.schema.json` (`sgos.scorecard.v1`).
 
 ## Bağlama (bu PR yapmaz)
 
+- Tarihçe sahipliği ve main'e yazma yarışı: [`docs/history-ownership.md`](history-ownership.md) (tek yazar kuralı, `history_owner` kaydı = `HISTORY_OWNERS`, yeni doğrulayıcı kodları). Scorecard commit etmez.
 - `src/cli.ts`: `orchestration` (modeli + bulguları yazdır) ve `scorecard` alt komutları; şu an `bin/scorecard.ts` bağımsız çalışır.
 - `package.json` `test` zaten `tests/*.test.ts` glob'u; ek iş yok.
 - `scorecard.yml` (haftalık, ağsız, PLANNED) workflow'u yazılınca modelde `workflow`/`cron` doğrulanır; yeni her workflow aynı PR'da modele eklenmezse drift testi kırılır (istenen davranış).

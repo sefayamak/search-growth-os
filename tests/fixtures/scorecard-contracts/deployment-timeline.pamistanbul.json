@@ -1,0 +1,48 @@
+{
+  "schema": "sgos.deployment-timeline.v1",
+  "site": "pamistanbul",
+  "events": [
+    {
+      "schema": "sgos.deployment-event.v1",
+      "site": "pamistanbul",
+      "environment": "production",
+      "commit_sha": "cccccccccccccccccccccccccccccccccccccccc",
+      "deployed_at": "2026-08-15T10:00:00Z",
+      "verification_state": "UNVERIFIED",
+      "provenance": {
+        "source": "github_deployments",
+        "retrieved_at": "2026-10-01T06:00:00Z",
+        "ref": "github-deployment-103"
+      },
+      "evidence": "FACT"
+    },
+    {
+      "schema": "sgos.deployment-event.v1",
+      "site": "pamistanbul",
+      "environment": "production",
+      "commit_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "deployed_at": "2026-09-29T10:00:00Z",
+      "verification_state": "VERIFIED",
+      "provenance": {
+        "source": "github_deployments",
+        "retrieved_at": "2026-10-01T06:30:00.000Z",
+        "ref": "github-deployment-101"
+      },
+      "evidence": "FACT"
+    },
+    {
+      "schema": "sgos.deployment-event.v1",
+      "site": "pamistanbul",
+      "environment": "preview",
+      "commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "deployed_at": "2026-09-30T10:00:00Z",
+      "verification_state": "UNVERIFIED",
+      "provenance": {
+        "source": "github_deployments",
+        "retrieved_at": "2026-10-01T06:00:00Z",
+        "ref": "github-deployment-102"
+      },
+      "evidence": "FACT"
+    }
+  ]
+}

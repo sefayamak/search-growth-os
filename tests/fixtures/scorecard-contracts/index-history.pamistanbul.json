@@ -1,0 +1,87 @@
+{
+  "schema": "sgos.index-history.v1",
+  "site": "pamistanbul",
+  "snapshots": [
+    {
+      "taken_at": "2026-09-30T06:00:00.000Z",
+      "site": "pamistanbul",
+      "sample_size": 3,
+      "universe_size": "UNKNOWN",
+      "stopped": null,
+      "entries": [
+        {
+          "url": "https://www.pamistanbul.com/a",
+          "state": "INSPECTED",
+          "verdict": "NOT_INDEXED",
+          "in_sitemap": true,
+          "fetch_ok": true,
+          "canonical_self": true,
+          "indexable": true
+        },
+        {
+          "url": "https://www.pamistanbul.com/b",
+          "state": "INSPECTED",
+          "verdict": "INDEXED",
+          "in_sitemap": true,
+          "fetch_ok": true,
+          "canonical_self": true,
+          "indexable": true
+        },
+        {
+          "url": "https://www.pamistanbul.com/c",
+          "state": "INSPECTED",
+          "verdict": "NEUTRAL",
+          "in_sitemap": true,
+          "fetch_ok": true,
+          "canonical_self": false,
+          "indexable": true
+        }
+      ]
+    },
+    {
+      "taken_at": "2026-10-01T07:00:00.000Z",
+      "site": "pamistanbul",
+      "sample_size": 3,
+      "universe_size": "UNKNOWN",
+      "stopped": null,
+      "entries": [
+        {
+          "url": "https://www.pamistanbul.com/a",
+          "state": "INSPECTED",
+          "verdict": "NOT_INDEXED",
+          "in_sitemap": true,
+          "fetch_ok": true,
+          "canonical_self": true,
+          "indexable": true
+        },
+        {
+          "url": "https://www.pamistanbul.com/b",
+          "state": "INSPECTED",
+          "verdict": "INDEXED",
+          "in_sitemap": true,
+          "fetch_ok": true,
+          "canonical_self": true,
+          "indexable": true
+        },
+        {
+          "url": "https://www.pamistanbul.com/c",
+          "state": "INSPECTED",
+          "verdict": "NEUTRAL",
+          "in_sitemap": true,
+          "fetch_ok": true,
+          "canonical_self": false,
+          "indexable": true
+        },
+        {
+          "url": "https://www.pamistanbul.com/d",
+          "state": "ERROR",
+          "verdict": "UNKNOWN",
+          "in_sitemap": "UNKNOWN",
+          "fetch_ok": "UNKNOWN",
+          "canonical_self": "UNKNOWN",
+          "indexable": "UNKNOWN"
+        }
+      ]
+    }
+  ]
+}

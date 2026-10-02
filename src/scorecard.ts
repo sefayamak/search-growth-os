@@ -11,7 +11,8 @@
 //
 // Diger ajanlarin birlestirilmemis modullerini IMPORT ETMEZ; yalniz JSON'u belgelenmis sema
 // kimligiyle okur: sgos.clarity-history.v1, sgos.performance-history.v1, sgos.index-history.v1,
-// sgos.deployment-event.v1, sgos.measure-report.v1 (docs/scorecard-orchestration.md: beklenen alanlar).
+// sgos.deployment-timeline.v1 (olaylar sgos.deployment-event.v1), sgos.measure-report.v1.
+// Performance/index/deployment URETICININ gercek alanlarini okur (adaptor katmani asagida; docs/scorecard-contracts.md).
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Confidence, EvidenceLabel } from "./types.ts";
@@ -22,6 +23,9 @@ export const SCHEMA_IDS = {
   performance: "sgos.performance-history.v1",
   index: "sgos.index-history.v1",
   deployment: "sgos.deployment-event.v1",
+  deploymentTimeline: "sgos.deployment-timeline.v1",
+  performanceRecord: "sgos.performance.v1",
+  performanceReport: "sgos.performance-report.v1",
   measure: "sgos.measure-report.v1",
 } as const;
 
@@ -163,79 +167,204 @@ export function uxFriction(raw: unknown, siteId: string, now: Date, max = DEFAUL
   return dim(D, "OK", "INFERENCE", "CANDIDATE", `${usable.date}: rage/script_error/error_click 0; ${checked}. Tek gunluk olcum, kesin "sorun yok" degil`, asOf);
 }
 
-export function performance(raw: unknown, siteId: string, now: Date, max = DEFAULT_MAX_AGE_DAYS.performance): Dimension {
-  const D = "performance" as const;
-  const g = gate(D, raw, SCHEMA_IDS.performance, siteId); if (!g.ok) return g.dim;
-  const recs = (Array.isArray(g.payload.records) ? g.payload.records : []).filter(isObj).filter((r) => r.site_id === undefined || r.site_id === siteId)
-    .sort((a, b) => String(a.date ?? a.measured_at).localeCompare(String(b.date ?? b.measured_at)));
-  if (!recs.length) return unknown(D, "performans gecmisi var ama kayit yok");
-  const last = recs[recs.length - 1];
-  const when = parseWhen(last.measured_at ?? last.date, now);
-  if (!when) return unknown(D, "son performans kaydinin tarihi gecersiz");
-  const age = ageDays(when, now);
-  if (age > max) return stale(D, when, age, max);
-  const asOf = when.toISOString();
-  if (last.measurement_state === "NOT_CONNECTED") return dim(D, "NOT_CONNECTED", "FACT", "CONFIRMED", "performans olcumu bagli degil", asOf);
-  if (last.measurement_state !== undefined && last.measurement_state !== "MEASURED") return unknown(D, `son kayit state=${String(last.measurement_state)} (MEASURED degil); degerler kullanilmadi`, asOf);
-  const m: Array<[string, unknown, number]> = [["lcp_ms", last.lcp_ms, CWV_GOOD.lcp_ms], ["cls", last.cls, CWV_GOOD.cls], ["inp_ms", last.inp_ms, CWV_GOOD.inp_ms]];
-  const present = m.filter(([, v]) => isNum(v));
-  if (!present.length) return unknown(D, "kayitta lcp_ms/cls/inp_ms yok; skor tahmin edilmedi", asOf);
-  const over = present.filter(([, v, lim]) => (v as number) > lim);
-  const checked = `bakilan: ${present.map(([k, v]) => `${k}=${String(v)}`).join(", ")}; esikler LCP<=${CWV_GOOD.lcp_ms}ms CLS<=${CWV_GOOD.cls} INP<=${CWV_GOOD.inp_ms}ms`;
-  const missing = m.filter(([, v]) => !isNum(v)).map(([k]) => k);
-  const lab = typeof last.source === "string" ? ` kaynak=${last.source}` : "";
-  if (over.length) return dim(D, "ATTENTION", "INFERENCE", "CANDIDATE", `${over.map(([k]) => k).join(", ")} esigi asti; ${checked}${lab}. Lab olcumu olabilir, saha verisi degil`, asOf);
-  // Eksik metrik varken "OK" demek yarim bakistir: bunu ATTENTION degil, UNKNOWN'a yakin ama OK-sinirli yaziyoruz.
-  if (missing.length) return unknown(D, `${missing.join(", ")} eksik; mevcutlar esigin altinda ama tam degerlendirme yok (${checked})`, asOf);
-  return dim(D, "OK", "INFERENCE", "CANDIDATE", `${checked}${lab}`, asOf);
+// ---------------------------------------------------------------------------
+// URETICI ADAPTOR KATMANI (performance / index / deployment)
+//
+// NEDEN: bu uc boyutun ilk surumu KENDI uydurdugu alan adlarini okuyordu (site_id, records[].measurement_state,
+// not_indexed_count, {events,generated_at}). Gercek ureticiler (#36 performance, #34 index-alarms, #32 deployment-timeline)
+// baska sekil yaziyor; bu yuzden hepsi sessizce UNKNOWN'a dusecekti ya da -- daha kotusu -- site_id alani
+// olmadigi icin IZOLASYON KONTROLU atlanacakti. Ilke: ureticinin gercek semasi KANONIKTIR; scorecard ikinci bir
+// veri modeli kurmaz, yalniz asagidaki okuyucularla uretici alanlarini kendi boyut durumuna cevirir.
+// Okunan alanlarin tam listesi: docs/scorecard-contracts.md. Taninmayan sekil = UNKNOWN (asla OK, asla 0).
+// ---------------------------------------------------------------------------
+
+/** Scorecard'in URETICI dosyalarindan okudugu alanlarin TAM listesi (tek dogruluk kaynagi). `[]` = dizi elemani.
+ *  Test (tests/scorecard-contract.test.ts) bu listeyi (a) uretici-sekilli fixture'larda, (b) docs/scorecard-contracts.md'de arar:
+ *  listeye alan eklenip belgelenmez ya da uretici alani yeniden adlandirilirsa test kirilir. Listede olmayan alan OKUNMAZ. */
+export const CONSUMED_PRODUCER_FIELDS: Record<string, string[]> = {
+  "sgos.performance-history.v1": ["schema", "site", "records[].schema", "records[].site", "records[].state", "records[].source", "records[].date", "records[].measured_at", "records[].url", "records[].strategy", "records[].lcp_ms", "records[].inp_ms", "records[].cls"],
+  "sgos.performance-report.v1": ["schema", "generated_at", "sites[].site", "sites[].regressions[].label", "sites[].regressions[].site", "sites[].regressions[].metric"],
+  "sgos.index-history.v1": ["schema", "site", "snapshots[].site", "snapshots[].taken_at", "snapshots[].sample_size", "snapshots[].universe_size", "snapshots[].stopped", "snapshots[].entries[].state", "snapshots[].entries[].verdict", "snapshots[].entries[].in_sitemap", "snapshots[].entries[].fetch_ok", "snapshots[].entries[].canonical_self", "snapshots[].entries[].indexable"],
+  "index-alarms-report": ["site", "generated_at", "index_alarms.status", "index_alarms.alarms"],
+  "sgos.deployment-timeline.v1": ["schema", "site", "events"],
+  "sgos.deployment-event.v1": ["events[].schema", "events[].site", "events[].environment", "events[].commit_sha", "events[].deployed_at", "events[].verification_state", "events[].provenance.retrieved_at"],
+};
+
+const ISO_Z =/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/;
+const SHA40 = /^[0-9a-f]{40}$/;
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Ureticiler sitenin kimligini `site` alaninda yazar (`site_id` degil). Alan YOKSA UNKNOWN: izolasyon dogrulanamadi,
+ *  "baska siteye ait degil" varsayilmaz (kural 3 + 6). */
+function producerGate(d: DimensionId, raw: unknown, schema: string, siteId: string): Gate {
+  if (raw === undefined || raw === null) return { ok: false, dim: unknown(d, `girdi yok (${schema} dosyasi verilmedi/bulunamadi)`) };
+  if (!isObj(raw)) return { ok: false, dim: unknown(d, `${schema}: JSON nesne degil`) };
+  if (raw.schema !== schema) return { ok: false, dim: unknown(d, `sema beklenen ${schema}, gelen ${String(raw.schema)}`) };
+  if (typeof raw.site !== "string") return { ok: false, dim: unknown(d, `${schema}: uretici 'site' alani yok; izolasyon dogrulanamadi, kullanilmadi`) };
+  if (raw.site !== siteId) return { ok: false, dim: unknown(d, `site uyusmuyor (${raw.site} != ${siteId}); izolasyon geregi kullanilmadi`) };
+  return { ok: true, payload: raw };
 }
 
-export function indexHealth(raw: unknown, siteId: string, now: Date, max = DEFAULT_MAX_AGE_DAYS.index_health): Dimension {
-  const D = "index_health" as const;
-  const g = gate(D, raw, SCHEMA_IDS.index, siteId); if (!g.ok) return g.dim;
-  const recs = (Array.isArray(g.payload.records) ? g.payload.records : []).filter(isObj).filter((r) => r.site_id === undefined || r.site_id === siteId)
-    .sort((a, b) => String(a.date ?? a.measured_at).localeCompare(String(b.date ?? b.measured_at)));
-  if (!recs.length) return unknown(D, "index gecmisi var ama kayit yok");
-  const last = recs[recs.length - 1];
-  const when = parseWhen(last.measured_at ?? last.date, now);
-  if (!when) return unknown(D, "son index kaydinin tarihi gecersiz");
+// ---- performance (#36: sgos.performance-history.v1, kayit sgos.performance.v1) ------------------------------------
+
+const metricValue = (r: Record<string, unknown>, k: "lcp_ms" | "inp_ms" | "cls"): number | null => {
+  const v = r[k];
+  if (typeof v !== "number" || !Number.isFinite(v)) return null;
+  // Uretici ayni kurali koyar: lcp/inp 0 = "olcum yok" (null olmali); yalniz CLS=0 gecerli ve en iyi degerdir.
+  return k === "cls" ? (v >= 0 ? v : null) : v > 0 ? v : null;
+};
+
+function perfRegressions(report: unknown, siteId: string, now: Date, max: number): { count: number; metrics: string[]; generated: string } | { skipped: string } | null {
+  if (report === undefined || report === null) return null;
+  if (!isObj(report) || report.schema !== SCHEMA_IDS.performanceReport) return { skipped: "performans raporu taninmadi (sema)" };
+  const when = parseWhen(report.generated_at, now);
+  if (!when) return { skipped: "performans raporunun generated_at'i gecersiz" };
+  if (ageDays(when, now) > max) return { skipped: `performans raporu bayat (${ageDays(when, now)} gun)` };
+  // Rapor tum siteleri tasir: yalniz bu sitenin satirina bakilir, digerleri hic dokunulmaz.
+  const mine = Array.isArray(report.sites) ? report.sites.filter(isObj).filter((s) => s.site === siteId) : [];
+  if (mine.length !== 1) return { skipped: `raporda ${siteId} icin ${mine.length} satir (1 beklenir)` };
+  const regs = Array.isArray(mine[0].regressions) ? mine[0].regressions.filter(isObj).filter((x) => x.site === siteId && x.label === "INFERENCE") : [];
+  return { count: regs.length, metrics: [...new Set(regs.map((x) => String(x.metric)))], generated: when.toISOString().slice(0, 10) };
+}
+
+export function performance(raw: unknown, siteId: string, now: Date, max = DEFAULT_MAX_AGE_DAYS.performance, report?: unknown): Dimension {
+  const D = "performance" as const;
+  const g = producerGate(D, raw, SCHEMA_IDS.performance, siteId); if (!g.ok) return g.dim;
+  const all = g.payload.records;
+  if (!Array.isArray(all)) return unknown(D, "records dizi degil");
+  if (!all.length) return unknown(D, "performans gecmisi var ama kayit yok");
+  if (all.some((r) => isObj(r) && typeof r.site === "string" && r.site !== siteId)) return unknown(D, "gecmiste baska siteye ait kayit var; izolasyon geregi dosya kullanilmadi");
+  // Gecmis yalniz MEASURED + source field|lab tutar (uretici recordProblem); digerleri gecersiz sayilir, sifir sayilmaz.
+  const valid = all.filter(isObj).filter((r) => r.schema === SCHEMA_IDS.performanceRecord && r.site === siteId && r.state === "MEASURED" && (r.source === "field" || r.source === "lab")
+    && typeof r.date === "string" && DATE_ONLY.test(r.date) && typeof r.measured_at === "string" && r.measured_at.slice(0, 10) === r.date && parseWhen(r.measured_at, now) !== null);
+  if (!valid.length) return unknown(D, `${all.length} kayit var ama hicbiri gecerli MEASURED uretici kaydi degil (schema/site/state/source/tarih)`);
+  // Uretici GUNDE URL x strateji kadar kayit yazar: "son kayit" degil, son GUNUN tum kayitlari degerlendirilir.
+  const latestDate = valid.map((r) => r.date as string).sort().at(-1)!;
+  const day = valid.filter((r) => r.date === latestDate);
+  const when = day.map((r) => parseWhen(r.measured_at, now)!).sort((a, b) => b.getTime() - a.getTime())[0];
   const age = ageDays(when, now);
   if (age > max) return stale(D, when, age, max);
   const asOf = when.toISOString();
-  if (last.measurement_state === "NOT_CONNECTED") return dim(D, "NOT_CONNECTED", "FACT", "CONFIRMED", "URL Inspection bagli degil", asOf);
-  if (last.measurement_state !== undefined && last.measurement_state !== "MEASURED") return unknown(D, `son kayit state=${String(last.measurement_state)}; ERROR/PARTIAL "indexli degil" demek degildir`, asOf);
-  const n = last.sample_size, bad = last.not_indexed_count;
-  if (!isNum(n) || n === 0 || !isNum(bad)) return unknown(D, "sample_size/not_indexed_count yok ya da 0; orneklem olmadan karar verilmez", asOf);
-  const scope = `ORNEKLEM ${n} URL (tam coverage degil)`;
-  // Indekslenmemis URL bir FACT (Google'in cevabi); "bu bir sorun" yorumu INFERENCE: bilerek indexlenmemis olabilir.
-  if (bad > 0) return dim(D, "ATTENTION", "INFERENCE", "CANDIDATE", `${scope}: ${bad} URL indexli degil; nedeni dogrulanmadi (bilincli noindex/canonical olabilir)`, asOf);
-  return dim(D, "OK", "INFERENCE", "CANDIDATE", `${scope}: hepsi indexli. Ornek disindaki URL'ler hakkinda bilgi yok`, asOf);
+  // Field (CrUX, gercek kullanici) ile lab (tek sentetik kosu) KARISTIRILMAZ (uretici de karistirmaz): field varsa yalniz field.
+  const useField = day.some((r) => r.source === "field");
+  const sel = day.filter((r) => r.source === (useField ? "field" : "lab"));
+  const ignored = day.length - sel.length;
+  const required: Array<"lcp_ms" | "inp_ms" | "cls"> = useField ? ["lcp_ms", "inp_ms", "cls"] : ["lcp_ms", "cls"]; // lab'de INP yoktur (uretici semasi)
+  const worst: Partial<Record<"lcp_ms" | "inp_ms" | "cls", number>> = {};
+  for (const k of ["lcp_ms", "inp_ms", "cls"] as const) {
+    const vs = sel.map((r) => metricValue(r, k)).filter((v): v is number => v !== null);
+    if (vs.length) worst[k] = Math.max(...vs);
+  }
+  const src = useField ? "field (CrUX, gercek kullanici)" : "lab (tek sentetik kosu; saha verisi degil)";
+  const checked = `bakilan: ${latestDate} ${src} ${sel.length} kayit (${new Set(sel.map((r) => `${String(r.url)}#${String(r.strategy)}`)).size} URL x strateji); en kotu degerler ${(["lcp_ms", "inp_ms", "cls"] as const).map((k) => `${k}=${worst[k] ?? "UNKNOWN"}`).join(", ")}; esikler LCP<=${CWV_GOOD.lcp_ms}ms CLS<=${CWV_GOOD.cls} INP<=${CWV_GOOD.inp_ms}ms${ignored ? `; ayni gunun ${ignored} ${useField ? "lab" : "field"} kaydi karistirilmadi` : ""}${all.length - valid.length ? `; ${all.length - valid.length} gecersiz kayit yok sayildi` : ""}`;
+  const over = (["lcp_ms", "inp_ms", "cls"] as const).filter((k) => (worst[k] ?? -1) > CWV_GOOD[k]);
+  const missing = required.filter((k) => worst[k] === undefined);
+  let d: Dimension;
+  // Olculen sayi FACT'tir ama esik siniflandirmasi bir INFERENCE'tir (uretici de ratings.label=INFERENCE yazar).
+  if (over.length) d = dim(D, "ATTENTION", "INFERENCE", "CANDIDATE", `${over.map((k) => `${k}=${worst[k]}`).join(", ")} esigi asti; ${checked}`, asOf);
+  else if (missing.length) d = unknown(D, `${missing.join(", ")} eksik (null); mevcutlar esigin altinda ama tam degerlendirme yok; ${checked}`, asOf);
+  else d = dim(D, "OK", "INFERENCE", "CANDIDATE", `${checked}${useField ? "" : ". INP lab'de olculmez; yalniz LCP/CLS degerlendirildi"}`, asOf);
+  // Regresyon adayi (uretici raporu): yalniz YUKSELTIR (OK -> ATTENTION); hicbir zaman ATTENTION'i dusurmez.
+  const reg = perfRegressions(report, siteId, now, max);
+  if (reg && "skipped" in reg) return { ...d, basis: `${d.basis}; regresyon raporu kullanilmadi: ${reg.skipped}` };
+  if (reg && reg.count > 0) {
+    const note = `uretici raporu (${reg.generated}): ${reg.count} regresyon adayi (${reg.metrics.join(", ")}); neden iddiasi yok`;
+    if (d.state === "OK") return dim(D, "ATTENTION", "INFERENCE", "CANDIDATE", `${note}; ${d.basis}`, asOf);
+    return { ...d, basis: `${d.basis}; ${note}` };
+  }
+  return reg ? { ...d, basis: `${d.basis}; uretici raporunda ${siteId} icin regresyon adayi yok (${reg.generated})` } : d;
+}
+
+// ---- index (#34: sgos.index-history.v1 + CombinedReport) -----------------------------------------------------------
+
+export function indexHealth(raw: unknown, siteId: string, now: Date, max = DEFAULT_MAX_AGE_DAYS.index_health, report?: unknown): Dimension {
+  const D = "index_health" as const;
+  const g = producerGate(D, raw, SCHEMA_IDS.index, siteId); if (!g.ok) return g.dim;
+  const snaps = g.payload.snapshots;
+  if (!Array.isArray(snaps)) return unknown(D, "snapshots dizi degil");
+  if (!snaps.length) return unknown(D, "index gecmisi var ama snapshot yok");
+  if (snaps.some((s) => isObj(s) && typeof s.site === "string" && s.site !== siteId)) return unknown(D, "gecmiste baska siteye ait snapshot var; izolasyon geregi dosya kullanilmadi");
+  const valid = snaps.filter(isObj).filter((s) => s.site === siteId && parseWhen(s.taken_at, now) !== null && Array.isArray(s.entries) && Number.isInteger(s.sample_size) && (s.sample_size as number) >= 0);
+  if (!valid.length) return unknown(D, `${snaps.length} snapshot var ama hicbiri gecerli degil (site/taken_at/entries/sample_size)`);
+  valid.sort((a, b) => Date.parse(String(a.taken_at)) - Date.parse(String(b.taken_at)));
+  const last = valid[valid.length - 1];
+  const when = parseWhen(last.taken_at, now)!;
+  const age = ageDays(when, now);
+  if (age > max) return stale(D, when, age, max);
+  const asOf = when.toISOString();
+  const entries = (last.entries as unknown[]).filter(isObj);
+  // ERROR bir gozlem degildir: "indekslenmemis" demek de degildir (uretici ayni ayrimi yapar).
+  const inspected = entries.filter((e) => e.state === "INSPECTED");
+  if (last.sample_size === 0 || inspected.length === 0) return unknown(D, `son snapshot'ta denetlenen URL yok (sample_size=${String(last.sample_size)}, stopped=${String(last.stopped)}); "hepsi indexli" denemez`, asOf);
+  if (last.sample_size !== inspected.length) return unknown(D, `sample_size=${String(last.sample_size)} ama INSPECTED entries=${inspected.length}; tutarsiz snapshot kullanilmadi`, asOf);
+  const eligible = (e: Record<string, unknown>) => e.in_sitemap === true && e.fetch_ok === true && e.canonical_self === true && e.indexable === true;
+  const notIndexed = inspected.filter((e) => e.verdict === "NOT_INDEXED");
+  const neutralEligible = inspected.filter((e) => e.verdict === "NEUTRAL" && eligible(e));
+  const unresolved = inspected.filter((e) => (e.verdict === "NEUTRAL" || e.verdict === "UNKNOWN") && !neutralEligible.includes(e));
+  const scope = `ORNEKLEM ${inspected.length} URL (tam coverage degil; universe_size=${String(last.universe_size)}; snapshot ${asOf.slice(0, 10)}, toplam ${valid.length} snapshot)`;
+  const errCount = entries.length - inspected.length;
+  const tail = `${errCount ? `; ${errCount} ERROR URL gozlem sayilmadi` : ""}${valid.length < 2 ? "; tek snapshot: >24 saat alarm hesabi icin en az iki gozlem gerekir" : ""}`;
+  // Alarm: uretici raporu (zaman farki hesabi onun isidir; scorecard yeniden hesaplamaz).
+  let alarmN = 0, reportNote = "";
+  if (report !== undefined && report !== null) {
+    const ia = isObj(report) ? report.index_alarms : undefined;
+    const rw = isObj(report) ? parseWhen(report.generated_at, now) : null;
+    if (!isObj(report) || report.site !== siteId || !isObj(ia) || !rw) reportNote = "; alarm raporu kullanilmadi (site/sema/tarih uyusmuyor)";
+    else if (ageDays(rw, now) > max || rw.getTime() < when.getTime()) reportNote = "; alarm raporu bayat/snapshot'tan eski, kullanilmadi";
+    else if (ia.status === "ALARMS" && Array.isArray(ia.alarms)) { alarmN = ia.alarms.length; reportNote = `; uretici alarm raporu ${rw.toISOString().slice(0, 10)}: ${alarmN} alarm`; }
+    else reportNote = `; uretici alarm raporu: status=${String(ia.status)}`;
+  }
+  const bad = notIndexed.length + neutralEligible.length;
+  // Indekslenmemis URL Google'in cevabidir (FACT); "bu bir sorun" yorumu INFERENCE: bilincli noindex/canonical olabilir.
+  if (bad > 0 || alarmN > 0) return dim(D, "ATTENTION", "INFERENCE", "CANDIDATE", `${scope}: ${notIndexed.length} NOT_INDEXED, ${neutralEligible.length} indekslenmesi beklenen URL NEUTRAL${alarmN ? `, ${alarmN} alarm` : ""}; nedeni dogrulanmadi (bilincli noindex/canonical olabilir)${reportNote}${tail}`, asOf);
+  // NEUTRAL/UNKNOWN karari "indexli" degildir; "hepsi indexli" denmez (yanlis negatif korumasi).
+  if (unresolved.length) return unknown(D, `${scope}: ${unresolved.length} URL karari NEUTRAL/UNKNOWN (indekslenmesi beklenen kosullar saglanmiyor ya da bilinmiyor); OK denmedi${reportNote}${tail}`, asOf);
+  return dim(D, "OK", "INFERENCE", "CANDIDATE", `${scope}: denetlenen hepsi INDEXED. Ornek disindaki URL'ler hakkinda bilgi yok${reportNote}${tail}`, asOf);
+}
+
+// ---- deployment (#32: sgos.deployment-timeline.v1, olay sgos.deployment-event.v1) ----------------------------------
+
+/** Uretici validateEvent ile ayni cekirdek kural; baska sitenin olayi ya da bozuk alan = sorun. */
+function deployEventProblem(e: unknown, site: string, now: Date): string | null {
+  if (!isObj(e)) return "olay nesne degil";
+  if (e.schema !== SCHEMA_IDS.deployment) return "olay schema'si hatali";
+  if (e.site !== site) return `olay baska siteye ait (${String(e.site)})`;
+  if (e.environment !== "production" && e.environment !== "preview" && e.environment !== "unknown") return "environment gecersiz";
+  if (typeof e.commit_sha !== "string" || !SHA40.test(e.commit_sha)) return "commit_sha 40 haneli kucuk hex degil";
+  if (typeof e.deployed_at !== "string" || !ISO_Z.test(e.deployed_at) || !parseWhen(e.deployed_at, now)) return "deployed_at ISO UTC degil/gelecek";
+  if (!["VERIFIED", "UNVERIFIED", "MISMATCH", "UNKNOWN"].includes(String(e.verification_state))) return "verification_state gecersiz";
+  if (!isObj(e.provenance) || typeof e.provenance.retrieved_at !== "string" || !ISO_Z.test(e.provenance.retrieved_at) || !parseWhen(e.provenance.retrieved_at, now)) return "provenance.retrieved_at gecersiz";
+  return null;
 }
 
 export function deploymentChange(raw: unknown, siteId: string, now: Date, max = DEFAULT_MAX_AGE_DAYS.deployment_change): Dimension {
   const D = "deployment_change" as const;
-  if (raw === undefined || raw === null) return unknown(D, `girdi yok (${SCHEMA_IDS.deployment} zaman cizelgesi verilmedi/bulunamadi)`);
-  // Zaman cizelgesi ya {events:[...]} ya da dogrudan olay dizisi olabilir; her olay kendi sema kimligini tasir.
-  const events = Array.isArray(raw) ? raw : isObj(raw) && Array.isArray(raw.events) ? raw.events : null;
-  if (!events) return unknown(D, "zaman cizelgesi events dizisi icermiyor");
-  const generated = isObj(raw) ? parseWhen(raw.generated_at ?? raw.as_of, now) : null;
-  const mine = events.filter(isObj).filter((e) => e.schema === SCHEMA_IDS.deployment && e.site_id === siteId);
-  const foreign = events.filter(isObj).filter((e) => e.site_id !== undefined && e.site_id !== siteId).length;
-  // Tazelik: olay yoklugu bayatlik degil (site deploy etmemis olabilir); bu yuzden dosyanin kendi damgasina bakilir.
-  const lastEvt = mine.map((e) => parseWhen(e.deployed_at, now)).filter((d): d is Date => !!d).sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
-  const fresh = generated ?? null;
-  if (!fresh) return unknown(D, `zaman cizelgesinin generated_at/as_of damgasi yok; tazelik bilinmiyor${foreign ? ` (${foreign} baska site olayi yok sayildi)` : ""}`, lastEvt ? lastEvt.toISOString() : null);
+  const g = producerGate(D, raw, SCHEMA_IDS.deploymentTimeline, siteId); if (!g.ok) return g.dim;
+  const events = g.payload.events;
+  if (!Array.isArray(events)) return unknown(D, "zaman cizelgesi events dizisi icermiyor");
+  // Uretici parseTimeline fail-closed: tek bozuk olay tum cizelgeyi reddeder. Yarim cizelge yanlis "deploy yok" uretirdi.
+  for (const [i, e] of events.entries()) { const p = deployEventProblem(e, siteId, now); if (p) return unknown(D, `olay ${i}: ${p}; cizelge fail-closed reddedildi`); }
+  if (!events.length) return unknown(D, "cizelge bos: tazelik bilinmiyor (bos cizelge 'deploy yok' kaniti degildir; kolektor kosmus olabilir ya da hic kosmamis)");
+  const ev = events as Array<Record<string, any>>;
+  // Cizelgenin kendi 'generated_at'i YOK; en yeni provenance.retrieved_at = saglayicinin/dogrulayicinin son sorgulandigi an.
+  const fresh = ev.map((e) => parseWhen(e.provenance.retrieved_at, now)!).sort((a, b) => b.getTime() - a.getTime())[0];
   const age = ageDays(fresh, now);
   if (age > max) return stale(D, fresh, age, max);
   const asOf = fresh.toISOString();
-  const iso = foreign ? `; ${foreign} baska site olayi izolasyon geregi yok sayildi` : "";
+  const prod = ev.filter((e) => e.environment === "production");
+  const nonProd = ev.length - prod.length;
   const windowStart = now.getTime() - 14 * DAY_MS;
-  const recent = mine.filter((e) => { const d = parseWhen(e.deployed_at, now); return d && d.getTime() >= windowStart; });
-  if (!recent.length) return dim(D, "OK", "INFERENCE", "CANDIDATE", `son 14 gunde ${siteId} icin deploy olayi yok (cizelge ${asOf.slice(0, 10)}); cizelgenin tum deploylari gordugu dogrulanmadi${iso}`, asOf);
-  const notVerified = recent.filter((e) => e.verification_state !== "VERIFIED");
-  if (notVerified.length) return dim(D, "ATTENTION", "FACT", "CONFIRMED", `son 14 gunde ${recent.length} deploy, ${notVerified.length} tanesi VERIFIED degil (${notVerified.map((e) => String(e.verification_state ?? "UNKNOWN")).join(",")})${iso}`, asOf);
-  return dim(D, "OK", "FACT", "CONFIRMED", `son 14 gunde ${recent.length} dogrulanmis deploy: metrik degisiklikleri bu pencerede degisiklikle karisabilir (nedensellik iddiasi yok)${iso}`, asOf);
+  const recent = prod.filter((e) => parseWhen(e.deployed_at, now)!.getTime() >= windowStart);
+  const scope = `cizelge ${ev.length} olay (${prod.length} production, ${nonProd} preview/unknown: aramada gorunmez, sayilmadi); son sorgu ${asOf.slice(0, 10)}`;
+  if (!recent.length) return dim(D, "OK", "INFERENCE", "CANDIDATE", `son 14 gunde ${siteId} icin production deploy olayi yok (${scope}); cizelgenin tum deploylari gordugu dogrulanmadi`, asOf);
+  const mismatch = recent.filter((e) => e.verification_state === "MISMATCH");
+  if (mismatch.length) return dim(D, "ATTENTION", "FACT", "CONFIRMED", `son 14 gunde ${recent.length} production deploy, ${mismatch.length} tanesi MISMATCH (canli SHA beklenenle uyusmuyor: ${mismatch.map((e) => String(e.commit_sha).slice(0, 7)).join(",")}); ${scope}`, asOf);
+  const unver = recent.filter((e) => e.verification_state !== "VERIFIED");
+  // UNVERIFIED = saglayici "deploy ettim" dedi, canli dogrulanmadi (uretici parser'lari hep UNVERIFIED uretir): bilmiyoruz.
+  if (unver.length) return unknown(D, `son 14 gunde ${recent.length} production deploy, ${unver.length} tanesi canli dogrulanmadi (${[...new Set(unver.map((e) => String(e.verification_state)))].join(",")}); deploy gercekten canli mi bilinmiyor; ${scope}`, asOf);
+  return dim(D, "OK", "FACT", "CONFIRMED", `son 14 gunde ${recent.length} dogrulanmis (VERIFIED) production deploy: metrik degisiklikleri bu pencerede degisiklikle karisabilir (nedensellik iddiasi yok); ${scope}`, asOf);
 }
+
 
 export function searchOpportunity(raw: unknown, siteId: string, now: Date, max = DEFAULT_MAX_AGE_DAYS.search_opportunity): Dimension {
   const D = "search_opportunity" as const;
@@ -267,6 +396,8 @@ export interface ScorecardInputs {
   site_id: string;
   onboarding_status?: string;
   clarity?: unknown; performance?: unknown; index?: unknown; deployments?: unknown; measure?: unknown;
+  /** Opsiyonel uretici raporlari (regresyon adaylari / alarmlar). Yoksa boyut yalniz gecmis dosyasindan hesaplanir. */
+  performance_report?: unknown; index_report?: unknown;
 }
 
 export function buildScorecard(i: ScorecardInputs, now: Date = new Date(), maxAge: Partial<Record<DimensionId, number>> = {}): SiteScorecard {
@@ -274,10 +405,10 @@ export function buildScorecard(i: ScorecardInputs, now: Date = new Date(), maxAg
   const s = i.site_id;
   const dimensions = [
     measurementHealth(i.clarity, s, now, a.measurement_health),
-    indexHealth(i.index, s, now, a.index_health),
+    indexHealth(i.index, s, now, a.index_health, i.index_report),
     searchOpportunity(i.measure, s, now, a.search_opportunity),
     uxFriction(i.clarity, s, now, a.ux_friction),
-    performance(i.performance, s, now, a.performance),
+    performance(i.performance, s, now, a.performance, i.performance_report),
     deploymentChange(i.deployments, s, now, a.deployment_change),
   ];
   const counts: Record<DimState, number> = { OK: 0, ATTENTION: 0, UNKNOWN: 0, "UNKNOWN-STALE": 0, NOT_CONNECTED: 0 };
@@ -300,7 +431,7 @@ export function dimensionInvariantProblems(d: Dimension): string[] {
 // Dosyadan yukleme (yalniz okuma; yok/bozuk dosya = undefined, istisna yok)
 // ---------------------------------------------------------------------------
 
-export interface ArtifactPaths { clarityDir?: string; performanceDir?: string; indexDir?: string; deploymentDir?: string; measureFile?: string }
+export interface ArtifactPaths { clarityDir?: string; performanceDir?: string; indexDir?: string; deploymentDir?: string; measureFile?: string; performanceReportFile?: string; indexReportDir?: string }
 
 function readJson(path: string | undefined): unknown {
   if (!path || !existsSync(path)) return undefined;
@@ -310,7 +441,7 @@ function readJson(path: string | undefined): unknown {
 /** Beklenen duzen: <dir>/<site_id>.json. Bozuk JSON "yok" gibi okunur ve boyut UNKNOWN olur; sifir/OK'e donmez. */
 export function loadInputs(p: ArtifactPaths, siteId: string, onboardingStatus?: string): ScorecardInputs {
   const f = (dir?: string) => (dir ? join(dir, `${siteId}.json`) : undefined);
-  return { site_id: siteId, onboarding_status: onboardingStatus, clarity: readJson(f(p.clarityDir)), performance: readJson(f(p.performanceDir)), index: readJson(f(p.indexDir)), deployments: readJson(f(p.deploymentDir)), measure: readJson(p.measureFile) };
+  return { site_id: siteId, onboarding_status: onboardingStatus, clarity: readJson(f(p.clarityDir)), performance: readJson(f(p.performanceDir)), index: readJson(f(p.indexDir)), deployments: readJson(f(p.deploymentDir)), measure: readJson(p.measureFile), performance_report: readJson(p.performanceReportFile), index_report: readJson(f(p.indexReportDir)) };
 }
 
 // ---------------------------------------------------------------------------

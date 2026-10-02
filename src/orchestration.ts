@@ -36,7 +36,60 @@ export interface Job {
   writes: string[];
   depends_on: string[];
   note?: string;
+  /** main'e commit/push eder mi? `writes`teki "(commit, main)" metni aciklamadir; dogrulayici BU alana bakar. */
+  commits_to_main?: boolean;
+  /** Commit adimini koruyan concurrency grubu. Iki ayri grup = iki is ayni anda main'e push edebilir (yaris). */
+  commit_group?: string;
+  /** push oncesi pull --rebase var mi. plain_push + baska commit eden is = non-fast-forward reddi riski. */
+  push_strategy?: "rebase_then_push" | "plain_push";
 }
+
+/** Onerilen TEK ortak grup: main'e yazan her workflow'un commit adimi (ayri `persist` job'i) bu grupta kosar. */
+export const TARGET_COMMIT_GROUP = "main-writes";
+
+// ---------------------------------------------------------------------------
+// Tarihce sahipligi: olcum modulu -> makine-okunur cikti -> tarihce sahibi -> kalicilik -> scorecard tuketimi
+// ---------------------------------------------------------------------------
+//
+// NEDEN ZINCIR: data/*-history dosyalari ARTIMLI durumdur (bugunku dosya dunku dosyaya eklenir). Iki is ayni dosyaya
+// yazarsa ikincisi birincinin ekini sessizce ezer ya da rebase catismasi uretir; ikisi de "veri yok" gibi gorunur ve
+// scorecard'i yanlis UNKNOWN/OK'e iter. Bu yuzden her tarihce yolunun TEK yazari vardir; digerleri (scorecard dahil) YALNIZ OKUR.
+// Zincirin halkalari bos birakilamaz (dogrulayici HISTORY_CHAIN_INCOMPLETE).
+export interface HistoryOwner {
+  /** Dizin, sonunda "/". Tek yazar kurali bu yol uzerindendir. */
+  path: string;
+  /** 1) Olcumu yapan modul. */
+  measurement_module: string;
+  /** 2) Modulun makine-okunur cikti sema kimligi. */
+  schema: string;
+  /** 3) Tarihce sahibi: bu yola yazan TEK is (Job.id). */
+  owner_job: string;
+  /** 4) Kalicilik: main'e commit mi, yalniz artifact mi. */
+  persistence: "commit_main" | "artifact_only";
+  /** 5) Salt-okunur tuketiciler (Job.id) ve besledikleri scorecard boyutlari. */
+  consumers: string[];
+  scorecard_dimensions: string[];
+  /** Uretici durumu (kural 5: kaynak): "main" ya da acik PR. */
+  producer_ref: string;
+}
+
+/** Tarihce dosyalari: bu bes yolun hepsinin sahibi olmak ZORUNDA (eksik = HISTORY_PATH_REQUIRED_MISSING). */
+export const REQUIRED_HISTORY_PATHS = ["data/clarity-history/", "data/performance-history/", "data/index-history/", "data/canonical-backlog/", "data/deployment-timeline/"];
+
+export const HISTORY_OWNERS: HistoryOwner[] = [
+  { path: "data/clarity-history/", measurement_module: "src/clarity-daily.ts", schema: "sgos.clarity-history.v1", owner_job: "clarity-daily", persistence: "commit_main",
+    consumers: ["scorecard-weekly"], scorecard_dimensions: ["measurement_health", "ux_friction"], producer_ref: "main" },
+  { path: "data/performance-history/", measurement_module: "src/performance.ts", schema: "sgos.performance-history.v1", owner_job: "lighthouse-weekly", persistence: "commit_main",
+    consumers: ["scorecard-weekly"], scorecard_dimensions: ["performance"], producer_ref: "PR #36 (claude/sprint-lighthouse)" },
+  { path: "data/index-history/", measurement_module: "src/index-alarms.ts", schema: "sgos.index-history.v1", owner_job: "index-alarms-daily", persistence: "commit_main",
+    consumers: ["scorecard-weekly"], scorecard_dimensions: ["index_health"], producer_ref: "PR #34 (claude/sprint-index-alarms)" },
+  // Ayni is (index-alarms-daily) iki DIZINE yazar: tek-yazar kurali yol bazlidir, is bazli degil.
+  // Not: owner_status alanlarini insan PR ile yazar; bot onlari korur (updateBacklog) ama rebase catismasi gercek bir riskdir (docs/history-ownership.md).
+  { path: "data/canonical-backlog/", measurement_module: "src/index-alarms.ts", schema: "sgos.canonical-backlog.v1", owner_job: "index-alarms-daily", persistence: "commit_main",
+    consumers: [], scorecard_dimensions: [], producer_ref: "PR #34 (claude/sprint-index-alarms); scorecard bunu henuz OKUMAZ" },
+  { path: "data/deployment-timeline/", measurement_module: "src/deployment-timeline.ts", schema: "sgos.deployment-timeline.v1", owner_job: "deployment-verifier", persistence: "commit_main",
+    consumers: ["scorecard-weekly"], scorecard_dimensions: ["deployment_change"], producer_ref: "PR #32 (claude/sprint-deployment-verifier)" },
+];
 
 export interface QuotaPool {
   id: string;
@@ -62,7 +115,9 @@ export const JOBS: Job[] = [
     note: "Icerik ritmi, 7 site, secret yok." },
   { id: "measure", loop: "weekly", cadence: "weekly", cron: "40 6 * * 1", runner: "github_actions", workflow: "measure.yml",
     api_calls_per_site: "UNKNOWN", quota_cost: { pool: "gsc-ga4-measure", per_site: "UNKNOWN" }, state: "ACTIVE",
-    writes: ["reports/ (commit, main)", "artifact:measure-<run_id>"], depends_on: [], note: "GSC + GA4; commit adimi yalniz schedule veya commit_report ile." },
+    writes: ["reports/ (commit, main)", "content/topic-ledger.json (commit, main)", "artifact:measure-<run_id>"], depends_on: [],
+    commits_to_main: true, commit_group: "measure", push_strategy: "plain_push",
+    note: "GSC + GA4; commit adimi yalniz schedule veya commit_report ile. DIKKAT: push oncesi pull --rebase YOK (measure.yml)." },
   { id: "search-audit", loop: "weekly", cadence: "weekly", cron: "40 6 * * 1", runner: "github_actions", workflow: "search-audit.yml",
     api_calls_per_site: 0, quota_cost: null, state: "ACTIVE", writes: ["artifact:search-audit-<site>-<run_id>"], depends_on: [],
     note: "Salt-okunur HTTP taramasi (pilot site). measure ile ayni dakika: farkli havuz, bilinen ve zararsiz cakisma." },
@@ -72,6 +127,7 @@ export const JOBS: Job[] = [
     api_calls_per_site: 3, quota_cost: { pool: "clarity-project", per_site: 3 }, state: "GATED",
     gate: "vars.SEARCH_GROWTH_CLARITY_DAILY_ENABLED == 'true'",
     writes: ["data/clarity-history/*.json (commit, main)", "artifact:clarity-daily-<run_id>"], depends_on: [],
+    commits_to_main: true, commit_group: "clarity", push_strategy: "rebase_then_push",
     note: "Cutover bayragi yokken schedule atlanir. Dispatch bayraga bagli degil (insan eylemi)." },
   { id: "legacy-site-health-monitor", loop: "daily", cadence: "daily", cron: "10 6 * * *", runner: "ccr_routine",
     api_calls_per_site: 3, quota_cost: { pool: "clarity-project", per_site: 3 }, state: "ACTIVE",
@@ -95,18 +151,22 @@ export const JOBS: Job[] = [
 
   // ---------------- PLANNED (yeni katmanlar; henuz kod/workflow yok) ----------------
   { id: "lighthouse-weekly", loop: "weekly", cadence: "weekly", cron: "10 7 * * 1", runner: "github_actions", workflow: "lighthouse.yml",
-    api_calls_per_site: "UNKNOWN", quota_cost: null, state: "PLANNED", writes: ["data/performance-history/*.json"], depends_on: [],
+    api_calls_per_site: "UNKNOWN", quota_cost: null, state: "PLANNED", writes: ["data/performance-history/*.json (commit, main)", "artifact:lighthouse-<run_id>"], depends_on: [],
+    commits_to_main: true, commit_group: TARGET_COMMIT_GROUP, push_strategy: "rebase_then_push",
     note: "Planli saat oneri; workflow olusunca model guncellenir." },
   { id: "index-alarms-daily", loop: "daily", cadence: "daily", cron: "40 7 * * *", runner: "github_actions", workflow: "index-alarms.yml",
     api_calls_per_site: "UNKNOWN", quota_cost: { pool: "gsc-url-inspection", per_site: "UNKNOWN" }, state: "PLANNED",
-    writes: ["data/index-history/*.json"], depends_on: [], note: "Kota kullanimi olculene kadar UNKNOWN." },
+    writes: ["data/index-history/*.json (commit, main)", "data/canonical-backlog/*.json (commit, main)", "artifact:index-alarms-<run_id>"], depends_on: [],
+    commits_to_main: true, commit_group: TARGET_COMMIT_GROUP, push_strategy: "rebase_then_push", note: "Kota kullanimi olculene kadar UNKNOWN. Iki dizinin TEK yazari (index-probe yalniz artifact yazar)." },
   { id: "deployment-verifier", loop: "on_demand", cadence: "event", runner: "github_actions", workflow: "deployment-verifier.yml",
-    api_calls_per_site: 0, quota_cost: null, state: "PLANNED", writes: ["data/deployment-timeline/*.json"], depends_on: [],
-    note: "Deploy olayinda tetiklenir; cron'u yok." },
+    api_calls_per_site: 0, quota_cost: null, state: "PLANNED", writes: ["data/deployment-timeline/*.json (commit, main)", "artifact:deployment-verifier-<run_id>"], depends_on: [],
+    commits_to_main: true, commit_group: TARGET_COMMIT_GROUP, push_strategy: "rebase_then_push",
+    note: "Deploy olayinda tetiklenir; cron'u yok. Her kosu TUM deploy listesini ceker (idempotent): ortak grupta bekleyen fazla kosu iptal olsa da veri kaybolmaz." },
   { id: "scorecard-weekly", loop: "weekly", cadence: "weekly", cron: "10 8 * * 1", runner: "github_actions", workflow: "scorecard.yml",
-    api_calls_per_site: 0, quota_cost: null, state: "PLANNED", writes: ["reports/scorecard-<tarih>.{json,md}"],
+    api_calls_per_site: 0, quota_cost: null, state: "PLANNED", writes: ["artifact:scorecard-<run_id>"],
     depends_on: ["measure", "clarity-daily", "lighthouse-weekly", "index-alarms-daily", "deployment-verifier"],
-    note: "Yalniz artifact dosyalarini okur; ag yok. Monthly dongude henuz is tanimli degil (uydurma is eklenmedi)." },
+    commits_to_main: false,
+    note: "SALT-OKUNUR tuketici: data/ ve reports/ altina HICBIR sey yazmaz, commit etmez (docs/history-ownership.md); cikti yalniz artifact. Ag yok. Monthly dongude henuz is tanimli degil (uydurma is eklenmedi)." },
 ];
 
 // ---------------------------------------------------------------------------
@@ -174,7 +234,11 @@ export function fireSlots(expr: string): Set<string> {
 export type IssueCode =
   | "DUPLICATE_ID" | "BAD_CRON" | "MISSING_CRON" | "UNEXPECTED_CRON" | "MISSING_WORKFLOW" | "GATE_REQUIRED"
   | "UNKNOWN_DEPENDENCY" | "DEPENDENCY_NOT_LIVE" | "UNKNOWN_POOL" | "QUOTA_MISMATCH"
-  | "DUPLICATE_SCHEDULER" | "QUOTA_OVERBOOKED" | "QUOTA_NEAR_LIMIT" | "SCHEDULE_COLLISION" | "LOOP_MISMATCH";
+  | "DUPLICATE_SCHEDULER" | "QUOTA_OVERBOOKED" | "QUOTA_NEAR_LIMIT" | "SCHEDULE_COLLISION" | "LOOP_MISMATCH"
+  // tarihce sahipligi + main'e yazma yarisi
+  | "MULTI_WRITER" | "HISTORY_PATH_REQUIRED_MISSING" | "HISTORY_DUPLICATE_PATH" | "HISTORY_OWNER_UNKNOWN_JOB" | "HISTORY_OWNER_NOT_WRITER"
+  | "HISTORY_WRITER_NOT_OWNER" | "HISTORY_UNREGISTERED_WRITE" | "HISTORY_CHAIN_INCOMPLETE" | "HISTORY_CONSUMER_WRITES" | "HISTORY_CONSUMER_NOT_DEPENDENT"
+  | "HISTORY_PERSISTENCE_MISMATCH" | "COMMIT_POLICY_MISSING" | "MAIN_COMMIT_RACE" | "PUSH_WITHOUT_REBASE";
 
 export interface Issue { severity: "ERROR" | "WARN" | "INFO"; code: IssueCode; jobs: string[]; message: string }
 
@@ -183,7 +247,21 @@ const isScheduledLive = (j: Job) => (j.state === "ACTIVE" || j.state === "GATED"
 /** Kotayi harcayabilen is: DISABLED/PLANNED harcamaz; dispatch isleri elle de olsa harcar. */
 const canSpend = (j: Job) => j.state === "ACTIVE" || j.state === "GATED";
 
-export function validateModel(jobs: Job[] = JOBS, pools: QuotaPool[] = QUOTA_POOLS): Issue[] {
+/** Bir `writes` girdisinden depo yolunu cikarir: "data/x/*.json (commit, main)" -> "data/x/". artifact:/serbest metin -> null.
+ *  Glob (`*`, `<`, `{`) ilk goruldugu yerde yolu keser ve dizin sayar. Yalniz data/, reports/, content/ depo yolu sayilir. */
+export function repoPathOf(entry: string): string | null {
+  const tok = entry.trim().split(/\s+/)[0] ?? "";
+  if (!/^(data|reports|content)\//.test(tok)) return null;
+  const parts = tok.split("/").filter(Boolean);
+  const k = parts.findIndex((x) => /[*<{]/.test(x));
+  const keep = k === -1 ? parts : parts.slice(0, k);
+  return keep.join("/") + (k !== -1 || tok.endsWith("/") ? "/" : "");
+}
+/** Iki yol cakisir mi: ayni yol ya da biri digerinin dizin oneki. */
+export const pathsOverlap = (a: string, b: string): boolean => a === b || (a.endsWith("/") && b.startsWith(a)) || (b.endsWith("/") && a.startsWith(b));
+const repoPathsOf = (j: Job): string[] => j.writes.map(repoPathOf).filter((x): x is string => !!x);
+
+export function validateModel(jobs: Job[] = JOBS, pools: QuotaPool[] = QUOTA_POOLS, owners: HistoryOwner[] = HISTORY_OWNERS, requiredHistory: string[] = REQUIRED_HISTORY_PATHS): Issue[] {
   const issues: Issue[] = [];
   const add = (severity: Issue["severity"], code: IssueCode, ids: string[], message: string) => issues.push({ severity, code, jobs: ids, message });
   const byId = new Map<string, Job>();
@@ -243,8 +321,67 @@ export function validateModel(jobs: Job[] = JOBS, pools: QuotaPool[] = QUOTA_POO
     if (!shared.length) continue;
     const samePool = !!A.quota_cost && A.quota_cost.pool === B.quota_cost?.pool;
     const sameRunnerHost = A.runner !== "github_actions" && A.runner === B.runner;
-    add(samePool || sameRunnerHost ? "WARN" : "INFO", "SCHEDULE_COLLISION", [A.id, B.id],
-      `${A.id} ve ${B.id} ayni dakikada tetikleniyor (${shared[0]}${shared.length > 1 ? ` +${shared.length - 1}` : ""})${samePool ? "; ayni kota havuzu" : sameRunnerHost ? "; ayni runner" : "; farkli kaynaklar, zararsiz"}`);
+    // Ikisi de main'e commit ediyorsa ve gruplari farkliysa ayni dakikada push yarisi gercektir (zararsiz degil).
+    const commitRace = !!A.commits_to_main && !!B.commits_to_main && A.commit_group !== B.commit_group;
+    add(samePool || sameRunnerHost || commitRace ? "WARN" : "INFO", "SCHEDULE_COLLISION", [A.id, B.id],
+      `${A.id} ve ${B.id} ayni dakikada tetikleniyor (${shared[0]}${shared.length > 1 ? ` +${shared.length - 1}` : ""})${samePool ? "; ayni kota havuzu" : sameRunnerHost ? "; ayni runner" : commitRace ? "; ikisi de main'e commit ediyor, commit gruplari farkli (push yarisi)" : "; farkli kaynaklar, zararsiz"}`);
+  }
+
+  // ---- Tarihce sahipligi: TEK yazar + zincir bütünlüğü ------------------------------------------------------------
+  const writers = jobs.filter((j) => j.state !== "DISABLED"); // PLANNED dahil: tasarim asamasinda yakalamak ucuz, sonradan pahali
+  for (let a = 0; a < writers.length; a++) for (let b = a + 1; b < writers.length; b++) {
+    const hit = repoPathsOf(writers[a]).flatMap((pa) => repoPathsOf(writers[b]).filter((pb) => pathsOverlap(pa, pb)).map((pb) => (pa.length >= pb.length ? pa : pb)));
+    if (hit.length) add("ERROR", "MULTI_WRITER", [writers[a].id, writers[b].id], `${[...new Set(hit)].join(", ")}: iki is ayni yola yazamaz (${writers[a].id}, ${writers[b].id}); tek yazar, digerleri salt-okunur tuketici olmali`);
+  }
+  const ownerByPath = new Map<string, HistoryOwner>();
+  for (const o of owners) {
+    if (ownerByPath.has(o.path)) add("ERROR", "HISTORY_DUPLICATE_PATH", [o.owner_job, ownerByPath.get(o.path)!.owner_job], `${o.path}: iki sahip kaydi var; tarihce yolunun tek sahibi olur`);
+    ownerByPath.set(o.path, o);
+    if (!o.measurement_module.trim() || !o.schema.trim() || !o.owner_job.trim() || !o.producer_ref.trim())
+      add("ERROR", "HISTORY_CHAIN_INCOMPLETE", [o.owner_job], `${o.path}: zincir halkasi bos (olcum modulu -> cikti sema -> sahip -> kalicilik -> tuketim)`);
+    if (o.consumers.length === 0 && o.scorecard_dimensions.length > 0) add("ERROR", "HISTORY_CHAIN_INCOMPLETE", [o.owner_job], `${o.path}: scorecard boyutu var ama tuketici is yok`);
+    if (o.consumers.length > 0 && o.scorecard_dimensions.length === 0) add("ERROR", "HISTORY_CHAIN_INCOMPLETE", [o.owner_job], `${o.path}: tuketici var ama hangi scorecard boyutunu besledigi yazili degil`);
+    const owner = byId.get(o.owner_job);
+    if (!owner) { add("ERROR", "HISTORY_OWNER_UNKNOWN_JOB", [o.owner_job], `${o.path}: sahip is modelde yok (${o.owner_job})`); continue; }
+    if (!repoPathsOf(owner).some((w) => pathsOverlap(w, o.path))) add("ERROR", "HISTORY_OWNER_NOT_WRITER", [owner.id], `${o.path}: sahip ${owner.id} bu yolu writes'inda tasimiyor`);
+    if (o.persistence === "commit_main" && !owner.commits_to_main) add("ERROR", "HISTORY_PERSISTENCE_MISMATCH", [owner.id], `${o.path}: kalicilik commit_main ama ${owner.id} commits_to_main degil`);
+    if (o.persistence === "artifact_only" && owner.commits_to_main) add("ERROR", "HISTORY_PERSISTENCE_MISMATCH", [owner.id], `${o.path}: kalicilik artifact_only ama ${owner.id} main'e commit ediyor`);
+    for (const c of o.consumers) {
+      const cj = byId.get(c);
+      if (!cj) { add("ERROR", "HISTORY_OWNER_UNKNOWN_JOB", [c], `${o.path}: tuketici is modelde yok (${c})`); continue; }
+      // Tuketici hicbir depo yoluna yazmaz ve commit etmez: aksi halde "salt-okunur tuketici" iddiasi bos kalir.
+      if (repoPathsOf(cj).length || cj.commits_to_main) add("ERROR", "HISTORY_CONSUMER_WRITES", [c, owner.id], `${c}: ${o.path} tuketicisi depoya yazamaz/commit edemez (yazdigi: ${repoPathsOf(cj).join(", ") || "commits_to_main"})`);
+      if (!cj.depends_on.includes(o.owner_job)) add("ERROR", "HISTORY_CONSUMER_NOT_DEPENDENT", [c, o.owner_job], `${c}: ${o.path} tuketicisi sahibine (${o.owner_job}) depends_on ile baglanmali`);
+    }
+  }
+  for (const r of requiredHistory) if (!ownerByPath.has(r)) add("ERROR", "HISTORY_PATH_REQUIRED_MISSING", [], `${r}: tarihce yolunun sahip kaydi yok`);
+  for (const j of writers) for (const w of repoPathsOf(j)) {
+    const hitOwner = owners.find((o) => pathsOverlap(o.path, w));
+    if (w.startsWith("data/") && !hitOwner) add("ERROR", "HISTORY_UNREGISTERED_WRITE", [j.id], `${j.id}: ${w} data/ altina yaziyor ama HISTORY_OWNERS kaydi yok`);
+    else if (hitOwner && hitOwner.owner_job !== j.id) add("ERROR", "HISTORY_WRITER_NOT_OWNER", [j.id, hitOwner.owner_job], `${j.id}: ${hitOwner.path} yolunun sahibi ${hitOwner.owner_job}; ${j.id} yazamaz`);
+  }
+
+  // ---- main'e yazma: commit politikasi + yaris ---------------------------------------------------------------------
+  for (const j of jobs) {
+    const saysCommit = j.writes.some((w) => /\(commit, main\)/.test(w));
+    if (saysCommit && !j.commits_to_main) add("ERROR", "COMMIT_POLICY_MISSING", [j.id], `${j.id}: writes "(commit, main)" diyor ama commits_to_main isaretli degil`);
+    if (j.commits_to_main && (!j.commit_group || !j.push_strategy)) add("ERROR", "COMMIT_POLICY_MISSING", [j.id], `${j.id}: commits_to_main ise commit_group ve push_strategy zorunlu`);
+    if (j.commits_to_main && !repoPathsOf(j).length) add("ERROR", "COMMIT_POLICY_MISSING", [j.id], `${j.id}: commits_to_main ama writes'ta depo yolu yok`);
+  }
+  const committers = jobs.filter((j) => j.state !== "DISABLED" && j.commits_to_main && j.commit_group);
+  const isLive = (j: Job) => j.state === "ACTIVE" || j.state === "GATED";
+  for (let a = 0; a < committers.length; a++) for (let b = a + 1; b < committers.length; b++) {
+    const A = committers[a], B = committers[b];
+    if (A.commit_group === B.commit_group) continue;
+    add(isLive(A) && isLive(B) ? "WARN" : "INFO", "MAIN_COMMIT_RACE", [A.id, B.id],
+      `${A.id} (grup ${A.commit_group}) ve ${B.id} (grup ${B.commit_group}) main'e farkli concurrency gruplariyla commit ediyor; ayni anda push yarisi olabilir. Oneri: commit adimlari ortak "${TARGET_COMMIT_GROUP}" grubunda`);
+  }
+  for (const j of committers) {
+    if (j.push_strategy !== "plain_push") continue;
+    const others = committers.filter((o) => o.id !== j.id);
+    if (!others.length) continue;
+    add(isLive(j) ? "WARN" : "ERROR", "PUSH_WITHOUT_REBASE", [j.id, ...others.map((o) => o.id)],
+      `${j.id}: push oncesi pull --rebase yok; baska commit eden is (${others.map((o) => o.id).join(", ")}) arada main'e yazarsa push non-fast-forward ile reddedilir ve rapor/tarihce kaybolur`);
   }
   return issues;
 }
@@ -265,7 +402,33 @@ export function extractWorkflowCrons(yaml: string): string[] {
   return out;
 }
 
-export interface DriftIssue { workflow: string; kind: "SCHEDULE_NOT_IN_MODEL" | "MODEL_CRON_NOT_IN_WORKFLOW" | "WORKFLOW_NOT_IN_MODEL" | "GATE_NOT_IN_WORKFLOW"; detail: string }
+export interface DriftIssue {
+  workflow: string;
+  kind: "SCHEDULE_NOT_IN_MODEL" | "MODEL_CRON_NOT_IN_WORKFLOW" | "WORKFLOW_NOT_IN_MODEL" | "GATE_NOT_IN_WORKFLOW"
+    | "COMMIT_NOT_IN_MODEL" | "MODEL_COMMIT_NOT_IN_WORKFLOW" | "PUSH_STRATEGY_DRIFT" | "CONCURRENCY_NOT_IN_WORKFLOW" | "GIT_ADD_NOT_IN_MODEL";
+  detail: string;
+}
+
+const codeLines = (yaml: string): string[] => yaml.split(/\r?\n/).filter((l) => !/^\s*#/.test(l));
+/** Workflow'un ust duzey `concurrency:` blogundaki group degeri (yoksa null). */
+export function extractConcurrencyGroup(yaml: string): string | null {
+  const m = codeLines(yaml).join("\n").match(/^concurrency:\s*\n\s+group:\s*([^\n]+)/m);
+  return m ? m[1].trim().replace(/^["']|["']$/g, "") : null;
+}
+/** Ilk push'tan ONCE pull --rebase var mi. push yoksa null (workflow main'e yazmiyor). Yorum satirlari sayilmaz. */
+export function extractPushStrategy(yaml: string): "rebase_then_push" | "plain_push" | null {
+  const L = codeLines(yaml);
+  const push = L.findIndex((l) => /\bgit push\b/.test(l));
+  if (push === -1) return null;
+  const rebase = L.findIndex((l) => /\bgit pull\s+--rebase\b/.test(l));
+  return rebase !== -1 && rebase <= push ? "rebase_then_push" : "plain_push";
+}
+/** `git add <yollar>` ile stage edilen depo yollari (bayraklar atlanir). */
+export function extractGitAddPaths(yaml: string): string[] {
+  const out: string[] = [];
+  for (const l of codeLines(yaml)) for (const m of l.matchAll(/\bgit add\s+([^;&|\n]+)/g)) for (const t of m[1].trim().split(/\s+/)) if (t && !t.startsWith("-")) out.push(t);
+  return out;
+}
 
 /** workflows: dosya adi -> icerik. Model ACTIVE/GATED github_actions islerini karsilastirir.
  *  PLANNED isler workflow'da olmak zorunda degil; DISABLED isin cron'u workflow'da kalabilir (ayri karar). */
@@ -278,6 +441,22 @@ export function diffWorkflows(workflows: Record<string, string>, jobs: Job[] = J
     const modelCrons = new Set(mj.filter((j) => j.cron).map((j) => j.cron!));
     for (const c of extractWorkflowCrons(text)) if (!modelCrons.has(c)) out.push({ workflow: wf, kind: "SCHEDULE_NOT_IN_MODEL", detail: `cron "${c}" modelde yok` });
     const wfCrons = new Set(extractWorkflowCrons(text));
+    // Yazma drift'i: workflow'un commit/stage ettigi yer modelde yoksa tek-yazar kaydi gercegi yansitmiyor demektir.
+    const live = mj.filter((j) => j.state !== "PLANNED");
+    const push = extractPushStrategy(text);
+    const committers = live.filter((j) => j.commits_to_main);
+    if (push && !committers.length) out.push({ workflow: wf, kind: "COMMIT_NOT_IN_MODEL", detail: "workflow git push ediyor ama modelde commits_to_main isi yok" });
+    if (!push && committers.length) out.push({ workflow: wf, kind: "MODEL_COMMIT_NOT_IN_WORKFLOW", detail: `${committers.map((j) => j.id).join(", ")}: model main'e commit ediyor diyor, workflow'da git push yok` });
+    const group = extractConcurrencyGroup(text);
+    for (const j of committers) {
+      if (push && j.push_strategy !== push) out.push({ workflow: wf, kind: "PUSH_STRATEGY_DRIFT", detail: `${j.id}: model ${String(j.push_strategy)}, workflow ${push}` });
+      if (j.commit_group !== group) out.push({ workflow: wf, kind: "CONCURRENCY_NOT_IN_WORKFLOW", detail: `${j.id}: model commit_group "${String(j.commit_group)}", workflow "${String(group)}"` });
+    }
+    const modelPaths = live.flatMap(repoPathsOf);
+    for (const a of extractGitAddPaths(text)) {
+      const ap = repoPathOf(a) ?? (a.includes("/") || a.includes(".") ? a : null);
+      if (ap && !modelPaths.some((m) => pathsOverlap(m, ap))) out.push({ workflow: wf, kind: "GIT_ADD_NOT_IN_MODEL", detail: `git add ${a}: modelde bu yola yazan is yok` });
+    }
     for (const j of mj) {
       if (j.state !== "PLANNED" && j.cron && !wfCrons.has(j.cron)) out.push({ workflow: wf, kind: "MODEL_CRON_NOT_IN_WORKFLOW", detail: `${j.id}: model cron "${j.cron}" workflow'da yok` });
       if (j.state === "GATED" && j.gate && j.runner === "github_actions" && !text.includes(j.gate)) out.push({ workflow: wf, kind: "GATE_NOT_IN_WORKFLOW", detail: `${j.id}: kapi "${j.gate}" workflow'da yok` });
@@ -286,9 +465,12 @@ export function diffWorkflows(workflows: Record<string, string>, jobs: Job[] = J
   return out;
 }
 
-export function modelToMarkdown(jobs: Job[] = JOBS, issues: Issue[] = validateModel(jobs)): string {
+export function modelToMarkdown(jobs: Job[] = JOBS, issues: Issue[] = validateModel(jobs), owners: HistoryOwner[] = HISTORY_OWNERS): string {
   const L = ["# Orkestrasyon modeli", "", "| Dongu | Is | Cadence/cron (UTC) | Runner | Durum | Kota | Yazar |", "|---|---|---|---|---|---|---|"];
   for (const j of jobs) L.push(`| ${j.loop} | ${j.id} | ${j.cron ?? j.cadence} | ${j.runner}${j.workflow ? `:${j.workflow}` : ""} | ${j.state} | ${j.quota_cost ? `${j.quota_cost.pool} ${j.quota_cost.per_site}/site` : "-"} | ${j.writes.join("; ") || "salt-okunur"} |`);
+  L.push("", "## Tarihce sahipligi (olcum modulu -> cikti -> sahip -> kalicilik -> scorecard)", "",
+    "| Yol | Olcum modulu | Cikti sema | TEK yazar | Kalicilik | Tuketici -> boyut | Uretici |", "|---|---|---|---|---|---|---|");
+  for (const o of owners) L.push(`| ${o.path} | ${o.measurement_module} | ${o.schema} | ${o.owner_job} | ${o.persistence} | ${o.consumers.length ? `${o.consumers.join(",")} -> ${o.scorecard_dimensions.join(",")}` : "(okunmuyor)"} | ${o.producer_ref} |`);
   L.push("", "## Dogrulayici bulgulari", "");
   if (!issues.length) L.push("Bulgu yok.");
   for (const i of issues) L.push(`- **${i.severity}** \`${i.code}\` (${i.jobs.join(", ")}): ${i.message}`);
