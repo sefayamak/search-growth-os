@@ -73,6 +73,17 @@ for p in "${paths[@]}"; do
   if [[ -e "$p" ]]; then git add -- "$p"; fi
 done
 
+# İzinli DİZİN altına düşen her dosya `git add -- dizin/` ile alınırdı; bir adım yanlışlıkla credentials.json / token.txt
+# bıraksa main'e push edilirdi (.gitignore yalnız .env*'i korur). Beklenen yazıcı çıktıları .md/.json; gizli-görünümlü
+# adlar ve diğer uzantılar stage'den geri alınır (yüksek sesle, düşmeden: kalıcılık işi gizli dosya yüzünden kaybolmasın).
+while IFS= read -r -d '' f; do
+  base="${f##*/}"; lower="${base,,}"
+  if [[ ! "$lower" =~ \.(md|json)$ || "$lower" =~ (secret|credential|token|passw|\.env|\.pem|\.key|id_rsa|\.p12) ]]; then
+    git reset -q -- "$f"
+    echo "persist: UYARI — '$f' beklenen ad/uzantı desenine uymuyor (.md/.json, gizli-görünümlü ad yok); stage'den çıkarıldı, commit edilmeyecek" >&2
+  fi
+done < <(git diff --cached --name-only -z)
+
 if git diff --cached --quiet; then
   echo "persist: değişiklik yok, commit atılmadı"
   exit 0
@@ -94,7 +105,9 @@ attempt=1
 while ((attempt <= MAX_ATTEMPTS)); do
   echo "persist: deneme $attempt/$MAX_ATTEMPTS"
   if git fetch -q origin "$BRANCH"; then
-    if ! git rebase "origin/$BRANCH" >/dev/null 2>&1; then
+    # --autostash: izin listesi dışındaki izlenen dosya kirliyse (ör. adım bir şeyi değiştirdi) düz `git rebase` "unstaged
+    # changes" diye reddeder ve bu yanlışlıkla çatışma (exit 2) sayılırdı; veri push edilemezdi.
+    if ! git rebase --autostash "origin/$BRANCH" >/dev/null 2>&1; then
       # Çatışma deterministiktir; tekrar denemek işe yaramaz ve otomatik çözüm veri bozabilir.
       git rebase --abort >/dev/null 2>&1 || true
       echo "persist: HATA — rebase çatışması. Otomatik çözüm yok; yerel commit korundu ($(git rev-parse --short HEAD)), push edilmedi. Geçmiş artifact'ta duruyor." >&2

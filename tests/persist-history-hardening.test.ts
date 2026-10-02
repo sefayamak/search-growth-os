@@ -263,6 +263,43 @@ test("G: değişiklik yok -> exit 0, HEAD aynı, push yok", () => {
   assert.equal(rhead(e), head);
 });
 
+test("H1: izin dışı gizli-görünümlü dosyalar (untracked/modified) asla stage/commit/push edilmez", () => {
+  const e = setup(); const a = e.mk("a");
+  w(a, ".env", `KEY=${FAKE_KEY}\n`);
+  w(a, "credentials.json", `{"k":"${FAKE_KEY}"}\n`);
+  w(a, "token.txt", FAKE_KEY);
+  w(a, "README.md", `modified ${FAKE_KEY}\n`);
+  w(a, "data/clarity-history/ok.json", "{}\n");
+  const r = run(a, ["-m", "m", "data/clarity-history/"]);
+  assert.equal(r.code, 0, r.out);
+  const files = remoteFiles(e);
+  for (const f of [".env", "credentials.json", "token.txt"]) assert.ok(!files.includes(f), f);
+  assert.equal(git(e.remote, "show", "main:README.md"), "readme");
+  assert.equal(gitTry(e.remote, "grep", "-q", FAKE_KEY, "main", "--").code, 1, "uzak ağaçta sahte anahtar yok");
+  const st = git(a, "status", "--porcelain");
+  assert.match(st, /README\.md/); assert.match(st, /credentials\.json/);
+});
+
+test("H2: izinli dizin içindeki gizli-görünümlü dosya ve gitignore etkileşimi", () => {
+  const e = setup(); const a = e.mk("a");
+  // .gitignore (repo'daki gerçek kalıplar) .env* dosyalarını korur; ad deseni filtresi yoksa diğer adlar geçer.
+  writeFileSync(join(a, ".gitignore"), ".env\n.env.*\n!.env.example\n"); git(a, "add", ".gitignore"); git(a, "commit", "-qm", "ign");
+  w(a, "reports/.env", FAKE_KEY);
+  w(a, "reports/ok.md", "ok\n");
+  w(a, "reports/credentials.json", `{"k":"${FAKE_KEY}"}\n`);
+  w(a, "data/clarity-history/token.txt", FAKE_KEY);
+  w(a, "data/clarity-history/ok.json", "{}\n");
+  const r = run(a, ["-m", "m", "reports/", "data/clarity-history/"]);
+  assert.equal(r.code, 0, r.out);
+  const files = remoteFiles(e);
+  assert.ok(files.includes("reports/ok.md") && files.includes("data/clarity-history/ok.json"));
+  assert.ok(!files.includes("reports/.env"), ".env* gitignore ile korunur");
+  // Gizli-görünümlü ama yalnız gitignore'a takılmayan adlar GÖNDERİLMEZ (ad deseni allow-list'i).
+  assert.ok(!files.includes("reports/credentials.json"), "credentials.json reports/ altında gönderilmemeli");
+  assert.ok(!files.includes("data/clarity-history/token.txt"), "token.txt history altında gönderilmemeli");
+  assert.equal(gitTry(e.remote, "grep", "-q", FAKE_KEY, "main", "--").code, 1);
+});
+
 test("X1: var olmayan izinli yol hata değil; izinli olmayan yol var olmasa da reddedilir", () => {
   const e = setup(); const a = e.mk("a");
   const r = run(a, ["-m", "m", "content/topic-ledger.json", "reports/not-allowed-missing/../x"]);
