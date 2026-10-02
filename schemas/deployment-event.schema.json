@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sgos.deployment-event.v1",
+  "title": "DeploymentEvent",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "site", "environment", "commit_sha", "deployed_at", "verification_state", "provenance", "evidence"],
+  "properties": {
+    "schema": { "const": "sgos.deployment-event.v1" },
+    "site": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$" },
+    "environment": { "enum": ["production", "preview", "unknown"] },
+    "commit_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "deployed_at": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,3})?Z$" },
+    "verification_state": { "enum": ["VERIFIED", "UNVERIFIED", "MISMATCH", "UNKNOWN"] },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "retrieved_at", "ref"],
+      "properties": {
+        "source": { "enum": ["github_deployments", "vercel", "manual_fixture"] },
+        "retrieved_at": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,3})?Z$" },
+        "ref": { "type": "string", "minLength": 1 }
+      }
+    },
+    "evidence": { "const": "FACT" }
+  }
+}
