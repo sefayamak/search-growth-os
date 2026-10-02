@@ -113,7 +113,9 @@ test("sozlesme: --out measure-json/ canonical yola kopyalaninca skorkart ayni do
   const raw = JSON.parse(readFileSync(join(repoLike, LATEST), "utf8"));
   assert.equal(raw.schema, "sgos.measure-report.v1");
   assert.ok(Object.keys(raw.sites).includes("pamistanbul"));
-  const card = buildScorecard({ site_id: "pamistanbul", onboarding_status: "pilot_onboarding", measure: raw }, new Date());
+  // Mock Google saati SABIT (2026-10-02T06:40Z). Skorkart gercek saatle okursa rapor 10 gun sonra (2026-10-12) bayat sayilip
+  // test kirilirdi (zaman bombasi): okuma zamani raporun kendi uretim zamanina sabitlenir.
+  const card = buildScorecard({ site_id: "pamistanbul", onboarding_status: "pilot_onboarding", measure: raw }, new Date(raw.generated_at));
   const dim = card.dimensions.find((d) => d.dimension === "search_opportunity")!;
   assert.ok(["OK", "ATTENTION"].includes(dim.state), `olculmus rapor UNKNOWN okunmamali: ${dim.state} / ${dim.basis}`);
   assert.equal(dim.evidence_label, "INFERENCE");
@@ -131,5 +133,5 @@ test("sozlesme: kimlik yokken de JSON uretilir ve NOT_CONNECTED der (sifir degil
   const d = mkdtempSync(join(tmpdir(), "measure-wf-nc-"));
   runLikeWorkflow(join(d, "measure-json"), undefined);
   const raw = JSON.parse(readFileSync(join(d, "measure-json", "measure-report.json"), "utf8"));
-  assert.equal(searchOpportunity(raw, "pamistanbul", new Date()).state, "NOT_CONNECTED");
+  assert.equal(searchOpportunity(raw, "pamistanbul", new Date(raw.generated_at)).state, "NOT_CONNECTED"); // sabit mock saati: gercek saate bagli degil
 });
