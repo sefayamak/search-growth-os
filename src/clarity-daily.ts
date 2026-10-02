@@ -163,6 +163,8 @@ function recordProblem(r: unknown, siteId: string): string | null {
   const s = x.sessions as DailyRecord["sessions"] | undefined;
   if (!s) return "sessions yok";
   for (const k of ["real", "bot", "total", "bot_pct"] as const) if (s[k] !== "UNKNOWN" && !isNum(s[k])) return `sessions.${k} gecersiz`;
+  // source_run_id istege bagli (eski kayitlarda yok); varsa Actions run id'si gibi yalniz rakam olmali. Takeover tazelik kaniti buna dayanir.
+  if (x.source_run_id !== undefined && (typeof x.source_run_id !== "string" || !/^\d{1,20}$/.test(x.source_run_id))) return "source_run_id gecersiz";
   // measurement_success acik yazildiysa kuraldan turetilenle BIREBIR ayni olmali (usable ile karistirilmasin diye).
   if (x.measurement_success !== undefined) {
     if (typeof x.measurement_success !== "boolean") return "measurement_success gecersiz";
