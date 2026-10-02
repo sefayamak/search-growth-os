@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "search-growth-os/agent-internal-link",
+  "title": "Ajan iç link önerisi. Yalnız tarif eder; uygulayamaz (mutation: none).",
+  "description": "Site-sınırı denetimi (kaynak/hedef host'u site registry domain'lerinde mi) JSON Schema ile ifade edilemez; src/agent-contracts.ts validateInternalLink() zorlar.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "kind", "site", "source_url", "target_url_or_entity", "reason", "evidence", "confidence", "risk", "expected_change", "approval_state", "mutation"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "kind": { "const": "internal_link" },
+    "site": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+    "source_url": { "type": "string", "format": "uri" },
+    "target_url_or_entity": { "type": "string", "format": "uri", "description": "İç linkte mutlak URL." },
+    "reason": { "type": "string", "minLength": 1 },
+    "evidence": {
+      "type": "object", "additionalProperties": false, "required": ["refs", "label"],
+      "properties": {
+        "refs": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+        "label": { "enum": ["FACT", "INFERENCE", "HYPOTHESIS", "RECOMMENDATION"], "description": "Altı etiketten öneriye uyanlar; IMPLEMENTED_CHANGE/VERIFIED_RESULT öneride geçersiz." }
+      }
+    },
+    "confidence": { "enum": ["CONFIRMED", "CANDIDATE", "FALSE_POSITIVE", "UNKNOWN"] },
+    "risk": { "enum": ["low", "medium", "high"] },
+    "expected_change": {
+      "type": "object", "additionalProperties": false, "required": ["hypothesis", "test"],
+      "properties": {
+        "hypothesis": { "type": "string", "minLength": 1, "description": "Sayısal kazanç iddiası içeremez." },
+        "test": { "type": "string", "minLength": 1 }
+      }
+    },
+    "approval_state": { "enum": ["PROPOSED", "REVIEW_REQUIRED", "OWNER_APPROVED", "REJECTED"], "description": "Varsayılanı yok; çağıran açıkça verir." },
+    "approver": { "type": "string", "minLength": 1, "description": "Yalnız OWNER_APPROVED ile; insan adı." },
+    "mutation": { "const": "none" }
+  },
+  "allOf": [
+    { "if": { "properties": { "approval_state": { "const": "OWNER_APPROVED" } }, "required": ["approval_state"] }, "then": { "required": ["approver"] }, "else": { "not": { "required": ["approver"] } } }
+  ]
+}
