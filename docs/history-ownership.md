@@ -53,8 +53,8 @@ bunu zorlar). `reports/scorecard-…` yazması gerekirse önce kendi yolu ve tek
 | `HISTORY_CONSUMER_WRITES` | tüketici depoya yazıyor / commit ediyor |
 | `HISTORY_CONSUMER_NOT_DEPENDENT` | tüketici sahibine `depends_on` ile bağlı değil |
 | `COMMIT_POLICY_MISSING` | commit eden işte `commit_group`/`push_strategy` yok; ya da `(commit, main)` yazıp bayrak yok |
-| `MAIN_COMMIT_RACE` | main'e commit eden iki iş farklı concurrency grubunda (WARN: ikisi de canlı; INFO: biri PLANNED) |
-| `PUSH_WITHOUT_REBASE` | `plain_push` iş + başka commit eden iş var (WARN canlı; ERROR PLANNED) |
+| `MAIN_COMMIT_RACE` | main'e commit eden iki iş farklı concurrency grubunda (WARN: ikisi de canlı; INFO: biri PLANNED **ya da ikisi de `rebase_retry_bounded` ve yazdıkları yollar ayrık**, bkz. §6a) |
+| `PUSH_WITHOUT_REBASE` | `plain_push` iş + başka commit eden iş var (WARN canlı; ERROR PLANNED). `rebase_retry_bounded` (betik) bunu üretmez |
 
 **Drift** (`diffWorkflows`, gerçek `.github/workflows/*.yml` ile): `COMMIT_NOT_IN_MODEL` (workflow `git push` ediyor, model bilmiyor),
 `MODEL_COMMIT_NOT_IN_WORKFLOW`, `PUSH_STRATEGY_DRIFT`, `CONCURRENCY_NOT_IN_WORKFLOW`, `GIT_ADD_NOT_IN_MODEL` (workflow modelde olmayan bir yolu stage ediyor).
@@ -107,6 +107,33 @@ Bulgular:
 - `commits_to_main`, `commit_group`, `push_strategy` model alanlarıdır ve gerçek workflow'larla drift testine bağlıdır (`measure`: `measure` + `plain_push`; `clarity-daily`: `clarity` + `rebase_then_push`).
 - PLANNED işler gelecekteki hedef düzene (`main-writes`, `rebase_then_push`) göre tanımlıdır; PLANNED iş `plain_push` ise ERROR (tasarım aşamasında yakalanır).
 - Hiçbir schedule açılmadı; PLANNED işler için workflow dosyası bulunmadığı testle sabitlendi.
+
+## 6a. Kalıcılık betiği (#40) ve drift/model anlayışı: İKİ FORM
+
+`docs/persistence-safety.md` (#40) measure ve clarity-daily'nin commit adımlarını `bash scripts/persist-history.sh -m "<mesaj>" <yol>...` çağrısına
+çevirir (satır içi `git add/commit/pull/push` kalkar). Drift testi **iki formu birden** anlar; test #40 merge olmadan da (satır içi) merge olduktan sonra da (betik) geçer:
+
+| | Satır içi (eski) | Betik (#40) |
+|---|---|---|
+| push | `git push` (`git pull --rebase` öncesindeyse `rebase_then_push`, yoksa `plain_push`) | `persist-history.sh` çağrısının kendisi = push → `rebase_retry_bounded` |
+| `git add` kümesi | `git add <yollar>` argümanları | betik çağrısının **yol argümanları** (`-m` değeri ve bayraklar atlanır; `\` ile devam eden satırlar birleştirilir) |
+| Karışık (ikisi birden) | satır içi form kazanır: betik çağrısı arkasına korumasız `git push` saklanamaz (`PUSH_STRATEGY_DRIFT`) | |
+| Yanlış pozitif koruması | yorum satırları, `echo bash scripts/persist-history.sh`, `git add scripts/persist-history.sh` betik çağrısı sayılmaz | |
+
+**Model:** `measure` ve `clarity-daily` → `push_strategy: "rebase_retry_bounded"`. Betiğe geçiş gerçekleşmeden önceki workflow'u kabul etmek için
+`legacy_push_strategy` (`measure`: `plain_push`, `clarity-daily`: `rebase_then_push`) tutulur: workflow **tam olarak** bu eski formdaysa `PUSH_STRATEGY_DRIFT` verilmez
+(geçiş dönemi), ama `migrationPending()` bekleyen geçişi listeler. Başka bir satır içi form (ör. beyan edilmemiş rebase) hâlâ drift'tir.
+`commit_group` değişmedi: bu **concurrency grubudur** (`measure`, `clarity`) ve workflow'daki `group:` ile birebir karşılaştırılır; #40 §4 ortak grubu bilinçli reddeder
+(bekleyen koşu iptal edilebilir → kayıt deliği), koruma serileştirme değil fetch+rebase+sınırlı yeniden denemedir. Dolayısıyla §5/4'teki "tüm işler `main-writes`" önerisi
+`measure`/`clarity-daily` için **geçerli değildir**; `TARGET_COMMIT_GROUP` yalnız PLANNED işlerde kalan tasarım notudur (workflow'ları yazılırken #40 §4'e göre yeniden karar verilmeli).
+
+**Gerçeği gösteren görünüm:** `validateModel(effectiveJobs(workflows))` push stratejisini workflow'un gözlenen stratejisiyle değiştirir; böylece `measure.yml` hâlâ düz `git push` ise
+`PUSH_WITHOUT_REBASE` ve `MAIN_COMMIT_RACE` (WARN) gerçekten uyarır, betiğe geçildiyse susar. Beyan edilen model (`validateModel()` workflow'suz) betik sözleşmesini yansıtır.
+
+**Neden `PUSH_WITHOUT_REBASE` söner:** betik her denemede `git fetch` + `git rebase origin/<dal>` yapar; düz push'un tek zayıflığı (rebase'siz non-fast-forward reddi) kapanır. **Neden `MAIN_COMMIT_RACE` silinmez, INFO'ya iner:**
+farklı gruplar hâlâ aynı anda push edebilir ama ikinci itme rebase edip yeniden dener (en fazla 3 deneme), ve yazılan yollar ayrıktır (izin listesi + tek yazar) → çatışma yok. İndirim **yalnız**
+iki iş de `rebase_retry_bounded` **ve** `writes` yolları kesişmiyorsa uygulanır; yol kesişirse (rebase çatışabilir), biri `plain_push`/tek-deneme `rebase_then_push` ise WARN aynen kalır (testli).
+Hâlâ kalan risk: 3 ardışık ret ya da çatışma → kırmızı koşu (veri artifact'ta; otomatik telafi yok) — #40 §3/§5.
 
 ## 7. Kalan boşluklar (bu PR yapmaz)
 

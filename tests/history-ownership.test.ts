@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import {
   JOBS, HISTORY_OWNERS, REQUIRED_HISTORY_PATHS, TARGET_COMMIT_GROUP, QUOTA_POOLS, validateModel, diffWorkflows, extractConcurrencyGroup, extractPushStrategy,
-  extractGitAddPaths, repoPathOf, pathsOverlap, modelToMarkdown, type Job, type HistoryOwner, type IssueCode,
+  extractGitAddPaths, extractPersistCalls, effectiveJobs, migrationPending, repoPathOf, pathsOverlap, modelToMarkdown, type Job, type HistoryOwner, type IssueCode,
 } from "../src/orchestration.ts";
 
 const WF_DIR = new URL("../.github/workflows/", import.meta.url);
@@ -123,11 +123,25 @@ test("tuketici kurallari: sahibine bagli olmali; yazamaz; yeni data/ dizini kayi
 
 // ---- main'e yazma yarisi ---------------------------------------------------------------------------------------------
 
-test("gercek duzen: measure ve clarity-daily FARKLI gruplarla main'e yaziyor -> MAIN_COMMIT_RACE WARN; measure plain_push -> PUSH_WITHOUT_REBASE WARN", () => {
-  const race = issues().find((i) => i.code === "MAIN_COMMIT_RACE" && i.jobs.includes("measure") && i.jobs.includes("clarity-daily"));
-  assert.ok(race && race.severity === "WARN");
-  const push = issues().find((i) => i.code === "PUSH_WITHOUT_REBASE" && i.jobs[0] === "measure");
-  assert.ok(push && push.severity === "WARN");
+// IKI DUNYA: (a) #40 merge OLMADAN: workflow'lar satir ici git komutlari kullanir; (b) #40 merge SONRASI: `bash scripts/persist-history.sh`.
+// Gercek dosyalardan hangisinde oldugumuz tespit edilir; beklenti dunyaya gore degisir, test ikisinde de gecer.
+const scriptForm = (f: string) => extractPushStrategy(workflows[f]) === "rebase_retry_bounded";
+const BOTH_MIGRATED = scriptForm("measure.yml") && scriptForm("clarity-daily.yml");
+
+test("gercek duzen (iki dunya): measure/clarity-daily FARKLI gruplarla main'e yaziyor; betik varsa MAIN_COMMIT_RACE INFO + PUSH_WITHOUT_REBASE yok, yoksa WARN'lar gercegi soyler", () => {
+  const ij = issues(effectiveJobs(workflows));
+  const race = ij.find((i) => i.code === "MAIN_COMMIT_RACE" && i.jobs.includes("measure") && i.jobs.includes("clarity-daily"));
+  const push = ij.find((i) => i.code === "PUSH_WITHOUT_REBASE" && i.jobs[0] === "measure");
+  if (BOTH_MIGRATED) {
+    assert.ok(race && race.severity === "INFO" && /rebase_retry_bounded/.test(race.message));
+    assert.ok(!push);
+  } else {
+    assert.ok(race && race.severity === "WARN");
+    if (!scriptForm("measure.yml")) assert.ok(push && push.severity === "WARN"); else assert.ok(!push);
+  }
+  // Beyan edilen model (workflow'suz) betik sozlesmesini soyler: duz-push uyarisi yok, yaris korumali INFO.
+  assert.ok(!issues().some((i) => i.code === "PUSH_WITHOUT_REBASE"));
+  assert.equal(issues().find((i) => i.code === "MAIN_COMMIT_RACE" && i.jobs.includes("measure") && i.jobs.includes("clarity-daily"))?.severity, "INFO");
   // planli isler ortak grupta ve rebase'li: aralarinda yaris yok
   const planned = ["lighthouse-weekly", "index-alarms-daily", "deployment-verifier"];
   for (const id of planned) { assert.equal(job(cj(), id).commit_group, TARGET_COMMIT_GROUP); assert.equal(job(cj(), id).push_strategy, "rebase_then_push"); }
@@ -140,6 +154,18 @@ test("FP: ortak commit grubu yarisi kaldirir; tek commit eden plain_push is soru
   assert.ok(!issues(j).some((i) => i.code === "PUSH_WITHOUT_REBASE"));
   const solo = cj().map((x) => (x.id === "measure" || !x.commits_to_main ? x : { ...x, state: "DISABLED" as const }));
   assert.ok(!issues(solo).some((i) => i.code === "PUSH_WITHOUT_REBASE" || i.code === "MAIN_COMMIT_RACE"));
+});
+
+test("MAIN_COMMIT_RACE/PUSH_WITHOUT_REBASE betik korumasi: FP (korumali + ayrik yol -> INFO) ve FN (yol kesisir / biri korumasiz -> WARN, sessizce dusmez)", () => {
+  const race = (j: Job[]) => issues(j).find((i) => i.code === "MAIN_COMMIT_RACE" && i.jobs.includes("measure") && i.jobs.includes("clarity-daily"));
+  assert.equal(race(cj())?.severity, "INFO");
+  const overlap = cj(); job(overlap, "measure").writes.push("data/clarity-history/x.json (commit, main)");
+  assert.equal(race(overlap)?.severity, "WARN"); // ayni yola iki yazar: rebase catisabilir, koruma yetmez
+  const oneUnsafe = cj(); job(oneUnsafe, "measure").push_strategy = "plain_push";
+  assert.equal(race(oneUnsafe)?.severity, "WARN");
+  assert.equal(issues(oneUnsafe).find((i) => i.code === "PUSH_WITHOUT_REBASE" && i.jobs[0] === "measure")?.severity, "WARN");
+  const singleAttempt = cj(); job(singleAttempt, "clarity-daily").push_strategy = "rebase_then_push"; // tek deneme betik degil
+  assert.equal(race(singleAttempt)?.severity, "WARN");
 });
 
 test("FN: PLANNED is plain_push ise ERROR (tasarim asamasinda yakalanir); live ise WARN", () => {
@@ -167,27 +193,76 @@ test("ayni dakikada iki commit eden is farkli gruptaysa SCHEDULE_COLLISION WARN 
 
 // ---- workflow <-> model drift (yazma tarafi) ---------------------------------------------------------------------------
 
-test("gercek workflow'lar: commit/push/concurrency/git-add modelle uyumlu (drift yok)", () => {
+// Sentetik workflow'lar: iki formu da DUNYADAN BAGIMSIZ sinar (gercek dosyalar hangi formdaysa o ayrica test edilir).
+const wf = (group: string, run: string) => `on:\n  schedule:\n    - cron: "40 6 * * 1"\nconcurrency:\n  group: ${group}\n  cancel-in-progress: false\njobs:\n  m:\n    steps:\n      - name: Raporu depoya yaz\n        run: |\n${run.split("\n").map((l) => `          ${l}`).join("\n")}\n`;
+const LEGACY_MEASURE = wf("measure", 'git add reports/measure-latest.md reports/runs/\n[ -f content/topic-ledger.json ] && git add content/topic-ledger.json\ngit commit -m "olcum"\ngit push');
+const SCRIPT_MEASURE = wf("measure", 'bash scripts/persist-history.sh -m "ölçüm: $(date -u +%Y-%m-%d) (otomatik)" \\\n  reports/measure-latest.md reports/runs/ content/topic-ledger.json');
+const dm = (t: string, name = "measure.yml") => diffWorkflows({ [name]: t });
+const kinds = (t: string, name = "measure.yml") => dm(t, name).map((d) => d.kind);
+
+test("gercek workflow'lar (iki dunya): commit/push/concurrency/git-add modelle uyumlu; hangi formdaysa o gorunur, bekleyen gecis drift sayilmaz", () => {
   assert.deepEqual(diffWorkflows(workflows), []);
-  assert.equal(extractPushStrategy(workflows["measure.yml"]), "plain_push");
-  assert.equal(extractPushStrategy(workflows["clarity-daily.yml"]), "rebase_then_push");
+  const want = (f: string, legacy: string) => (scriptForm(f) ? "rebase_retry_bounded" : legacy);
+  assert.equal(extractPushStrategy(workflows["measure.yml"]), want("measure.yml", "plain_push"));
+  assert.equal(extractPushStrategy(workflows["clarity-daily.yml"]), want("clarity-daily.yml", "rebase_then_push"));
   assert.equal(extractConcurrencyGroup(workflows["measure.yml"]), "measure");
   assert.equal(extractConcurrencyGroup(workflows["clarity-daily.yml"]), "clarity");
   assert.deepEqual(Object.entries(workflows).filter(([, t]) => extractPushStrategy(t)).map(([f]) => f).sort(), ["clarity-daily.yml", "measure.yml"]);
+  // Betik formunda git add kumesi = betik argumanlari: gercek yollar modelde (reports/, ledger, clarity-history) ve baska yol yok.
+  const adds = (f: string) => extractGitAddPaths(workflows[f]);
+  assert.ok(adds("clarity-daily.yml").includes("data/clarity-history/") || adds("clarity-daily.yml").some((p) => p.startsWith("data/clarity-history")));
+  assert.ok(adds("measure.yml").every((p) => /^(reports\/|content\/topic-ledger\.json)/.test(p)), adds("measure.yml").join(","));
+  const pend = migrationPending(workflows);
+  assert.deepEqual(pend.map((p) => p.job).sort(), ["clarity-daily", "measure"].filter((id) => !scriptForm(id === "measure" ? "measure.yml" : "clarity-daily.yml")));
 });
 
-test("drift FN: measure.yml'e rebase eklenir, grup degisir, yeni git add / yeni git push gelirse test kirilir", () => {
-  const m = workflows["measure.yml"];
-  const rebased = m.replace(/^(\s*)git push$/m, "$1git pull --rebase origin main\n$1git push");
-  assert.ok(diffWorkflows({ ...workflows, "measure.yml": rebased }).some((d) => d.kind === "PUSH_STRATEGY_DRIFT"));
-  const regrouped = m.replace("group: measure", "group: main-writes");
-  assert.ok(diffWorkflows({ ...workflows, "measure.yml": regrouped }).some((d) => d.kind === "CONCURRENCY_NOT_IN_WORKFLOW"));
-  const added = workflows["clarity-daily.yml"].replace("git add data/clarity-history/", "git add data/clarity-history/ data/yeni-gecmis/");
-  assert.ok(diffWorkflows({ ...workflows, "clarity-daily.yml": added }).some((d) => d.kind === "GIT_ADD_NOT_IN_MODEL" && /yeni-gecmis/.test(d.detail)));
-  const sneaky = workflows["portfolio-check.yml"] + "\n      - run: git push\n";
-  assert.ok(diffWorkflows({ ...workflows, "portfolio-check.yml": sneaky }).some((d) => d.kind === "COMMIT_NOT_IN_MODEL"));
-  const nopush = workflows["clarity-daily.yml"].replace("git push", "echo atla");
-  assert.ok(diffWorkflows({ ...workflows, "clarity-daily.yml": nopush }).some((d) => d.kind === "MODEL_COMMIT_NOT_IN_WORKFLOW"));
+test("drift (satir ici ESKI form): model betik diyor, workflow hala duz git push -> drift DEGIL ama migrationPending; add/commit/grup drift'i hala yakalanir", () => {
+  assert.deepEqual(dm(LEGACY_MEASURE), []);
+  assert.equal(extractPushStrategy(LEGACY_MEASURE), "plain_push");
+  assert.deepEqual(extractGitAddPaths(LEGACY_MEASURE), ["reports/measure-latest.md", "reports/runs/", "content/topic-ledger.json"]);
+  assert.equal(migrationPending({ "measure.yml": LEGACY_MEASURE }).length, 1);
+  // FN: beyan edilmemis bir satir ici strateji (rebase'li ama modelin legacy'si plain_push) drift'tir
+  assert.ok(kinds(LEGACY_MEASURE.replace("git push", "git pull --rebase origin main\n          git push")).includes("PUSH_STRATEGY_DRIFT"));
+  assert.ok(kinds(LEGACY_MEASURE.replace("group: measure", "group: main-writes")).includes("CONCURRENCY_NOT_IN_WORKFLOW"));
+  assert.ok(kinds(LEGACY_MEASURE.replace("reports/runs/\n", "reports/runs/ data/yeni-gecmis/\n")).includes("GIT_ADD_NOT_IN_MODEL"));
+  assert.ok(kinds(LEGACY_MEASURE.replace("git push", "echo atla")).includes("MODEL_COMMIT_NOT_IN_WORKFLOW"));
+  assert.ok(kinds(wf("measure", "echo x\ngit push"), "portfolio-check.yml").includes("COMMIT_NOT_IN_MODEL"));
+});
+
+test("drift (BETIK formu): persist-history.sh cagrisi = push (rebase_retry_bounded) ve yol argumanlari = git add kumesi; drift yok", () => {
+  assert.deepEqual(dm(SCRIPT_MEASURE), []);
+  assert.equal(extractPushStrategy(SCRIPT_MEASURE), "rebase_retry_bounded");
+  assert.deepEqual(extractGitAddPaths(SCRIPT_MEASURE), ["reports/measure-latest.md", "reports/runs/", "content/topic-ledger.json"]);
+  assert.deepEqual(migrationPending({ "measure.yml": SCRIPT_MEASURE }), []);
+  assert.deepEqual(effectiveJobs({ "measure.yml": SCRIPT_MEASURE }).find((j) => j.id === "measure")!.push_strategy, "rebase_retry_bounded");
+  assert.equal(effectiveJobs({ "measure.yml": LEGACY_MEASURE }).find((j) => j.id === "measure")!.push_strategy, "plain_push");
+  // FN: modelde olmayan yol betige arguman olarak verilirse (betik izin listesi ayri bir kapidir) GIT_ADD_NOT_IN_MODEL
+  assert.ok(kinds(SCRIPT_MEASURE.replace("reports/runs/", "reports/runs/ data/yeni-gecmis/")).includes("GIT_ADD_NOT_IN_MODEL"));
+  // FN: tek-yazar: measure baska iscinin dizinini (clarity-history) betige verirse yakalanir
+  assert.ok(dm(SCRIPT_MEASURE.replace("reports/runs/", "reports/runs/ data/clarity-history/")).some((d) => d.kind === "GIT_ADD_NOT_IN_MODEL" && /clarity-history/.test(d.detail)));
+  assert.ok(kinds(SCRIPT_MEASURE.replace("group: measure", "group: main-writes")).includes("CONCURRENCY_NOT_IN_WORKFLOW"));
+  // FN: betik cagrisi kalkarsa model commit diyor ama workflow yazmiyor
+  assert.ok(kinds(wf("measure", "echo yok")).includes("MODEL_COMMIT_NOT_IN_WORKFLOW"));
+  // FN: modelde commit eden isi olmayan workflow betik cagirirsa
+  assert.ok(kinds(SCRIPT_MEASURE, "portfolio-check.yml").includes("COMMIT_NOT_IN_MODEL"));
+  // FN (maskeleme): betik cagrisinin YANINA korumasiz satir ici git push eklenirse betik formu sayilmaz -> PUSH_STRATEGY_DRIFT
+  const mixed = SCRIPT_MEASURE.replace("          reports/measure-latest.md", "          reports/measure-latest.md\n          git push");
+  assert.equal(extractPushStrategy(mixed), "plain_push");
+  assert.ok(kinds(mixed).includes("PUSH_STRATEGY_DRIFT"));
+  assert.deepEqual(migrationPending({ "measure.yml": mixed }), []);
+});
+
+test("extractPersistCalls: devam satiri, tirnakli mesaj, --, sondaki yorum; FP: yorum / echo / git add scripts/ / baska betik", () => {
+  assert.deepEqual(extractPersistCalls('bash scripts/persist-history.sh -m "a b (c) $(date +%F)" \\\n  data/clarity-history/'), [["data/clarity-history/"]]);
+  assert.deepEqual(extractPersistCalls("bash scripts/persist-history.sh -m msg -- reports/ content/topic-ledger.json # not"), [["reports/", "content/topic-ledger.json"]]);
+  assert.deepEqual(extractPersistCalls("run: ./scripts/persist-history.sh -m 'x y' reports/"), [["reports/"]]);
+  assert.deepEqual(extractPersistCalls("bash scripts/persist-history.sh -m 'x' reports/ && echo reports/yok/"), [["reports/"]]);
+  assert.deepEqual(extractPersistCalls("# bash scripts/persist-history.sh -m x reports/\n"), []);
+  assert.deepEqual(extractPersistCalls("echo bash scripts/persist-history.sh -m x reports/\n"), []);
+  assert.deepEqual(extractPersistCalls("git add scripts/persist-history.sh\n"), []);
+  assert.deepEqual(extractPersistCalls("bash scripts/other.sh reports/\n"), []);
+  assert.equal(extractPushStrategy("# bash scripts/persist-history.sh -m x reports/\n"), null);
+  assert.deepEqual(extractGitAddPaths("git add scripts/persist-history.sh\n"), ["scripts/persist-history.sh"]); // gercek git add: yol sayilir (modelde yoksa drift)
 });
 
 test("drift FP: yorumdaki git push / git add / concurrency sayilmaz", () => {

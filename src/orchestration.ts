@@ -40,9 +40,15 @@ export interface Job {
   commits_to_main?: boolean;
   /** Commit adimini koruyan concurrency grubu. Iki ayri grup = iki is ayni anda main'e push edebilir (yaris). */
   commit_group?: string;
-  /** push oncesi pull --rebase var mi. plain_push + baska commit eden is = non-fast-forward reddi riski. */
-  push_strategy?: "rebase_then_push" | "plain_push";
+  /** Main'e itme stratejisi. plain_push + baska commit eden is = non-fast-forward reddi riski.
+   *  rebase_retry_bounded = `scripts/persist-history.sh` (#40): fetch + rebase + EN FAZLA 3 deneme, force yok, catismada kirmizi
+   *  (docs/persistence-safety.md). rebase_then_push = satir ici `git pull --rebase` + tek `git push` (yeniden deneme yok). */
+  push_strategy?: PushStrategy;
+  /** push_strategy "rebase_retry_bounded" iken: betige gecis (#40) oncesi workflow'un SATIR ICI stratejisi. Workflow hala bu eski formdaysa
+   *  drift testi PUSH_STRATEGY_DRIFT saymaz (iki dunya: #40 merge oncesi/sonrasi) ama `migrationPending` bekleyen gecisi gorunur kilar. */
+  legacy_push_strategy?: "rebase_then_push" | "plain_push";
 }
+export type PushStrategy = "rebase_then_push" | "plain_push" | "rebase_retry_bounded";
 
 /** Onerilen TEK ortak grup: main'e yazan her workflow'un commit adimi (ayri `persist` job'i) bu grupta kosar. */
 export const TARGET_COMMIT_GROUP = "main-writes";
@@ -116,8 +122,8 @@ export const JOBS: Job[] = [
   { id: "measure", loop: "weekly", cadence: "weekly", cron: "40 6 * * 1", runner: "github_actions", workflow: "measure.yml",
     api_calls_per_site: "UNKNOWN", quota_cost: { pool: "gsc-ga4-measure", per_site: "UNKNOWN" }, state: "ACTIVE",
     writes: ["reports/ (commit, main)", "content/topic-ledger.json (commit, main)", "artifact:measure-<run_id>"], depends_on: [],
-    commits_to_main: true, commit_group: "measure", push_strategy: "plain_push",
-    note: "GSC + GA4; commit adimi yalniz schedule veya commit_report ile. DIKKAT: push oncesi pull --rebase YOK (measure.yml)." },
+    commits_to_main: true, commit_group: "measure", push_strategy: "rebase_retry_bounded", legacy_push_strategy: "plain_push",
+    note: "GSC + GA4; commit adimi yalniz schedule veya commit_report ile, scripts/persist-history.sh uzerinden (#40). Betige gecmeden once workflow satir ici DUZ git push kullanir: effectiveJobs gercegi gosterir (PUSH_WITHOUT_REBASE)." },
   { id: "search-audit", loop: "weekly", cadence: "weekly", cron: "40 6 * * 1", runner: "github_actions", workflow: "search-audit.yml",
     api_calls_per_site: 0, quota_cost: null, state: "ACTIVE", writes: ["artifact:search-audit-<site>-<run_id>"], depends_on: [],
     note: "Salt-okunur HTTP taramasi (pilot site). measure ile ayni dakika: farkli havuz, bilinen ve zararsiz cakisma." },
@@ -127,7 +133,7 @@ export const JOBS: Job[] = [
     api_calls_per_site: 3, quota_cost: { pool: "clarity-project", per_site: 3 }, state: "GATED",
     gate: "vars.SEARCH_GROWTH_CLARITY_DAILY_ENABLED == 'true'",
     writes: ["data/clarity-history/*.json (commit, main)", "artifact:clarity-daily-<run_id>"], depends_on: [],
-    commits_to_main: true, commit_group: "clarity", push_strategy: "rebase_then_push",
+    commits_to_main: true, commit_group: "clarity", push_strategy: "rebase_retry_bounded", legacy_push_strategy: "rebase_then_push",
     note: "Cutover bayragi yokken schedule atlanir. Dispatch bayraga bagli degil (insan eylemi)." },
   { id: "legacy-site-health-monitor", loop: "daily", cadence: "daily", cron: "10 6 * * *", runner: "ccr_routine",
     api_calls_per_site: 3, quota_cost: { pool: "clarity-project", per_site: 3 }, state: "ACTIVE",
@@ -373,6 +379,15 @@ export function validateModel(jobs: Job[] = JOBS, pools: QuotaPool[] = QUOTA_POO
   for (let a = 0; a < committers.length; a++) for (let b = a + 1; b < committers.length; b++) {
     const A = committers[a], B = committers[b];
     if (A.commit_group === B.commit_group) continue;
+    // #40: ikisi de fetch+rebase+sinirli yeniden deneme betigiyle itiyorsa VE yazdiklari yollar ayriksa (tek yazici sahipligi: bot-bot rebase
+    // catismasi yapisal olarak yok) push yarisi veri kaybettirmez; ikinci itme rebase edip yeniden dener. Bilgi: INFO.
+    // Yollar kesisiyorsa ya da biri korumasizsa (plain_push / tek-deneme rebase) eski WARN aynen kalir.
+    const pa = repoPathsOf(A), pb = repoPathsOf(B);
+    const protectedPair = A.push_strategy === "rebase_retry_bounded" && B.push_strategy === "rebase_retry_bounded" && !pa.some((x) => pb.some((y) => pathsOverlap(x, y)));
+    if (protectedPair) {
+      add("INFO", "MAIN_COMMIT_RACE", [A.id, B.id], `${A.id} (grup ${A.commit_group}) ve ${B.id} (grup ${B.commit_group}) farkli gruplarla main'e yaziyor ama ikisi de rebase+sinirli-yeniden-deneme betigiyle (rebase_retry_bounded) ve yazdiklari yollar ayrik: push yarisi veri kaybettirmez (yalniz 3 ardisik ret ya da catisma kirmizi kosu uretir)`);
+      continue;
+    }
     add(isLive(A) && isLive(B) ? "WARN" : "INFO", "MAIN_COMMIT_RACE", [A.id, B.id],
       `${A.id} (grup ${A.commit_group}) ve ${B.id} (grup ${B.commit_group}) main'e farkli concurrency gruplariyla commit ediyor; ayni anda push yarisi olabilir. Oneri: commit adimlari ortak "${TARGET_COMMIT_GROUP}" grubunda`);
   }
@@ -415,18 +430,81 @@ export function extractConcurrencyGroup(yaml: string): string | null {
   const m = codeLines(yaml).join("\n").match(/^concurrency:\s*\n\s+group:\s*([^\n]+)/m);
   return m ? m[1].trim().replace(/^["']|["']$/g, "") : null;
 }
-/** Ilk push'tan ONCE pull --rebase var mi. push yoksa null (workflow main'e yazmiyor). Yorum satirlari sayilmaz. */
-export function extractPushStrategy(yaml: string): "rebase_then_push" | "plain_push" | null {
+/** Kabuk komutunu tirnak-duyarli kelimelere boler; tirnak disi `#`, `;`, `&`, `|`, `<`, `>` komutu bitirir. */
+function shellWords(cmd: string): string[] {
+  const out: string[] = [];
+  let cur = "", has = false, q = "";
+  for (const c of cmd) {
+    if (q) { if (c === q) q = ""; else cur += c; continue; }
+    if (c === '"' || c === "'") { q = c; has = true; continue; }
+    if (/\s/.test(c)) { if (has || cur) out.push(cur); cur = ""; has = false; continue; }
+    if (c === "#" && !cur && !has) break;
+    if (/[;|&<>]/.test(c)) break;
+    cur += c;
+  }
+  if (has || cur) out.push(cur);
+  return out;
+}
+/** Yorum disi satirlar; `\` ile devam eden satirlar tek mantiksal komuta birlestirilir (workflow `... \` + alt satirda yol yazar). */
+const logicalLines = (yaml: string): string[] => codeLines(yaml).join("\n").replace(/\\\r?\n\s*/g, " ").split("\n");
+// Yalniz KOMUT basinda: `echo bash scripts/persist-history.sh` ya da `git add scripts/persist-history.sh` cagri sayilmaz (yanlis pozitif).
+const PERSIST_CALL = /(?:^\s*(?:-\s+)?(?:run:\s+)?|[;&|(]\s*)(?:(?:bash|sh)\s+)?(?:[\w.\-/]*\/)?persist-history\.sh\b/;
+/** `bash scripts/persist-history.sh -m "<mesaj>" <yol>...` cagrilari: her biri icin yol argumanlari (-m degeri ve bayraklar atlanir). */
+export function extractPersistCalls(yaml: string): string[][] {
+  const calls: string[][] = [];
+  for (const l of logicalLines(yaml)) {
+    const m = PERSIST_CALL.exec(l);
+    if (!m) continue;
+    const w = shellWords(l.slice(m.index + m[0].length));
+    const paths: string[] = [];
+    for (let i = 0; i < w.length; i++) {
+      if (w[i] === "-m") { i++; continue; }
+      if (w[i] === "--") { paths.push(...w.slice(i + 1)); break; }
+      if (w[i].startsWith("-")) continue;
+      paths.push(w[i]);
+    }
+    calls.push(paths);
+  }
+  return calls;
+}
+/** Ilk push'tan ONCE pull --rebase var mi. push yoksa null (workflow main'e yazmiyor). Yorum satirlari sayilmaz.
+ *  Iki form: (1) satir ici `git push` (rebase_then_push | plain_push); (2) `scripts/persist-history.sh` cagrisi = push (betigin icinde
+ *  fetch+rebase+en fazla 3 deneme) -> rebase_retry_bounded. Ikisi birden varsa SATIR ICI form kazanir: korumasiz bir push'u betik
+ *  cagrisinin arkasinda gizlemek yanlis negatif olurdu. */
+export function extractPushStrategy(yaml: string): PushStrategy | null {
   const L = codeLines(yaml);
   const push = L.findIndex((l) => /\bgit push\b/.test(l));
-  if (push === -1) return null;
+  if (push === -1) return extractPersistCalls(yaml).length ? "rebase_retry_bounded" : null;
   const rebase = L.findIndex((l) => /\bgit pull\s+--rebase\b/.test(l));
   return rebase !== -1 && rebase <= push ? "rebase_then_push" : "plain_push";
 }
-/** `git add <yollar>` ile stage edilen depo yollari (bayraklar atlanir). */
+/** Stage edilen depo yollari: satir ici `git add <yollar>` (bayraklar atlanir) + betik cagrilarinin yol argumanlari (betik bunlari `git add` eder). */
 export function extractGitAddPaths(yaml: string): string[] {
   const out: string[] = [];
   for (const l of codeLines(yaml)) for (const m of l.matchAll(/\bgit add\s+([^;&|\n]+)/g)) for (const t of m[1].trim().split(/\s+/)) if (t && !t.startsWith("-")) out.push(t);
+  for (const paths of extractPersistCalls(yaml)) out.push(...paths);
+  return out;
+}
+
+/** Model + gercek workflow: push_strategy'yi workflow'un GOZLENEN stratejisiyle degistirir. validateModel(effectiveJobs(...)) gecis donemini
+ *  dogru gosterir: #40 oncesi measure.yml hala duz `git push` ise PUSH_WITHOUT_REBASE/MAIN_COMMIT_RACE gercekten uyarir; betige gecildiyse
+ *  PUSH_WITHOUT_REBASE soner, MAIN_COMMIT_RACE INFO'ya iner. Modelle celisen strateji ayrica diffWorkflows'ta drift olarak raporlanir. */
+export function effectiveJobs(workflows: Record<string, string>, jobs: Job[] = JOBS): Job[] {
+  return jobs.map((j) => {
+    const text = j.runner === "github_actions" && j.workflow ? workflows[j.workflow] : undefined;
+    const seen = text === undefined || !j.commits_to_main ? null : extractPushStrategy(text);
+    return seen && seen !== j.push_strategy ? { ...j, push_strategy: seen } : j;
+  });
+}
+/** Henuz satir ici formda olan (legacy_push_strategy ile eslesen) commit eden isler: drift DEGIL, bekleyen gecis (#40 merge'i). */
+export function migrationPending(workflows: Record<string, string>, jobs: Job[] = JOBS): { workflow: string; job: string; observed: PushStrategy; detail: string }[] {
+  const out: { workflow: string; job: string; observed: PushStrategy; detail: string }[] = [];
+  for (const j of jobs) {
+    const text = j.workflow ? workflows[j.workflow] : undefined;
+    if (text === undefined || !j.commits_to_main || j.push_strategy !== "rebase_retry_bounded" || !j.legacy_push_strategy) continue;
+    const seen = extractPushStrategy(text);
+    if (seen && seen === j.legacy_push_strategy && !extractPersistCalls(text).length) out.push({ workflow: j.workflow!, job: j.id, observed: seen, detail: `${j.id}: model rebase_retry_bounded, workflow hala satir ici ${seen} (scripts/persist-history.sh'e gecis bekliyor, #40)` });
+  }
   return out;
 }
 
@@ -449,7 +527,9 @@ export function diffWorkflows(workflows: Record<string, string>, jobs: Job[] = J
     if (!push && committers.length) out.push({ workflow: wf, kind: "MODEL_COMMIT_NOT_IN_WORKFLOW", detail: `${committers.map((j) => j.id).join(", ")}: model main'e commit ediyor diyor, workflow'da git push yok` });
     const group = extractConcurrencyGroup(text);
     for (const j of committers) {
-      if (push && j.push_strategy !== push) out.push({ workflow: wf, kind: "PUSH_STRATEGY_DRIFT", detail: `${j.id}: model ${String(j.push_strategy)}, workflow ${push}` });
+      // Gecis donemi: model betik (rebase_retry_bounded) diyor, workflow TAM olarak bildirilen legacy satir ici formda ise drift degil (bkz. migrationPending).
+      const legacyOk = j.push_strategy === "rebase_retry_bounded" && !!j.legacy_push_strategy && push === j.legacy_push_strategy && !extractPersistCalls(text).length;
+      if (push && j.push_strategy !== push && !legacyOk) out.push({ workflow: wf, kind: "PUSH_STRATEGY_DRIFT", detail: `${j.id}: model ${String(j.push_strategy)}, workflow ${push}` });
       if (j.commit_group !== group) out.push({ workflow: wf, kind: "CONCURRENCY_NOT_IN_WORKFLOW", detail: `${j.id}: model commit_group "${String(j.commit_group)}", workflow "${String(group)}"` });
     }
     const modelPaths = live.flatMap(repoPathsOf);
