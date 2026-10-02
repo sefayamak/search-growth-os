@@ -1,0 +1,36 @@
+{
+  "schema": "sgos.clarity-history.v1",
+  "site_id": "pamistanbul",
+  "max_records": 120,
+  "records": [
+    {
+      "site_id": "pamistanbul",
+      "date": "2026-10-02",
+      "measured_at": "2026-10-02T07:25:40.570Z",
+      "measurement_state": "MEASURED",
+      "confidence": "CONFIRMED",
+      "row_count": 520,
+      "metric_row_count_total": 520,
+      "max_metric_row_count": 73,
+      "rows_complete": true,
+      "is_zero": false,
+      "usable": true,
+      "friction": {
+        "dead_click_count": 1,
+        "rage_click_count": 0,
+        "script_error_count": 0,
+        "error_click_count": 0,
+        "excessive_scroll": 0,
+        "quickback_click": 7
+      },
+      "friction_total": 8,
+      "sessions": {
+        "real": 117,
+        "bot": 65,
+        "total": 182,
+        "bot_pct": 35.7
+      },
+      "source_run_id": "36978486153"
+    }
+  ]
+}

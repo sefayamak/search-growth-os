@@ -1,0 +1,36 @@
+{
+  "schema": "sgos.clarity-history.v1",
+  "site_id": "pamaistudio",
+  "max_records": 120,
+  "records": [
+    {
+      "site_id": "pamaistudio",
+      "date": "2026-10-02",
+      "measured_at": "2026-10-02T07:25:42.511Z",
+      "measurement_state": "NOT_CONNECTED",
+      "confidence": "UNKNOWN",
+      "row_count": "UNKNOWN",
+      "metric_row_count_total": "UNKNOWN",
+      "max_metric_row_count": "UNKNOWN",
+      "rows_complete": "UNKNOWN",
+      "is_zero": false,
+      "usable": false,
+      "friction": {
+        "dead_click_count": "UNKNOWN",
+        "rage_click_count": "UNKNOWN",
+        "script_error_count": "UNKNOWN",
+        "error_click_count": "UNKNOWN",
+        "excessive_scroll": "UNKNOWN",
+        "quickback_click": "UNKNOWN"
+      },
+      "friction_total": "UNKNOWN",
+      "sessions": {
+        "real": "UNKNOWN",
+        "bot": "UNKNOWN",
+        "total": "UNKNOWN",
+        "bot_pct": "UNKNOWN"
+      },
+      "source_run_id": "36978486153"
+    }
+  ]
+}
