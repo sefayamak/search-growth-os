@@ -29,6 +29,11 @@
           "inp_ms": "GOOD",
           "cls": "GOOD",
           "ttfb_ms": "GOOD"
+        },
+        "thresholds_ref": {
+          "source": "web.dev/vitals",
+          "accessed": "NOT_RETRIEVED_THIS_SESSION",
+          "status": "DOCUMENTED_ASSUMPTION"
         }
       }
     },
@@ -58,6 +63,11 @@
           "inp_ms": "GOOD",
           "cls": "GOOD",
           "ttfb_ms": "GOOD"
+        },
+        "thresholds_ref": {
+          "source": "web.dev/vitals",
+          "accessed": "NOT_RETRIEVED_THIS_SESSION",
+          "status": "DOCUMENTED_ASSUMPTION"
         }
       }
     },
@@ -87,6 +97,11 @@
           "inp_ms": "UNKNOWN",
           "cls": "GOOD",
           "ttfb_ms": "GOOD"
+        },
+        "thresholds_ref": {
+          "source": "web.dev/vitals",
+          "accessed": "NOT_RETRIEVED_THIS_SESSION",
+          "status": "DOCUMENTED_ASSUMPTION"
         }
       }
     }

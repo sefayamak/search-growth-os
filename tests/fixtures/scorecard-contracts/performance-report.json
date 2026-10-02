@@ -6,6 +6,25 @@
     "used": 2,
     "unit": "psi_requests"
   },
+  "thresholds_ref": {
+    "source": "web.dev/vitals",
+    "accessed": "NOT_RETRIEVED_THIS_SESSION",
+    "status": "DOCUMENTED_ASSUMPTION"
+  },
+  "validation_status": {
+    "psi_response_shape": "NOT_LIVE_VALIDATED",
+    "psi_quota_behaviour": "NOT_LIVE_VALIDATED",
+    "crux_availability_7_sites": "NOT_LIVE_VALIDATED",
+    "crux_cls_percentile_unit": "NOT_LIVE_VALIDATED",
+    "lab_inp_audit_presence": "NOT_LIVE_VALIDATED",
+    "cwv_thresholds": "DOCUMENTED_ASSUMPTION"
+  },
+  "unit_assumptions": {
+    "lcp_ms": "ms (CrUX percentile ve lab numericValue)",
+    "inp_ms": "ms (CrUX percentile)",
+    "ttfb_ms": "ms (CrUX percentile ve lab server-response-time numericValue)",
+    "cls": "birimsiz. CrUX percentile: tamsayi ise x100 (10 -> 0.10) VARSAYIMI; ondalikli sayi/dizge ise zaten birimsiz. Lab numericValue birimsiz."
+  },
   "sites": [
     {
       "site": "pamistanbul",
@@ -38,6 +57,11 @@
               "inp_ms": "GOOD",
               "cls": "GOOD",
               "ttfb_ms": "GOOD"
+            },
+            "thresholds_ref": {
+              "source": "web.dev/vitals",
+              "accessed": "NOT_RETRIEVED_THIS_SESSION",
+              "status": "DOCUMENTED_ASSUMPTION"
             }
           }
         },
@@ -67,6 +91,11 @@
               "inp_ms": "UNKNOWN",
               "cls": "GOOD",
               "ttfb_ms": "GOOD"
+            },
+            "thresholds_ref": {
+              "source": "web.dev/vitals",
+              "accessed": "NOT_RETRIEVED_THIS_SESSION",
+              "status": "DOCUMENTED_ASSUMPTION"
             }
           }
         }
