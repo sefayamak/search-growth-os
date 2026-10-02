@@ -95,4 +95,43 @@ eşik/yorum INFERENCE'tır; INFERENCE hiçbir yerde CONFIRMED olmaz (`dimensionI
 - **Rapor dosyalarının kalıcı yeri tanımsız.** `performance-report` ve index raporu kalıcı bir yola yazılmıyor (yalnız `runPerformance`/`buildReport`
   dönüşü). Scorecard opsiyonel girdi olarak alır (`--performance-report`, `--index-report`); yoksa yalnız geçmişten hesaplar.
 - **#34 index-history'de `NOT_CONNECTED` durumu yok.** Boş örnek (`sample_size=0`) → UNKNOWN; bağlı olmama ile erken durma ayırt edilemez.
-- `sgos.measure-report.v1` (`search_opportunity`) için **bilinen üretici yok**: `measure.yml` yalnız markdown yazıyor; bu boyut JSON üretici gelene kadar UNKNOWN kalır.
+- `sgos.measure-report.v1` üreticisi (#41) artık var ve scorecard gerçek şeklini okuyor (bkz. §5). Ama `measure.yml` henüz `--out reports/runs`
+  vermiyor ve `reports/runs/measure-report.json`'ı commit etmiyor (workflow bu PR'larda değiştirilmedi): dosya depoda oluşana kadar boyut
+  canlıda UNKNOWN kalır (`--measure-report reports/runs/measure-report.json`).
+
+## 5. `sgos.measure-report.v1` → `search_opportunity` (#41; `src/measure-report.ts`, `docs/measure-report.md`)
+
+Scorecard **üretici modülü import etmez**; JSON'u yalnız şema kimliğiyle okur. Fixture: `tests/fixtures/scorecard-contracts/measure-report.pamistanbul.json`
+(#41'in gerçek `buildMeasureReport`'undan; modül repodaysa round-trip testi birebir karşılaştırır, yoksa skip).
+`{site}` = istenen site kimliği (`sites` bir **anahtarlı nesne**, dizi değil). Okunan alanlar:
+
+- `schema`, `generated_at`
+- `sites.{site}.site_id`, `sites.{site}.generated_at`, `sites.{site}.gsc_state`, `sites.{site}.opportunity_count`
+- `sites.{site}.period.start`, `sites.{site}.period.end`
+- `sites.{site}.gsc.state`, `sites.{site}.gsc.state_reason`, `sites.{site}.gsc.rows_complete`
+- `sites.{site}.gsc.coverage.queries_truncated`, `sites.{site}.gsc.coverage.query_rows_total`, `sites.{site}.gsc.coverage.query_rows_returned`
+- `sites.{site}.search_opportunity_inputs.state`, `sites.{site}.search_opportunity_inputs.candidates`
+
+| Koşul | `search_opportunity` | Etiket / güven |
+|---|---|---|
+| dosya yok / şema ≠ `sgos.measure-report.v1` / `sites` nesne değil / site anahtarı yok | `UNKNOWN` | FACT / UNKNOWN |
+| girdinin `site_id`'si ≠ istenen site (ya da yok) — anahtar doğru olsa bile | `UNKNOWN` (izolasyon doğrulanamadı) | FACT / UNKNOWN |
+| `generated_at` > eşik (varsayılan 10 gün) | `UNKNOWN-STALE` | FACT / UNKNOWN |
+| `gsc` yok, ya da `gsc_state` ≠ `gsc.state` takma adı (MEASURED↔CONNECTED) | `UNKNOWN` (şema kayması) | FACT / UNKNOWN |
+| `gsc.state = NOT_CONNECTED` | `NOT_CONNECTED` (boyutun mevcut sözleşmesi; ne OK ne 0) | FACT / CONFIRMED |
+| `gsc.state = ERROR` / `UNKNOWN` | `UNKNOWN` (`state_reason` basis'e) | FACT / UNKNOWN |
+| `MEASURED`, `opportunity_count` sayı değil / aday listesi sayıyla tutarsız (0↔dolu, >0↔boş, aday>sayı) | `UNKNOWN` | FACT / UNKNOWN |
+| `MEASURED`, sayı > 0 | `ATTENTION` | INFERENCE / CANDIDATE |
+| `MEASURED`, sayı = 0, `rows_complete=true` | `OK` ("gerçek sıfır") | INFERENCE / CANDIDATE |
+| `MEASURED`, sayı = 0, `rows_complete` false/null | `UNKNOWN`: eksik satırlardan "fırsat yok" çıkmaz | FACT / UNKNOWN |
+
+**ATTENTION kararı.** `opportunity_count > 0` bir *arıza* değil *fırsat sinyalidir*; ama boyutun sözleşmesi "ATTENTION = insan bakmalı"
+ve bu ilk sürümden beri böyle. Yeni durum icat edilmedi; fırsat adayı etiketi INFERENCE/CANDIDATE kalır (aday kural-tabanlı çıkarımdır,
+asla FACT/CONFIRMED, asla RECOMMENDATION: öneri yalnız onboard edilmiş siteye ve insan kararına bağlıdır).
+**Kesilme / eksik satır.** `rows_complete=false` ya da `queries_truncated=true` iken durum yine ölçülen sayıdan hesaplanır (`opportunity_count`
+üreticide tablo kesilmesinden bağımsız, tüm satırlardan sayılır), ama `basis` "UYARI: …" taşır (`rows_complete=false` → sayı alt sınır; kesilme →
+adaylar tam liste değil). Tek istisna yukarıdaki sıfır satırıdır: sıfır, tamamlanmamış veriyle **kanıtlanmaz** (yanlış negatif, kural 6).
+Gerçek ölçülmüş sıfır (`api_empty_response` dahil, gösterim 0) geçerli bir `OK`'tur ve UNKNOWN ile karıştırılmaz.
+
+Eşleme (üretici alanı → boyut): `gsc.state`/`gsc_state` → durum; `opportunity_count` + `search_opportunity_inputs.candidates` → ATTENTION/OK ve
+tutarlılık; `period.start..end` → basis; `gsc.rows_complete`, `gsc.coverage.*` → basis uyarıları; `generated_at` → `as_of` ve tazelik.

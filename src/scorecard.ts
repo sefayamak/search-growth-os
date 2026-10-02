@@ -187,6 +187,8 @@ export const CONSUMED_PRODUCER_FIELDS: Record<string, string[]> = {
   "sgos.index-history.v1": ["schema", "site", "snapshots[].site", "snapshots[].taken_at", "snapshots[].sample_size", "snapshots[].universe_size", "snapshots[].stopped", "snapshots[].entries[].state", "snapshots[].entries[].verdict", "snapshots[].entries[].in_sitemap", "snapshots[].entries[].fetch_ok", "snapshots[].entries[].canonical_self", "snapshots[].entries[].indexable"],
   "index-alarms-report": ["site", "generated_at", "index_alarms.status", "index_alarms.alarms"],
   "sgos.deployment-timeline.v1": ["schema", "site", "events"],
+  // Anahtarli nesne: `{site}` = istenen site kimligi (test fixture'in sitesiyle degistirir). Yalniz bu alanlar okunur.
+  "sgos.measure-report.v1": ["schema", "generated_at", "sites.{site}.site_id", "sites.{site}.generated_at", "sites.{site}.gsc_state", "sites.{site}.opportunity_count", "sites.{site}.period.start", "sites.{site}.period.end", "sites.{site}.gsc.state", "sites.{site}.gsc.state_reason", "sites.{site}.gsc.rows_complete", "sites.{site}.gsc.coverage.queries_truncated", "sites.{site}.gsc.coverage.query_rows_total", "sites.{site}.gsc.coverage.query_rows_returned", "sites.{site}.search_opportunity_inputs.state", "sites.{site}.search_opportunity_inputs.candidates"],
   "sgos.deployment-event.v1": ["events[].schema", "events[].site", "events[].environment", "events[].commit_sha", "events[].deployed_at", "events[].verification_state", "events[].provenance.retrieved_at"],
 };
 
@@ -366,26 +368,56 @@ export function deploymentChange(raw: unknown, siteId: string, now: Date, max = 
 }
 
 
+/** sgos.measure-report.v1 (#41) okuyucusu. Uretici sekli: `sites[siteId]` ANAHTARLI NESNE; her girdi kendi `site_id`'sini tasir.
+ *  NEDEN `gsc_state` takma adi tek basina yetmez: `gsc.state` asil olcum durumudur (MEASURED/NOT_CONNECTED/UNKNOWN/ERROR), `gsc_state`
+ *  onun CONNECTED/... takma adi. Ikisi celisirse (ya da `gsc` blogu hic yoksa) sema kaymis demektir: UNKNOWN, asla OK/0.
+ *  Anlam: opportunity_count>0 bir ARIZA degil FIRSAT sinyalidir; boyutun mevcut sozlesmesi (ATTENTION = insan bakmali) korunur,
+ *  etiket her zaman INFERENCE/CANDIDATE (aday kural-tabanli cikarimdir, FACT/CONFIRMED asla). Gercek olculmus 0 gecerli bir OK'tur
+ *  (MEASURED + sayi 0 + aday listesi bos); UNKNOWN/null ise 0'a CEVRILMEZ. */
 export function searchOpportunity(raw: unknown, siteId: string, now: Date, max = DEFAULT_MAX_AGE_DAYS.search_opportunity): Dimension {
   const D = "search_opportunity" as const;
   if (raw === undefined || raw === null) return unknown(D, `girdi yok (${SCHEMA_IDS.measure} olcum raporu verilmedi/bulunamadi)`);
   if (!isObj(raw) || raw.schema !== SCHEMA_IDS.measure) return unknown(D, `sema beklenen ${SCHEMA_IDS.measure}, gelen ${isObj(raw) ? String(raw.schema) : "nesne degil"}`);
   const sites = raw.sites;
-  // Izolasyon: yalniz istenen sitenin girdisi okunur; diger siteler hic dokunulmaz.
-  const entry = isObj(sites) ? sites[siteId] : undefined;
+  // Izolasyon: yalniz istenen sitenin girdisi okunur; diger siteler hic dokunulmaz. hasOwn: "constructor" gibi anahtarlar prototipten gelmesin.
+  const entry = isObj(sites) && Object.hasOwn(sites, siteId) ? sites[siteId] : undefined;
   if (!isObj(entry)) return unknown(D, `raporda ${siteId} girdisi yok`);
+  // Girdi kendi kimligini tasir; anahtar ile icerik ayni siteyi gostermiyorsa (ya da kimlik yoksa) izolasyon dogrulanamadi (kural 3 + 6).
+  if (entry.site_id !== siteId) return unknown(D, `girdi site_id=${String(entry.site_id)} (beklenen ${siteId}); izolasyon dogrulanamadi`);
   const when = parseWhen(entry.generated_at ?? raw.generated_at, now);
   if (!when) return unknown(D, "rapor tarihi yok/gecersiz");
   const age = ageDays(when, now);
   if (age > max) return stale(D, when, age, max);
   const asOf = when.toISOString();
-  if (entry.gsc_state === "NOT_CONNECTED") return dim(D, "NOT_CONNECTED", "FACT", "CONFIRMED", "GSC bu site icin bagli degil; firsat olculemez", asOf);
-  if (entry.gsc_state !== "CONNECTED") return unknown(D, `gsc_state=${String(entry.gsc_state)}`, asOf);
+  const gsc = entry.gsc;
+  if (!isObj(gsc)) return unknown(D, "gsc blogu yok (sema kaymasi); durum dogrulanamadi", asOf);
+  // Ureticinin iki alani celisemez: CONNECTED <=> gsc.state MEASURED; digerleri birebir.
+  const alias = gsc.state === "MEASURED" ? "CONNECTED" : gsc.state;
+  if (entry.gsc_state !== alias) return unknown(D, `gsc_state=${String(entry.gsc_state)} ile gsc.state=${String(gsc.state)} celisiyor; durum dogrulanamadi`, asOf);
+  if (gsc.state === "NOT_CONNECTED") return dim(D, "NOT_CONNECTED", "FACT", "CONFIRMED", "GSC bu site icin bagli degil; firsat olculemez (0 degil)", asOf);
+  if (gsc.state !== "MEASURED") return unknown(D, `gsc.state=${String(gsc.state)}${typeof gsc.state_reason === "string" ? ` (${gsc.state_reason})` : ""}; olculmedi, firsat sayisi uydurulmadi`, asOf);
   const c = entry.opportunity_count;
-  if (!isNum(c)) return unknown(D, "opportunity_count yok; sayi uydurulmadi", asOf);
+  if (!isNum(c) || !Number.isInteger(c)) return unknown(D, "opportunity_count yok/sayi degil; sayi uydurulmadi", asOf);
+  const inp = entry.search_opportunity_inputs;
+  if (!isObj(inp) || inp.state !== "MEASURED" || !Array.isArray(inp.candidates)) return unknown(D, "search_opportunity_inputs olculmus degil/aday listesi yok; sayi tek basina yeterli sayilmadi", asOf);
+  // Tutarlilik: sayi 0 iken aday var ya da sayi>0 iken aday yok = uretici sekli bozuk; hangisine inanacagimizi bilmiyoruz.
+  if ((c === 0) !== (inp.candidates.length === 0) || inp.candidates.length > c) return unknown(D, `opportunity_count=${c} ile aday sayisi (${inp.candidates.length}) tutarsiz; dogrulanamadi`, asOf);
+  const cov = isObj(gsc.coverage) ? gsc.coverage : {};
+  const trunc = cov.queries_truncated === true;
+  const incomplete = gsc.rows_complete === false;
+  const completenessUnknown = gsc.rows_complete !== true && !incomplete; // null/yok: sayfalama sonu dogrulanmadi
+  const per = isObj(entry.period) && typeof entry.period.start === "string" && typeof entry.period.end === "string" ? ` donem ${entry.period.start}..${entry.period.end};` : "";
+  const caveats = [
+    incomplete ? "GSC satirlari TAMAMLANMADI (rows_complete=false): sayi alt sinirdir" : "",
+    completenessUnknown ? "rows_complete dogrulanmadi" : "",
+    trunc ? `sorgu tablosu kesildi (${String(cov.query_rows_returned)}/${String(cov.query_rows_total)} satir; sayi tablodan bagimsiz, adaylar tam liste degil)` : "",
+  ].filter(Boolean);
+  const cav = caveats.length ? ` UYARI: ${caveats.join("; ")}.` : "";
+  // Eksik veriden "0 firsat" cikarilamaz: tamamlanmamis satirlarda sifir, sifir kanitlamaz (yanlis negatif, kural 6).
+  if (c === 0 && (incomplete || completenessUnknown)) return unknown(D, `olculen 0 firsat ama GSC satir butunlugu dogrulanmadi;${per} 0 kanit sayilmadi.${cav}`, asOf);
   // Firsat bir oneri adayidir (RECOMMENDATION degil: onboarding'e ve insan kararina bagli), talep olculmus olsa da cikarimdir.
-  if (c > 0) return dim(D, "ATTENTION", "INFERENCE", "CANDIDATE", `${c} firsat adayi (GSC kanitli); inceleme gerekir, uygulama onerisi degil`, asOf);
-  return dim(D, "OK", "INFERENCE", "CANDIDATE", "GSC bagli, rapor doneminde firsat adayi 0", asOf);
+  if (c > 0) return dim(D, "ATTENTION", "INFERENCE", "CANDIDATE", `${c} firsat adayi (marka disi, sira 5-30, GSC olculmus);${per} inceleme gerekir, uygulama onerisi degil.${cav}`, asOf);
+  return dim(D, "OK", "INFERENCE", "CANDIDATE", `GSC olculdu (MEASURED), rapor doneminde firsat adayi 0;${per} gercek sifir, UNKNOWN degil.${cav}`, asOf);
 }
 
 // ---------------------------------------------------------------------------

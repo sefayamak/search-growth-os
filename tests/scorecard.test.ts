@@ -27,7 +27,18 @@ const isnap = (entries: unknown[], o: Record<string, unknown> = {}) => ({ taken_
 const idx = (snaps: unknown[] = [isnap([ient("https://www.pamistanbul.com/a"), ient("https://www.pamistanbul.com/b")])], site = S) => ({ schema: SCHEMA_IDS.index, site, snapshots: snaps });
 const ev = (o: Record<string, unknown> = {}) => ({ schema: SCHEMA_IDS.deployment, site: S, environment: "production", commit_sha: "a".repeat(40), deployed_at: "2026-09-28T10:00:00Z", verification_state: "VERIFIED", provenance: { source: "github_deployments", retrieved_at: "2026-10-01T06:00:00Z", ref: "github-deployment-1" }, evidence: "FACT", ...o });
 const depl = (events: unknown[] = [ev()], site = S) => ({ schema: SCHEMA_IDS.deploymentTimeline, site, events });
-const meas = (e: Record<string, unknown> = {}, site = S) => ({ schema: SCHEMA_IDS.measure, generated_at: "2026-09-29", sites: { [site]: { gsc_state: "CONNECTED", opportunity_count: 0, ...e } } });
+// #41 uretici sekli: girdi site_id tasir; gsc.state asil durum, gsc_state takma ad; aday listesi sayiyla tutarli (sayi>0 => en az 1 aday).
+const meas = (e: Record<string, unknown> = {}, site = S) => {
+  const n = "opportunity_count" in e ? e.opportunity_count : 0;
+  const alias = (e.gsc_state as string | undefined) ?? "CONNECTED";
+  const measured = alias === "CONNECTED";
+  return { schema: SCHEMA_IDS.measure, generated_at: "2026-09-29T06:00:00.000Z", sites: { [site]: {
+    site_id: site, generated_at: "2026-09-29T06:00:00.000Z", gsc_state: "CONNECTED", opportunity_count: 0,
+    period: { label: "son 28 gun", start: "2026-08-31", end: "2026-09-27" },
+    gsc: { state: measured ? "MEASURED" : alias, state_reason: measured ? null : "test", rows_complete: measured ? true : null, coverage: { query_rows_total: 10, query_rows_returned: 10, queries_truncated: measured ? false : null } },
+    search_opportunity_inputs: { state: measured ? "MEASURED" : alias, candidates: typeof n === "number" && n > 0 ? [{ query: "q", impressions: 100, clicks: 1, position: 9, score: 11 }] : [] },
+    ...e } } };
+};
 
 test("girdi yok: altisi UNKNOWN, hicbiri OK degil, tek skor alani yok", () => {
   const c = buildScorecard({ site_id: S }, NOW);
@@ -259,7 +270,7 @@ test("search_opportunity: firsat ATTENTION/INFERENCE; sayi yoksa UNKNOWN; baska 
   assert.equal(s(meas({ opportunity_count: 3 })).confidence, "CANDIDATE");
   assert.equal(s(meas({ opportunity_count: undefined })).state, "UNKNOWN");
   assert.equal(s(meas({}, "spryhand")).state, "UNKNOWN");
-  const old = { schema: SCHEMA_IDS.measure, generated_at: "2026-08-01", sites: { [S]: { gsc_state: "CONNECTED", opportunity_count: 0 } } };
+  const old = meas({ generated_at: "2026-08-01T00:00:00.000Z" });
   assert.equal(s(old).state, "UNKNOWN-STALE");
 });
 

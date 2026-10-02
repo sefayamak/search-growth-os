@@ -14,9 +14,9 @@ import { join } from "node:path";
 export const SITE = "pamistanbul";
 export const GEN_NOW = "2026-10-02T09:00:00.000Z";
 
-export interface ProducerModules { perf: any; index: any; deploy: any }
+export interface ProducerModules { perf: any; index: any; deploy: any; measure: any }
 export interface ContractFixtures {
-  performanceHistory: unknown; performanceReport: unknown; indexHistory: unknown; indexReport: unknown; deploymentTimeline: unknown;
+  performanceHistory: unknown; performanceReport: unknown; indexHistory: unknown; indexReport: unknown; deploymentTimeline: unknown; measureReport: unknown;
 }
 
 export const FIXTURE_FILES: Record<keyof ContractFixtures, string> = {
@@ -25,6 +25,7 @@ export const FIXTURE_FILES: Record<keyof ContractFixtures, string> = {
   indexHistory: "index-history.pamistanbul.json",
   indexReport: "index-report.pamistanbul.json",
   deploymentTimeline: "deployment-timeline.pamistanbul.json",
+  measureReport: "measure-report.pamistanbul.json",
 };
 
 const psiField = (lcp: number, inp: number, clsPct: number) => ({
@@ -79,8 +80,32 @@ export async function buildDeployment(d: any): Promise<unknown> {
   return JSON.parse(JSON.stringify(d.parseTimeline(t)));
 }
 
+/** #41 buildMeasureReport'u sahte GSC satirlariyla kosar (ag yok). Marka satiri, sira<5 satiri ve dusuk-gosterimli satir aday DEGIL;
+ *  boylece fixture eleme kurallarini ve sayiyi (2) birlikte tasir. */
+export function buildMeasure(m: any): unknown {
+  const row = (query: string, clicks: number, impressions: number, position: number) => ({ query, clicks, impressions, ctr: clicks / impressions, position });
+  const current = [
+    row("pamistanbul", 40, 400, 1.2), row("organik pamuk havlu", 3, 300, 8.5), row("pamuklu bornoz fiyat", 1, 120, 14),
+    row("havlu modelleri", 30, 500, 3), row("pamuk pestemal", 0, 15, 9),
+  ];
+  const total = (rows: { clicks: number; impressions: number }[]) => {
+    const clicks = rows.reduce((a, r) => a + r.clicks, 0), impressions = rows.reduce((a, r) => a + r.impressions, 0);
+    return [{ clicks, impressions, ctr: clicks / impressions, position: 6 }];
+  };
+  const yearAgo = [row("pamistanbul", 30, 300, 1.3), row("organik pamuk havlu", 1, 100, 12)];
+  const report = m.buildMeasureReport([{
+    siteId: SITE, gscProperty: "sc-domain:pamistanbul.com", ga4Property: "NOT_CONNECTED", patterns: ["pamistanbul", "pam istanbul"],
+    outcome: { kind: "ok", current, yearAgo, currentTotal: total(current), yearAgoTotal: total(yearAgo) },
+    ga4Status: { state: "NOT_CONNECTED", note: "GA4 kimligi yok" },
+  }], {
+    now: new Date(GEN_NOW), current: { label: "son 28 gun", start: "2026-09-04", end: "2026-10-01" }, yearAgo: { label: "gecen yil", start: "2025-09-05", end: "2025-10-02" },
+    toolVersion: "0.1.0", commit: null, registryPath: null,
+  });
+  return JSON.parse(JSON.stringify(report));
+}
+
 export async function buildContractFixtures(m: ProducerModules): Promise<ContractFixtures> {
   const p = await buildPerformance(m.perf);
   const i = buildIndex(m.index);
-  return { performanceHistory: p.history, performanceReport: JSON.parse(JSON.stringify(p.report)), indexHistory: i.history, indexReport: JSON.parse(JSON.stringify(i.report)), deploymentTimeline: await buildDeployment(m.deploy) };
+  return { performanceHistory: p.history, performanceReport: JSON.parse(JSON.stringify(p.report)), indexHistory: i.history, indexReport: JSON.parse(JSON.stringify(i.report)), deploymentTimeline: await buildDeployment(m.deploy), measureReport: buildMeasure(m.measure) };
 }
