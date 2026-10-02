@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "search-growth-os/scorecard",
+  "title": "sgos.scorecard.v1 - bir sitenin alti boyutlu durum karti. Tek skor yok; UNKNOWN asla OK degildir.",
+  "type": "object",
+  "required": ["schema", "site_id", "generated_at", "onboarding_status", "dimensions", "counts"],
+  "properties": {
+    "schema": { "const": "sgos.scorecard.v1" },
+    "site_id": { "type": "string" },
+    "generated_at": { "type": "string" },
+    "onboarding_status": { "type": "string" },
+    "dimensions": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "items": {
+        "type": "object",
+        "required": ["dimension", "state", "evidence_label", "confidence", "basis", "as_of"],
+        "properties": {
+          "dimension": { "enum": ["measurement_health", "index_health", "search_opportunity", "ux_friction", "performance", "deployment_change"] },
+          "state": { "enum": ["OK", "ATTENTION", "UNKNOWN", "UNKNOWN-STALE", "NOT_CONNECTED"] },
+          "evidence_label": { "enum": ["FACT", "INFERENCE", "HYPOTHESIS", "RECOMMENDATION", "IMPLEMENTED_CHANGE", "VERIFIED_RESULT"] },
+          "confidence": { "enum": ["CONFIRMED", "CANDIDATE", "FALSE_POSITIVE", "UNKNOWN"] },
+          "basis": { "type": "string", "minLength": 1 },
+          "as_of": { "type": ["string", "null"] }
+        },
+        "additionalProperties": false
+      }
+    },
+    "counts": {
+      "type": "object",
+      "required": ["OK", "ATTENTION", "UNKNOWN", "UNKNOWN-STALE", "NOT_CONNECTED"],
+      "additionalProperties": { "type": "integer", "minimum": 0 }
+    }
+  },
+  "additionalProperties": false
+}
