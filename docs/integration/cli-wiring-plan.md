@@ -60,7 +60,7 @@ bir adlandırma standardı **icat edilmedi**; her ad bir üretici modülün kend
 
 | # | Komut | Modül (PR) | Okur | Yazar | Ağ | Kimlik | Exit 1 olduğu durumlar | Exit 0 kalan (kasıtlı) |
 |---|---|---|---|---|---|---|---|---|
-| 1 | `clarity-takeover-status [registry] [--history dir] [--runs file] [--json]` | `clarity-takeover-status.ts` (#31) | `data/clarity-history/*.json`, `--runs` | yalnız stdout | yok | yok | registry geçersiz/okunamıyor | zincir `NONE`, `NOT_SUCCESS` günler, koşu kaydı sorunları, `site_problems` (rapora yazılır; bu bir kapı değil durum raporu) |
+| 1 | `clarity-takeover-status [registry] [--history dir] [--json]` | `clarity-takeover-status.ts` (#31) | `data/clarity-history/*.json` (`source_run_id`) | yalnız stdout | yok | yok | registry geçersiz/okunamıyor | zincir `NONE`, `NOT_SUCCESS` günler, koşu kaydı sorunları, `site_problems` (rapora yazılır; bu bir kapı değil durum raporu) |
 | 2 | `deployment-timeline <timeline.json> [--registry path] [--site id]` | `deployment-timeline.ts` (#32) | verilen dosya | stdout | yok | yok | `parseTimeline` fail-closed ret (tek bozuk olay, yabancı site, tekrar, sıra), site registry'de yok, `--site` uyuşmuyor, dosya yok | — |
 | 3 | `deployment-ingest <providerJson> --site id --provider github\|vercel [--registry path] [--timeline dir] [--write]` | #32 | kayıtlı sağlayıcı JSON'u + varsa `data/deployment-timeline/<site>.json` | `--write` ile **yalnız** `<dir>/<site>.json` | yok (CLI ağsız; JSON'u workflow `gh api` ile çeker) | yok | tanınmayan gövde şekli, site/provider geçersiz, mevcut çizelge bozuk | satır bazlı `REDDEDILDI` satırları (yazdırılır, sessiz düşmez) |
 | 4 | `content-validate <file.json> [--registry path] [--to STAGE]` | `content-pipeline.ts` (#33) | dosya (kayıt ya da dizi) | stdout | yok | yok | herhangi bir kayıt/geçiş geçersiz, dosya okunamadı | — |
@@ -151,7 +151,7 @@ Bu komutu **zorunlu CI kapısı yapma**; workflow'da `continue-on-error: true` i
 `tests/index-candidates.test.ts:286` (`index-probe.yml`'de `schedule` YOK) → bu yüzden indeks alarmı **yeni bir workflow**'dadır, `index-probe.yml` değişmez; `tests/orchestration.test.ts:97`
 (dört yeni katman `PLANNED`) → her workflow PR'ı yalnız kendi işinin durumunu çevirir, testi o iş için günceller. `orchestration.ts` modeli her workflow değişikliğiyle **aynı PR'da** güncellenmeli (drift testi).
 
-**B4 — Takeover için koşu kaydı üreticisi yok.** `clarity-takeover-status` `--runs` ister (`{date_utc, run_id, fresh_measurement_success, total_sites, measurement_success}`); `clarity-daily` bunu üretmiyor
+**B4 — ÇÖZÜLDÜ (#31 8639de7).** Koşu kanıtı ayrı bir kayıt değil, history kayıtlarındaki mevcut `source_run_id` alanıdır (`clarity-daily` zaten yazıyor); `--runs` seçeneği kaldırıldı. Aşağıdaki eski gerekçe tarihsel not olarak kalır: **B4 — Takeover için koşu kaydı üreticisi yok.** `clarity-takeover-status` `--runs` ister (`{date_utc, run_id, fresh_measurement_success, total_sites, measurement_success}`); `clarity-daily` bunu üretmiyor
 (yalnız `clarity-alerts.json` içinde `coverage` sayıları var). Kayıt olmadan tazelik `UNKNOWN`, `FULL_TAKEOVER_SUCCESS` iddia edilmez (doğru, ama zincir `FULL_TAKEOVER_2_OF_2`'ye hiç ulaşamaz). Ayrı küçük iş:
 `clarity-daily`'nin `clarity-out/clarity-alerts.json`'dan kayıt üretmesi ya da workflow adımı.
 

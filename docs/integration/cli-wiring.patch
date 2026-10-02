@@ -5,11 +5,12 @@
 # src/cli.ts o PR'lardaki modulleri dinamik import eder; tek basina main'de `npm run typecheck` ve yeni komutlar kirilir.
 # Kapsam: yalniz src/cli.ts + tests/cli-wiring.test.ts. Workflow dosyasina, uretim sitesine, secret'a dokunmaz.
 # Uygulama: git apply --check docs/integration/cli-wiring.patch && git apply docs/integration/cli-wiring.patch
-# Dogrulama (2026-10-02): 8 dal gecici worktree'de merge edildi -> typecheck temiz, npm test 682/682 (669 + 13 yeni).
+# Dogrulama (2026-10-02, GUNCEL head'ler: #31 8639de7, #32 388eb01, #33 393abdd, #34 3b3c3db, #35 0f2edb1, #36 a085200, #37 de34d06, #38 9efcc0d):
+# 8 dal gecici worktree'de merge edildi -> typecheck temiz, npm test 777/777 (764 + 13 yeni). #31 sertlestirmesiyle `--runs` kalkti; yama buna gore guncel.
 # Plan ve gerekce: docs/integration/cli-wiring-plan.md. Bu basliktaki satirlari git apply yok sayar.
 # ============================================================================================================
 diff --git a/src/cli.ts b/src/cli.ts
-index 70db2ef..16ac95b 100644
+index 70db2ef..61efb61 100644
 --- a/src/cli.ts
 +++ b/src/cli.ts
 @@ -34,7 +34,20 @@
@@ -43,7 +44,7 @@ index 70db2ef..16ac95b 100644
 +    case "clarity-takeover-status": {
 +      const ts = await import("./clarity-takeover-status.ts");
 +      let s: ReturnType<typeof ts.loadAndEvaluate>;
-+      try { s = ts.loadAndEvaluate(args[1] && !args[1].startsWith("--") ? args[1] : "config/sites.yaml", opt("history", join("data", "clarity-history")), opt("runs")); }
++      try { s = ts.loadAndEvaluate(args[1] && !args[1].startsWith("--") ? args[1] : "config/sites.yaml", opt("history", join("data", "clarity-history"))); }
 +      catch (e) { console.error((e as Error).message); process.exitCode = 1; return; }
 +      console.log(flag("json") ? JSON.stringify(s, null, 2) : ts.statusToMarkdown(s));
 +      return;
