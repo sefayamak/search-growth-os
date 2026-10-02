@@ -1,4 +1,4 @@
-# DEVAM — 20 Eylül 2026 akşamı bırakıldığı yer
+# DEVAM — 2 Ekim 2026 itibarıyla durum (20 Eylül notları tarihsel)
 
 Bu dosya, işi devralanın (insan ya da yeni bir Claude oturumu) okuyacağı ilk yer.
 Türkçe yazıldı; teknik terimler İngilizce kaldı.
@@ -19,7 +19,7 @@ sistemle bir ilgisi yok (o yalnız siteleri yayına alıyor).
 | Eski not (20 Eylül) | Bugün (doğrulandı) |
 |---|---|
 | "GSC/GA4 bağlı değil, UNKNOWN kalır" (bölüm 6) | **Bağlı.** `reports/measure-latest.md` (28 Eylül): 7/7 GSC OK, 7/7 GA4 OK. Service account + Search Console + GA4 erişimi tamamlandı |
-| "65 test" | **459 test**, `npm run typecheck` temiz |
+| "65 test" | Tüm testler geçer, `npm run typecheck` temiz (sayı bu dosyada tutulmaz; CI çıktısına bak) |
 | "iki workflow var" | Beş: `measure.yml` (haftalık GSC+GA4), `tests.yml` (her PR'da test), `index-probe.yml` (yalnız elle), `portfolio-check.yml`, `search-audit.yml` |
 | "Sıradaki adım: 3 PR'ı merge et" (pamistanbul-site #89/#90, pamaistudio#40) | Bu depodan **doğrulanamadı**; o repolar bu oturumun kapsamı dışı. Sefa'nın teyidi gerekir |
 | 18 skill | 18 skill (README'deki "15" eskiydi, düzeltildi) |
@@ -94,6 +94,94 @@ bunları `UNKNOWN` sayar. Clarity serisi, shm'nin ağ izni düzelene kadar güve
 **Phase 2'ye kalanlar:** Clarity client'ı, shm OAuth yolunun emekliliği, Lighthouse/CWV, deploy geçmişi,
 içerik taslağı → PR hattı, dashboard.
 
+### 2 Ekim 2026 — sprint sonrası main (en güncel; yukarıdaki "PR açık/draft" ifadeleri eskidir)
+
+**Main'e giren (squash SHA, `031d0e8..origin/main` geçmişi):**
+
+| PR | Ne | SHA |
+|---|---|---|
+| #30 | Owner-offline runbook (`docs/OWNER-OFFLINE-RUNBOOK.md`) | `854bf71` |
+| #31 | Clarity takeover durum hesaplayıcı (offline, `source_run_id` kanıtı); `src/clarity-daily.ts`'te +2 satır (id biçim doğrulaması) | `ba55520` |
+| #32 | Deployment verifier + timeline (provenance, nedensel iddia yok) | `d60b972` |
+| #33 | İçerik opportunity + editor pipeline durum modeli; yapılandırılabilir politika, eşikler `DEFAULT_ASSUMPTION` | `ad2bc24` |
+| #34 | Index alarms (>24s) + canonical backlog yöneticisi | `1c60d11` |
+| #35 | İç link + schema/entity ajan sözleşmeleri (yalnız öneri, mutation=none) | `4dfc496` |
+| #36 | Lighthouse/CWV (PSI, fixture-first) — `NOT_LIVE_VALIDATED` | `d07b981` |
+| #37 | Change safety v1: bütçe, rollback sözleşmesi, kill-switch; iki yol (A/B), **yazıcı yok** | `d27b336` |
+| #38 | Kanonik orkestrasyon modeli + site başı scorecard | `a2c8700` |
+| #40 | Güvenli persistence betiği (`scripts/persist-history.sh`; rebase + sınırlı retry, fail-closed) | `8e3e831` |
+| #41 | `sgos.measure-report.v1` makine-okunur measure çıktısı (`measure --out`; Markdown değişmez) | `d13c9a5` |
+| #42 | Zaman bağımlı test düzeltmesi (`tests/change-safety.test.ts`; yalnız test) | `dfed8d5` |
+| #43 | Persistence hardening: gizli-görünümlü dosya filtresi, `--autostash`, yerel bare-remote testleri; `docs/persistence-safety.md` güncel | `d08bd51` |
+| #39 | CLI bağlama: 12 salt-okunur/yerel komut + entegrasyon planı (`src/cli.ts`) | `488d1a6` |
+| #44 | Takeover status uçtan uca testleri (yalnız test) | `e7bcde9` |
+
+**CLI (main'de, #39):** 12 komut `src/cli.ts`'te: `clarity-takeover-status`, `deployment-timeline`, `deployment-ingest`, `content-validate`,
+`content-classify`, `index-alarms`, `agent-contracts-validate`, `performance-measure`, `change-eval`, `change-lint`, `scorecard`, `orchestration-check`.
+Hiçbiri üretim sitesine yazmaz; tek ağ yolu `performance-measure` → PageSpeed (anahtar yoksa istek yok). Plan: `docs/integration/cli-wiring-plan.md`.
+
+**Açık:** PR #45 — `measure.yml` içinde measure JSON adımı. **HOLD**: workflow değişikliği; ilk canlı koşusu Pzt 2026-10-05. Tek-fetch refactor ihtiyacı açık.
+PR #46 — bu docs senkronu.
+
+**Durum gerçekleri:**
+
+- Clarity coverage validation **tamamlandı** (2026-10-02): `COVERAGE_VALIDATION_SUCCESS`, 7/7 `measurement_success` (6 taze + PAM miras), usable 6/7.
+- FULL_TAKEOVER **1/2 ve 2/2 PENDING**: iki ayrı UTC gün, her biri 7/7 `measurement_success` **ve** 7/7 taze koşu gerekir. Zincir bugün `NONE`.
+- Legacy `site-health-monitor` rutini **hâlâ ENABLED** (son bilinen; bu oturumda yeniden okunmadı).
+- `SEARCH_GROWTH_CLARITY_DAILY_ENABLED` **ayarlı değil** (zamanlanmış koşu kapılı). Değer repodan okunamaz; owner beyanı, repodan UNKNOWN.
+- Credential rotation **bekliyor** (owner; yalnız legacy kapandıktan sonra).
+- Yeni modüller (#31–#38) CLI'ya bağlı (#39) ama **workflow'lara bağlı değil**; çoğu `NOT_LIVE_VALIDATED`: PSI yanıt şekli/kota (#36), canlı SHA probe (#32; kodda yok),
+  index alarm yeniden gözlemi (#34), measure JSON'un workflow'da kullanımı (#41), scorecard'ın gerçek artifact'larla koşusu (#38), change safety'nin yazıcıya bağlanması (#37; yazıcı yok).
+- `persist-history.sh` ilk canlı kullanımı: yarınki `clarity-daily` dispatch'i **veya** Pazartesi 2026-10-05 `measure.yml`. Bugüne dek canlı koşmadı.
+
+### Issue #13 durum tablosu (yalnız repodan doğrulananlar)
+
+| Alan | Durum | Kanıt / not |
+|---|---|---|
+| GSC haftalık measure | DONE | `reports/measure-latest.md` (2026-09-28): 7/7 GSC OK |
+| GA4 metrik çekimi | MISSING | Bağlantı smoke OK (7/7) ama `measure` GA4 metriği çekmiyor ("no live call attempted") |
+| Crawl (haftalık) | DONE (yalnız pilot) | `search-audit.yml`, pamistanbul |
+| Index coverage | IMPLEMENTED_NOT_LIVE_VALIDATED; yalnız örneklem | `index-probe` (örneklem) + alarms (#34) var, alarms bağlı değil; tam coverage yok |
+| Canonical ilişki tespiti | DONE | `canonical_relations` / `canonical_pattern`; backlog owner'a ait |
+| Clarity adapter + coverage | DONE | #18; 2026-10-02 coverage validation |
+| Clarity günlük döngü | BLOCKED_BY_CUTOVER | `clarity-daily` main'de, kapılı; FULL_TAKEOVER 2/2 + legacy kapanışı + bayrak gerekir |
+| Lighthouse/CWV | IMPLEMENTED_NOT_LIVE_VALIDATED | #36, bağlı değil |
+| Deployment verifier | IMPLEMENTED_NOT_LIVE_VALIDATED | #32, canlı probe yok |
+| Change safety | IMPLEMENTED_NOT_LIVE_VALIDATED | #37, yazıcı yok |
+| Scorecard / orkestrasyon | IMPLEMENTED_NOT_LIVE_VALIDATED | #38 |
+| Ajan sözleşmeleri (link/schema) | IMPLEMENTED_NOT_LIVE_VALIDATED | #35 |
+| İçerik pipeline | IMPLEMENTED_NOT_LIVE_VALIDATED | #33; eşikler `DEFAULT_ASSUMPTION` |
+| CLI bağlama | DONE (main) | #39; workflow bağlantısı yok |
+| Aylık döngü | MISSING | kod yok |
+| Dashboard | MISSING | kod yok |
+
+Issue #13'teki **"EDITORYAL" bir evidence etiketi değildir**: owner kararı gereği ayrı `opportunity_source` (`gsc_evidence` | `editorial`) alanı;
+evidence sözlüğü altı etiketle sabit.
+
+### YARIN (2026-10-03): FULL_TAKEOVER 1/2 — runbook (henüz KOŞULMADI)
+
+**Ön koşullar (hepsi sağlanmalı; biri yoksa dispatch etme):**
+
+1. UTC tarih 2026-10-03. 2. Legacy ~06:10Z koşusu bitmiş. 3. O güne ait clarity kaydı yok (`data/clarity-history/*.json`).
+4. Kota: legacy 3 + dispatch 3 = 6/10 (proje başına). 5. `main` yeşil.
+
+**Tek dispatch:** Actions, `Clarity daily (native, read-only)`, Run workflow, `main`'den, varsayılanlarla: tüm siteler (`site` boş), `force=false`, `commit_history=true`. Başka Clarity koşusu yok.
+
+**Kontrol (aynı koşuda):** 7/7 `measurement_success` **ve** 7/7 taze; 21 HTTP isteği; geçmiş commit'i `persist-history.sh` ile main'e düştü; run id not edilir.
+
+**Sonucu okuma:**
+
+```bash
+node --experimental-strip-types bin/clarity-takeover-status.ts config/sites.yaml --json
+```
+
+Beklenen: zincir `FULL_TAKEOVER_1_OF_2`, `qualifying_run_id` dolu (önce main'i çek). Bu run id'yi Actions arayüzünde elle doğrula (başarılı, `main`, o UTC gün, 7 satır `MEASURED`); araç bunu kodla yapmaz.
+
+**Hata yönetimi:** persist adımı kırmızıysa **körlemesine tekrar dispatch etme**. Same-day guard history'den okur; commit düşmediyse ikinci dispatch API'yi yeniden çağırır ve kota
+legacy 3 + 3 + 3 = 9/10 olur. Önce run logunu ve artifact'ı (`clarity-daily-<run_id>`) incele.
+
+**Runbook'un YAPMADIKLARI:** legacy'yi kapatmak, credential rotation, `SEARCH_GROWTH_CLARITY_DAILY_ENABLED` ayarı. Gün 2 = ayrı, sonraki bir UTC gün.
+
 ---
 
 ## 0. Yeni oturum: ilk beş dakika
@@ -108,6 +196,9 @@ içerik taslağı → PR hattı, dashboard.
 - Kuruluş yılını yeniden sorgulama — 2018, karar verildi (bölüm 3)
 - Diğer altı siteyi klonlama — yalnız o siteye dokunacaksan gerekir
 - Yeni bir denetim aracı yazma — `portfolio`, `llmstxt`, `audit` zaten var
+- Sprint modüllerini (#31–#38, #41) yeniden yazma/keşfetme — main'de; yukarıdaki 2 Ekim tablosu
+- Clarity coverage validation'ı yeniden koşma — 2026-10-02'de tamamlandı; yeni koşu yalnız FULL_TAKEOVER günleri için
+- Legacy'yi kapatma / rotation / bayrak / `force=true` — owner onayı olmadan yapılmaz (aşağıda NEVER AUTO)
 
 **YAP.** Tek komut, otuz saniye:
 
@@ -115,7 +206,7 @@ içerik taslağı → PR hattı, dashboard.
 cd search-growth-os && git pull && npm test
 ```
 
-459 test yeşil gelmeli (20 Eylül'de 65 idi). Sonra bölüm 2'deki tek adıma geç.
+Tüm testler yeşil gelmeli (sayı için CI çıktısına bak). Sonra bölüm 2'deki tek adıma geç.
 
 Bir şeyin hâlâ geçerli olup olmadığından şüphelenirsen ölçümü tekrarla —
 ama önce bu dosyadaki sayıya bak; çoğu soru orada cevaplı.
@@ -124,25 +215,19 @@ ama önce bu dosyadaki sayıya bak; çoğu soru orada cevaplı.
 
 ## 1. Tek cümleyle nerede kaldık
 
-Search Growth OS kuruldu ve çalışıyor; 7 sitenin içerik ritmi ve `llms.txt`
-durumu ölçüldü; bulunan iki gerçek hata için üç PR açıldı ve **üçü de yeşil,
-merge edilmeyi bekliyor**.
+Search Growth OS kuruldu ve çalışıyor; sprint modülleri, CLI bağlama ve persistence hardening main'de (2 Ekim tablosu).
+FULL_TAKEOVER doğrulaması koşulmadı; owner adımları (legacy, rotation, bayrak) bekliyor.
 
 ---
 
 ## 2. Sıradaki tek adım
 
-**Üç PR'ı merge et.** Hepsi `draft` durumda, o yüzden GitHub merge düğmesini
-kapatıyor. Her biri için: PR'ı aç → **Ready for review** → **Merge pull request**.
+**2026-10-03 (UTC): FULL_TAKEOVER 1/2 için tek `clarity-daily` dispatch'i** — adım adım runbook yukarıda ("YARIN"). Koştuktan sonra
+`bin/clarity-takeover-status.ts` ile oku. Sonraki ayrı UTC gün: 2/2. Ardından owner: legacy kapat, rotation, bayrak (`docs/OWNER-OFFLINE-RUNBOOK.md` §6).
 
-| PR | Ne yapıyor | CI |
-|---|---|---|
-| [pamistanbul-site#89](https://github.com/sefayamak/pamistanbul-site/pull/89) | Kuruluş yılı 2017 → 2018 (275 geçiş, 137 dosya) | yeşil |
-| [pamistanbul-site#90](https://github.com/sefayamak/pamistanbul-site/pull/90) | `llms.txt`'i indekse döndür (−%28) | yeşil |
-| [pamaistudio#40](https://github.com/sefayamak/pamaistudio/pull/40) | Kuruluş yılı + 2017'yi dayatan guard'ı ters çevir | yeşil |
+Bekleyen owner işi: PR #45 (measure JSON workflow adımı, HOLD) kararı; docs PR #46.
 
-#89 ve #90 aynı depoda ama farklı satırlara dokunuyor — sırası önemli değil,
-çakışmazlar. Merge sonrası Vercel canlıya alır.
+Eski (20 Eylül) adım — pamistanbul-site #89/#90, pamaistudio#40 merge'i — bu depodan **doğrulanamadı, UNKNOWN**; Sefa teyit etmeli.
 
 ---
 
@@ -168,6 +253,12 @@ Tam gerekçe ve kaynaklar: `policies/references/llms-txt.md`.
 2018 yanlış. `entity-truth.mjs`'teki `AI_UNIT_WRONG_YEAR` kuralı bu yüzden
 değiştirilmedi.
 
+**Owner kararları (2 Ekim sprinti; tekrar tartışılmaz):** persistence güvenliği = A (`docs/persistence-safety.md`); içerik politikası eşikleri `DEFAULT_ASSUMPTION` olarak korunur;
+measure JSON = rolling snapshot, workflow adımı HOLD (`docs/measure-report.md`). Sprint mesajındaki diğer iki karar kodunun konusu bu depoda tutarlı yazılı değil → **UNKNOWN**, owner teyidi gerekir.
+
+**NEVER AUTO (owner'ın açık, o anki onayı olmadan yapılmaz):** feature PR merge, legacy `site-health-monitor` kapatma, credential rotation,
+schedule cutover (`SEARCH_GROWTH_CLARITY_DAILY_ENABLED`), production mutation, `force=true` Clarity koşusu. Önceden verilmiş genel onay kapsamaz.
+
 ---
 
 ## 4. Sistem ne yapıyor, nasıl çalıştırılır
@@ -192,7 +283,7 @@ node --experimental-strip-types src/cli.ts portfolio     # içerik ritmi, 7 site
 node --experimental-strip-types src/cli.ts llmstxt       # llms.txt envanteri
 node --experimental-strip-types src/cli.ts audit --site pamistanbul --full
 node --experimental-strip-types src/cli.ts registry config/sites.yaml
-npm test                                                  # 459 test
+npm test                                                  # tüm testler geçmeli
 ```
 
 Bağımlılık yok, sadece Node 24.
