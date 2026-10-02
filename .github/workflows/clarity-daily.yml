@@ -85,11 +85,10 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/clarity-history/
-          git diff --cached --quiet && { echo "gecmis degismedi"; exit 0; }
-          git commit -m "clarity: gunluk ozet $(date -u +%Y-%m-%d) (otomatik)"
-          git pull --rebase origin main
-          git push
+          # Ortak guvenli kalicilik sozlesmesi (docs/persistence-safety.md): izin listeli add, degisiklik yoksa
+          # commit yok, fetch+rebase+sinirli yeniden deneme, force yok, catismada kirmizi.
+          bash scripts/persist-history.sh -m "clarity: gunluk ozet $(date -u +%Y-%m-%d) (otomatik)" \
+            data/clarity-history/
 
       - name: Artifact
         if: always()

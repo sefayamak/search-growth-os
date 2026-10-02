@@ -1,0 +1,56 @@
+dönemler  : son 28 gün 2026-09-03..2026-09-30
+            önceki 28 gün 2026-08-06..2026-09-02
+            geçen yıl aynı dönem 2025-09-04..2025-10-01
+
+Search Console : CONNECTED — live call succeeded in this run
+GA4            : NOT_CONNECTED — set SEARCH_GROWTH_GA4_CREDENTIALS_JSON (see docs/integrations/)
+
+pamistanbul
+  GSC property : sc-domain:pamistanbul.test
+  GA4 property : 100011
+  marka deseni : pam istanbul · pamistanbul · pamistanbul test
+  toplam       : 54 tık · 5000 gösterim · ort. 6.1 · 5 sorgu  (+350% YoY)
+  (not: marka/marka-dışı ayrımı 3370 gösterimlik düşük-hacimli kuyruğu kapsamıyor — GSC sorgu satırı üretmiyor)
+  marka        : 41 tık · 70 gösterim · ort. 2.9 · 1 sorgu  (+310% YoY)
+  marka dışı   : 13 tık · 1560 gösterim · ort. 9.1 · 4 sorgu  (+550% YoY)
+pamaistudio
+  GSC property : sc-domain:pamaistudio.test
+  GA4 property : 100011
+  marka deseni : pam ai studio · pamaistudio · pamaistudio test
+  toplam       : 0 tık · 0 gösterim · ort. 0.0 · 0 sorgu  (=)
+  marka        : 0 tık · 0 gösterim · ort. 0.0 · 0 sorgu  (=)
+  marka dışı   : 0 tık · 0 gösterim · ort. 0.0 · 0 sorgu  (=)
+spryhand
+  GSC property : sc-domain:spryhand.test
+  GA4 property : 100008
+  marka deseni : spryhand · spryhand test
+  veri         : HATA — HTTP 403 https://searchconsole.googleapis.com/webmasters/v3/sites/sc-domain%3Aspryhand.test/searchAnalytics/query — {"error":{"message":"User does not have sufficient permission"}}
+decideplan
+  GSC property : NOT_CONNECTED
+  GA4 property : 100010
+  marka deseni : decideplan · decideplan test
+  veri         : NOT_CONNECTED — registry'de google_search_console_property yok
+rightlisted
+  GSC property : sc-domain:rightlisted.test
+  GA4 property : NOT_CONNECTED
+  marka deseni : rightlisted · rightlisted test
+  toplam       : 3 tık · 90 gösterim · ort. 8.0 · 2 sorgu  (+200% YoY)
+  (not: marka/marka-dışı ayrımı 10 gösterimlik düşük-hacimli kuyruğu kapsamıyor — GSC sorgu satırı üretmiyor)
+  marka        : 2 tık · 20 gösterim · ort. 1.5 · 1 sorgu  (+100% YoY)
+  marka dışı   : 1 tık · 60 gösterim · ort. 14.0 · 1 sorgu  (yeni)
+untitledportraits
+  GSC property : sc-domain:untitledportraits.test
+  GA4 property : 100017
+  marka deseni : untitled portraits · untitledportraits · untitledportraits test
+  toplam       : 14 tık · 500 gösterim · ort. 5.0 · 3 sorgu  (+367% YoY)
+  (not: marka/marka-dışı ayrımı 40 gösterimlik düşük-hacimli kuyruğu kapsamıyor — GSC sorgu satırı üretmiyor)
+  marka        : 9 tık · 40 gösterim · ort. 1.2 · 1 sorgu  (yeni)
+  marka dışı   : 5 tık · 420 gösterim · ort. 9.4 · 2 sorgu  (+67% YoY)
+myhappymade
+  GSC property : sc-domain:myhappymade.test
+  GA4 property : 100011
+  marka deseni : myhappymade · myhappymade test
+  toplam       : 4 tık · 100 gösterim · ort. 11.0 · 1 sorgu  (yeni)
+  (not: marka/marka-dışı ayrımı 20 gösterimlik düşük-hacimli kuyruğu kapsamıyor — GSC sorgu satırı üretmiyor)
+  marka        : 0 tık · 0 gösterim · ort. 0.0 · 0 sorgu  (=)
+  marka dışı   : 4 tık · 80 gösterim · ort. 11.0 · 1 sorgu  (yeni)

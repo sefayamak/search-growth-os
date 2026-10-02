@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "sgos.index-history.v1",
+  "type": "object",
+  "required": ["schema", "site", "snapshots"],
+  "properties": {
+    "schema": { "const": "sgos.index-history.v1" },
+    "site": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,40}$" },
+    "snapshots": {
+      "type": "array",
+      "maxItems": 120,
+      "items": {
+        "type": "object",
+        "required": ["taken_at", "site", "sample_size", "universe_size", "stopped", "entries"],
+        "properties": {
+          "taken_at": { "type": "string", "format": "date-time" },
+          "site": { "type": "string" },
+          "sample_size": { "type": "integer", "minimum": 0 },
+          "universe_size": { "oneOf": [{ "type": "integer", "minimum": 0 }, { "const": "UNKNOWN" }] },
+          "stopped": { "type": ["string", "null"] },
+          "entries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["url", "state", "verdict", "in_sitemap", "fetch_ok", "canonical_self", "indexable"],
+              "properties": {
+                "url": { "type": "string" },
+                "state": { "enum": ["INSPECTED", "ERROR"] },
+                "verdict": { "enum": ["INDEXED", "NOT_INDEXED", "NEUTRAL", "UNKNOWN"] },
+                "in_sitemap": { "enum": [true, false, "UNKNOWN"] },
+                "fetch_ok": { "enum": [true, false, "UNKNOWN"] },
+                "canonical_self": { "enum": [true, false, "UNKNOWN"] },
+                "indexable": { "enum": [true, false, "UNKNOWN"] }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

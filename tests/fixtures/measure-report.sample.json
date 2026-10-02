@@ -1,0 +1,1177 @@
+{
+  "schema": "sgos.measure-report.v1",
+  "generated_at": "2026-10-02T06:40:00.000Z",
+  "provenance": {
+    "tool": "search-growth-os",
+    "command": "measure",
+    "tool_version": "0.1.0",
+    "commit": null,
+    "registry_path": "tests/fixtures/measure-report/sites.fixture.json",
+    "notes": [
+      "GSC: searchAnalytics.query (web, dataState final), sorgu boyutu + boyutsuz site toplamı; dönem karşılaştırması yıl-yıl.",
+      "GA4: measure komutu çağırmaz; metrikler null ve state UNKNOWN/NOT_CONNECTED.",
+      "Marka/marka-dışı: registry brand_entities/people_entities/domain desenleriyle kural-tabanlı sınıflama (INFERENCE/CANDIDATE)."
+    ]
+  },
+  "semantics": {
+    "unknown_is_never_zero": true,
+    "states": {
+      "MEASURED": "Canlı çağrı yanıt verdi; değerler ham ölçümdür (0 gerçek sıfırdır).",
+      "NOT_CONNECTED": "Kimlik ya da registry property'si yok; değerler null.",
+      "UNKNOWN": "Ölçüm denenmedi/yapılamadı; değerler null.",
+      "ERROR": "Çağrı hata verdi; değerler null, sebep state_reason'da."
+    }
+  },
+  "sites": {
+    "pamistanbul": {
+      "site_id": "pamistanbul",
+      "generated_at": "2026-10-02T06:40:00.000Z",
+      "gsc_state": "CONNECTED",
+      "opportunity_count": 3,
+      "period": {
+        "label": "son 28 gün",
+        "start": "2026-09-03",
+        "end": "2026-09-30"
+      },
+      "comparison_period": {
+        "label": "geçen yıl aynı dönem",
+        "kind": "year_over_year",
+        "start": "2025-09-04",
+        "end": "2025-10-01"
+      },
+      "gsc": {
+        "state": "MEASURED",
+        "state_reason": null,
+        "confidence": "CONFIRMED",
+        "evidence_label": "FACT",
+        "retrieved_at": "2026-10-02T06:40:00.000Z",
+        "source": {
+          "system": "google_search_console",
+          "property": "sc-domain:pamistanbul.test",
+          "api": "searchAnalytics.query",
+          "search_type": "web",
+          "data_state": "final"
+        },
+        "totals": {
+          "clicks": 54,
+          "impressions": 5000,
+          "ctr": 0.0108,
+          "position": 6.1
+        },
+        "totals_source": "api_total_row",
+        "comparison": {
+          "state": "MEASURED",
+          "state_reason": null,
+          "confidence": "CONFIRMED",
+          "evidence_label": "FACT",
+          "totals": {
+            "clicks": 12,
+            "impressions": 800,
+            "ctr": 0.015,
+            "position": 7
+          },
+          "delta": {
+            "clicks": {
+              "abs": 42,
+              "pct": 350
+            },
+            "impressions": {
+              "abs": 4200,
+              "pct": 525
+            },
+            "position_abs": -0.9000000000000004,
+            "evidence_label": "INFERENCE",
+            "confidence": "CANDIDATE"
+          }
+        },
+        "rows_complete": true,
+        "coverage": {
+          "query_rows_total": 5,
+          "query_rows_returned": 5,
+          "max_query_rows": 500,
+          "queries_truncated": false,
+          "anonymized_tail_impressions": 3370
+        },
+        "brand_split": {
+          "state": "MEASURED",
+          "evidence_label": "INFERENCE",
+          "confidence": "CANDIDATE",
+          "patterns": [
+            "pam istanbul",
+            "pamistanbul",
+            "pamistanbul test"
+          ],
+          "brand": {
+            "clicks": 41,
+            "impressions": 70,
+            "ctr": 0.5857142857142857,
+            "position": 2.9,
+            "queries": 1
+          },
+          "non_brand": {
+            "clicks": 13,
+            "impressions": 1560,
+            "ctr": 0.008333333333333333,
+            "position": 9.073717948717949,
+            "queries": 4
+          },
+          "comparison": {
+            "brand": {
+              "clicks": 10,
+              "impressions": 20,
+              "ctr": 0.5,
+              "position": 3,
+              "queries": 1
+            },
+            "non_brand": {
+              "clicks": 2,
+              "impressions": 100,
+              "ctr": 0.02,
+              "position": 8,
+              "queries": 1
+            }
+          }
+        },
+        "queries": [
+          {
+            "query": "video production istanbul",
+            "clicks": 10,
+            "impressions": 900,
+            "ctr": 0.011111111111111112,
+            "position": 7.2,
+            "brand_class": "non_brand"
+          },
+          {
+            "query": "ai film maker",
+            "clicks": 0,
+            "impressions": 400,
+            "ctr": 0,
+            "position": 12.5,
+            "brand_class": "non_brand"
+          },
+          {
+            "query": "fotograf cekimi fiyat",
+            "clicks": 3,
+            "impressions": 250,
+            "ctr": 0.012,
+            "position": 9.1,
+            "brand_class": "non_brand"
+          },
+          {
+            "query": "pam istanbul",
+            "clicks": 41,
+            "impressions": 70,
+            "ctr": 0.5857142857142857,
+            "position": 2.9,
+            "brand_class": "brand"
+          },
+          {
+            "query": "rare thing",
+            "clicks": 0,
+            "impressions": 10,
+            "ctr": 0,
+            "position": 40,
+            "brand_class": "non_brand"
+          }
+        ],
+        "pages": {
+          "state": "NOT_MEASURED",
+          "rows": null,
+          "reason": "measure komutu sayfa boyutunu çağırmıyor (yalnız detail)"
+        }
+      },
+      "ga4": {
+        "state": "NOT_CONNECTED",
+        "state_reason": "set SEARCH_GROWTH_GA4_CREDENTIALS_JSON (see docs/integrations/)",
+        "confidence": "UNKNOWN",
+        "evidence_label": "FACT",
+        "retrieved_at": null,
+        "source": {
+          "system": "google_analytics_4",
+          "property": "100011"
+        },
+        "metrics": {
+          "sessions": null,
+          "engaged_sessions": null,
+          "conversions": null,
+          "revenue": null
+        }
+      },
+      "search_opportunity_inputs": {
+        "state": "MEASURED",
+        "state_reason": null,
+        "evidence_label": "INFERENCE",
+        "confidence": "CANDIDATE",
+        "opportunity_count": 3,
+        "criteria": {
+          "excludes_brand": true,
+          "min_impressions": 20,
+          "min_position": 5,
+          "max_position": 30,
+          "top": 15,
+          "score": "impressions / position"
+        },
+        "candidates": [
+          {
+            "query": "video production istanbul",
+            "impressions": 900,
+            "clicks": 10,
+            "position": 7.2,
+            "score": 125
+          },
+          {
+            "query": "ai film maker",
+            "impressions": 400,
+            "clicks": 0,
+            "position": 12.5,
+            "score": 32
+          },
+          {
+            "query": "fotograf cekimi fiyat",
+            "impressions": 250,
+            "clicks": 3,
+            "position": 9.1,
+            "score": 27.472527472527474
+          }
+        ],
+        "query_page_rows": {
+          "state": "NOT_MEASURED",
+          "rows": null,
+          "reason": "sorgu×sayfa kırılımı mevcut ölçümde yok"
+        }
+      }
+    },
+    "pamaistudio": {
+      "site_id": "pamaistudio",
+      "generated_at": "2026-10-02T06:40:00.000Z",
+      "gsc_state": "CONNECTED",
+      "opportunity_count": 0,
+      "period": {
+        "label": "son 28 gün",
+        "start": "2026-09-03",
+        "end": "2026-09-30"
+      },
+      "comparison_period": {
+        "label": "geçen yıl aynı dönem",
+        "kind": "year_over_year",
+        "start": "2025-09-04",
+        "end": "2025-10-01"
+      },
+      "gsc": {
+        "state": "MEASURED",
+        "state_reason": null,
+        "confidence": "CONFIRMED",
+        "evidence_label": "FACT",
+        "retrieved_at": "2026-10-02T06:40:00.000Z",
+        "source": {
+          "system": "google_search_console",
+          "property": "sc-domain:pamaistudio.test",
+          "api": "searchAnalytics.query",
+          "search_type": "web",
+          "data_state": "final"
+        },
+        "totals": {
+          "clicks": 0,
+          "impressions": 0,
+          "ctr": 0,
+          "position": null
+        },
+        "totals_source": "api_empty_response",
+        "comparison": {
+          "state": "MEASURED",
+          "state_reason": null,
+          "confidence": "CONFIRMED",
+          "evidence_label": "FACT",
+          "totals": {
+            "clicks": 0,
+            "impressions": 0,
+            "ctr": 0,
+            "position": null
+          },
+          "delta": {
+            "clicks": {
+              "abs": 0,
+              "pct": null
+            },
+            "impressions": {
+              "abs": 0,
+              "pct": null
+            },
+            "position_abs": null,
+            "evidence_label": "INFERENCE",
+            "confidence": "CANDIDATE"
+          }
+        },
+        "rows_complete": true,
+        "coverage": {
+          "query_rows_total": 0,
+          "query_rows_returned": 0,
+          "max_query_rows": 500,
+          "queries_truncated": false,
+          "anonymized_tail_impressions": 0
+        },
+        "brand_split": {
+          "state": "MEASURED",
+          "evidence_label": "INFERENCE",
+          "confidence": "CANDIDATE",
+          "patterns": [
+            "pam ai studio",
+            "pamaistudio",
+            "pamaistudio test"
+          ],
+          "brand": {
+            "clicks": 0,
+            "impressions": 0,
+            "ctr": 0,
+            "position": null,
+            "queries": 0
+          },
+          "non_brand": {
+            "clicks": 0,
+            "impressions": 0,
+            "ctr": 0,
+            "position": null,
+            "queries": 0
+          },
+          "comparison": {
+            "brand": {
+              "clicks": 0,
+              "impressions": 0,
+              "ctr": 0,
+              "position": null,
+              "queries": 0
+            },
+            "non_brand": {
+              "clicks": 0,
+              "impressions": 0,
+              "ctr": 0,
+              "position": null,
+              "queries": 0
+            }
+          }
+        },
+        "queries": [],
+        "pages": {
+          "state": "NOT_MEASURED",
+          "rows": null,
+          "reason": "measure komutu sayfa boyutunu çağırmıyor (yalnız detail)"
+        }
+      },
+      "ga4": {
+        "state": "NOT_CONNECTED",
+        "state_reason": "set SEARCH_GROWTH_GA4_CREDENTIALS_JSON (see docs/integrations/)",
+        "confidence": "UNKNOWN",
+        "evidence_label": "FACT",
+        "retrieved_at": null,
+        "source": {
+          "system": "google_analytics_4",
+          "property": "100011"
+        },
+        "metrics": {
+          "sessions": null,
+          "engaged_sessions": null,
+          "conversions": null,
+          "revenue": null
+        }
+      },
+      "search_opportunity_inputs": {
+        "state": "MEASURED",
+        "state_reason": null,
+        "evidence_label": "INFERENCE",
+        "confidence": "CANDIDATE",
+        "opportunity_count": 0,
+        "criteria": {
+          "excludes_brand": true,
+          "min_impressions": 20,
+          "min_position": 5,
+          "max_position": 30,
+          "top": 15,
+          "score": "impressions / position"
+        },
+        "candidates": [],
+        "query_page_rows": {
+          "state": "NOT_MEASURED",
+          "rows": null,
+          "reason": "sorgu×sayfa kırılımı mevcut ölçümde yok"
+        }
+      }
+    },
+    "spryhand": {
+      "site_id": "spryhand",
+      "generated_at": "2026-10-02T06:40:00.000Z",
+      "gsc_state": "ERROR",
+      "opportunity_count": null,
+      "period": {
+        "label": "son 28 gün",
+        "start": "2026-09-03",
+        "end": "2026-09-30"
+      },
+      "comparison_period": {
+        "label": "geçen yıl aynı dönem",
+        "kind": "year_over_year",
+        "start": "2025-09-04",
+        "end": "2025-10-01"
+      },
+      "gsc": {
+        "state": "ERROR",
+        "state_reason": "HTTP 403 https://searchconsole.googleapis.com/webmasters/v3/sites/sc-domain%3Aspryhand.test/searchAnalytics/query — {\"error\":{\"message\":\"User does not have sufficient permission\"}}",
+        "confidence": "UNKNOWN",
+        "evidence_label": "FACT",
+        "retrieved_at": null,
+        "source": {
+          "system": "google_search_console",
+          "property": "sc-domain:spryhand.test",
+          "api": "searchAnalytics.query",
+          "search_type": "web",
+          "data_state": "final"
+        },
+        "totals": {
+          "clicks": null,
+          "impressions": null,
+          "ctr": null,
+          "position": null
+        },
+        "totals_source": null,
+        "comparison": {
+          "state": "ERROR",
+          "state_reason": "HTTP 403 https://searchconsole.googleapis.com/webmasters/v3/sites/sc-domain%3Aspryhand.test/searchAnalytics/query — {\"error\":{\"message\":\"User does not have sufficient permission\"}}",
+          "confidence": "UNKNOWN",
+          "evidence_label": "INFERENCE",
+          "totals": {
+            "clicks": null,
+            "impressions": null,
+            "ctr": null,
+            "position": null
+          },
+          "delta": {
+            "clicks": {
+              "abs": null,
+              "pct": null
+            },
+            "impressions": {
+              "abs": null,
+              "pct": null
+            },
+            "position_abs": null,
+            "evidence_label": "INFERENCE",
+            "confidence": "UNKNOWN"
+          }
+        },
+        "rows_complete": null,
+        "coverage": {
+          "query_rows_total": null,
+          "query_rows_returned": null,
+          "max_query_rows": 500,
+          "queries_truncated": null,
+          "anonymized_tail_impressions": null
+        },
+        "brand_split": null,
+        "queries": [],
+        "pages": {
+          "state": "NOT_MEASURED",
+          "rows": null,
+          "reason": "measure komutu sayfa boyutunu çağırmıyor (yalnız detail)"
+        }
+      },
+      "ga4": {
+        "state": "NOT_CONNECTED",
+        "state_reason": "set SEARCH_GROWTH_GA4_CREDENTIALS_JSON (see docs/integrations/)",
+        "confidence": "UNKNOWN",
+        "evidence_label": "FACT",
+        "retrieved_at": null,
+        "source": {
+          "system": "google_analytics_4",
+          "property": "100008"
+        },
+        "metrics": {
+          "sessions": null,
+          "engaged_sessions": null,
+          "conversions": null,
+          "revenue": null
+        }
+      },
+      "search_opportunity_inputs": {
+        "state": "ERROR",
+        "state_reason": "HTTP 403 https://searchconsole.googleapis.com/webmasters/v3/sites/sc-domain%3Aspryhand.test/searchAnalytics/query — {\"error\":{\"message\":\"User does not have sufficient permission\"}}",
+        "evidence_label": "INFERENCE",
+        "confidence": "UNKNOWN",
+        "opportunity_count": null,
+        "criteria": {
+          "excludes_brand": true,
+          "min_impressions": 20,
+          "min_position": 5,
+          "max_position": 30,
+          "top": 15,
+          "score": "impressions / position"
+        },
+        "candidates": [],
+        "query_page_rows": {
+          "state": "NOT_MEASURED",
+          "rows": null,
+          "reason": "sorgu×sayfa kırılımı mevcut ölçümde yok"
+        }
+      }
+    },
+    "decideplan": {
+      "site_id": "decideplan",
+      "generated_at": "2026-10-02T06:40:00.000Z",
+      "gsc_state": "NOT_CONNECTED",
+      "opportunity_count": null,
+      "period": {
+        "label": "son 28 gün",
+        "start": "2026-09-03",
+        "end": "2026-09-30"
+      },
+      "comparison_period": {
+        "label": "geçen yıl aynı dönem",
+        "kind": "year_over_year",
+        "start": "2025-09-04",
+        "end": "2025-10-01"
+      },
+      "gsc": {
+        "state": "NOT_CONNECTED",
+        "state_reason": "registry'de google_search_console_property yok",
+        "confidence": "UNKNOWN",
+        "evidence_label": "FACT",
+        "retrieved_at": null,
+        "source": {
+          "system": "google_search_console",
+          "property": null,
+          "api": "searchAnalytics.query",
+          "search_type": "web",
+          "data_state": "final"
+        },
+        "totals": {
+          "clicks": null,
+          "impressions": null,
+          "ctr": null,
+          "position": null
+        },
+        "totals_source": null,
+        "comparison": {
+          "state": "NOT_CONNECTED",
+          "state_reason": "registry'de google_search_console_property yok",
+          "confidence": "UNKNOWN",
+          "evidence_label": "INFERENCE",
+          "totals": {
+            "clicks": null,
+            "impressions": null,
+            "ctr": null,
+            "position": null
+          },
+          "delta": {
+            "clicks": {
+              "abs": null,
+              "pct": null
+            },
+            "impressions": {
+              "abs": null,
+              "pct": null
+            },
+            "position_abs": null,
+            "evidence_label": "INFERENCE",
+            "confidence": "UNKNOWN"
+          }
+        },
+        "rows_complete": null,
+        "coverage": {
+          "query_rows_total": null,
+          "query_rows_returned": null,
+          "max_query_rows": 500,
+          "queries_truncated": null,
+          "anonymized_tail_impressions": null
+        },
+        "brand_split": null,
+        "queries": [],
+        "pages": {
+          "state": "NOT_MEASURED",
+          "rows": null,
+          "reason": "measure komutu sayfa boyutunu çağırmıyor (yalnız detail)"
+        }
+      },
+      "ga4": {
+        "state": "NOT_CONNECTED",
+        "state_reason": "set SEARCH_GROWTH_GA4_CREDENTIALS_JSON (see docs/integrations/)",
+        "confidence": "UNKNOWN",
+        "evidence_label": "FACT",
+        "retrieved_at": null,
+        "source": {
+          "system": "google_analytics_4",
+          "property": "100010"
+        },
+        "metrics": {
+          "sessions": null,
+          "engaged_sessions": null,
+          "conversions": null,
+          "revenue": null
+        }
+      },
+      "search_opportunity_inputs": {
+        "state": "NOT_CONNECTED",
+        "state_reason": "registry'de google_search_console_property yok",
+        "evidence_label": "INFERENCE",
+        "confidence": "UNKNOWN",
+        "opportunity_count": null,
+        "criteria": {
+          "excludes_brand": true,
+          "min_impressions": 20,
+          "min_position": 5,
+          "max_position": 30,
+          "top": 15,
+          "score": "impressions / position"
+        },
+        "candidates": [],
+        "query_page_rows": {
+          "state": "NOT_MEASURED",
+          "rows": null,
+          "reason": "sorgu×sayfa kırılımı mevcut ölçümde yok"
+        }
+      }
+    },
+    "rightlisted": {
+      "site_id": "rightlisted",
+      "generated_at": "2026-10-02T06:40:00.000Z",
+      "gsc_state": "CONNECTED",
+      "opportunity_count": 1,
+      "period": {
+        "label": "son 28 gün",
+        "start": "2026-09-03",
+        "end": "2026-09-30"
+      },
+      "comparison_period": {
+        "label": "geçen yıl aynı dönem",
+        "kind": "year_over_year",
+        "start": "2025-09-04",
+        "end": "2025-10-01"
+      },
+      "gsc": {
+        "state": "MEASURED",
+        "state_reason": null,
+        "confidence": "CONFIRMED",
+        "evidence_label": "FACT",
+        "retrieved_at": "2026-10-02T06:40:00.000Z",
+        "source": {
+          "system": "google_search_console",
+          "property": "sc-domain:rightlisted.test",
+          "api": "searchAnalytics.query",
+          "search_type": "web",
+          "data_state": "final"
+        },
+        "totals": {
+          "clicks": 3,
+          "impressions": 90,
+          "ctr": 0.03333333333333333,
+          "position": 8
+        },
+        "totals_source": "api_total_row",
+        "comparison": {
+          "state": "MEASURED",
+          "state_reason": null,
+          "confidence": "CONFIRMED",
+          "evidence_label": "FACT",
+          "totals": {
+            "clicks": 1,
+            "impressions": 12,
+            "ctr": 0.08333333333333333,
+            "position": 2
+          },
+          "delta": {
+            "clicks": {
+              "abs": 2,
+              "pct": 200
+            },
+            "impressions": {
+              "abs": 78,
+              "pct": 650
+            },
+            "position_abs": 6,
+            "evidence_label": "INFERENCE",
+            "confidence": "CANDIDATE"
+          }
+        },
+        "rows_complete": true,
+        "coverage": {
+          "query_rows_total": 2,
+          "query_rows_returned": 2,
+          "max_query_rows": 500,
+          "queries_truncated": false,
+          "anonymized_tail_impressions": 10
+        },
+        "brand_split": {
+          "state": "MEASURED",
+          "evidence_label": "INFERENCE",
+          "confidence": "CANDIDATE",
+          "patterns": [
+            "rightlisted",
+            "rightlisted test"
+          ],
+          "brand": {
+            "clicks": 2,
+            "impressions": 20,
+            "ctr": 0.1,
+            "position": 1.5,
+            "queries": 1
+          },
+          "non_brand": {
+            "clicks": 1,
+            "impressions": 60,
+            "ctr": 0.016666666666666666,
+            "position": 14,
+            "queries": 1
+          },
+          "comparison": {
+            "brand": {
+              "clicks": 1,
+              "impressions": 10,
+              "ctr": 0.1,
+              "position": 2,
+              "queries": 1
+            },
+            "non_brand": {
+              "clicks": 0,
+              "impressions": 0,
+              "ctr": 0,
+              "position": null,
+              "queries": 0
+            }
+          }
+        },
+        "queries": [
+          {
+            "query": "directory listing",
+            "clicks": 1,
+            "impressions": 60,
+            "ctr": 0.016666666666666666,
+            "position": 14,
+            "brand_class": "non_brand"
+          },
+          {
+            "query": "rightlisted",
+            "clicks": 2,
+            "impressions": 20,
+            "ctr": 0.1,
+            "position": 1.5,
+            "brand_class": "brand"
+          }
+        ],
+        "pages": {
+          "state": "NOT_MEASURED",
+          "rows": null,
+          "reason": "measure komutu sayfa boyutunu çağırmıyor (yalnız detail)"
+        }
+      },
+      "ga4": {
+        "state": "NOT_CONNECTED",
+        "state_reason": "registry'de ga4_property yok",
+        "confidence": "UNKNOWN",
+        "evidence_label": "FACT",
+        "retrieved_at": null,
+        "source": {
+          "system": "google_analytics_4",
+          "property": null
+        },
+        "metrics": {
+          "sessions": null,
+          "engaged_sessions": null,
+          "conversions": null,
+          "revenue": null
+        }
+      },
+      "search_opportunity_inputs": {
+        "state": "MEASURED",
+        "state_reason": null,
+        "evidence_label": "INFERENCE",
+        "confidence": "CANDIDATE",
+        "opportunity_count": 1,
+        "criteria": {
+          "excludes_brand": true,
+          "min_impressions": 20,
+          "min_position": 5,
+          "max_position": 30,
+          "top": 15,
+          "score": "impressions / position"
+        },
+        "candidates": [
+          {
+            "query": "directory listing",
+            "impressions": 60,
+            "clicks": 1,
+            "position": 14,
+            "score": 4.285714285714286
+          }
+        ],
+        "query_page_rows": {
+          "state": "NOT_MEASURED",
+          "rows": null,
+          "reason": "sorgu×sayfa kırılımı mevcut ölçümde yok"
+        }
+      }
+    },
+    "untitledportraits": {
+      "site_id": "untitledportraits",
+      "generated_at": "2026-10-02T06:40:00.000Z",
+      "gsc_state": "CONNECTED",
+      "opportunity_count": 2,
+      "period": {
+        "label": "son 28 gün",
+        "start": "2026-09-03",
+        "end": "2026-09-30"
+      },
+      "comparison_period": {
+        "label": "geçen yıl aynı dönem",
+        "kind": "year_over_year",
+        "start": "2025-09-04",
+        "end": "2025-10-01"
+      },
+      "gsc": {
+        "state": "MEASURED",
+        "state_reason": null,
+        "confidence": "CONFIRMED",
+        "evidence_label": "FACT",
+        "retrieved_at": "2026-10-02T06:40:00.000Z",
+        "source": {
+          "system": "google_search_console",
+          "property": "sc-domain:untitledportraits.test",
+          "api": "searchAnalytics.query",
+          "search_type": "web",
+          "data_state": "final"
+        },
+        "totals": {
+          "clicks": 14,
+          "impressions": 500,
+          "ctr": 0.028,
+          "position": 5
+        },
+        "totals_source": "api_total_row",
+        "comparison": {
+          "state": "MEASURED",
+          "state_reason": null,
+          "confidence": "CONFIRMED",
+          "evidence_label": "FACT",
+          "totals": {
+            "clicks": 3,
+            "impressions": 210,
+            "ctr": 0.014285714285714285,
+            "position": 7
+          },
+          "delta": {
+            "clicks": {
+              "abs": 11,
+              "pct": 366.66666666666663
+            },
+            "impressions": {
+              "abs": 290,
+              "pct": 138.0952380952381
+            },
+            "position_abs": -2,
+            "evidence_label": "INFERENCE",
+            "confidence": "CANDIDATE"
+          }
+        },
+        "rows_complete": true,
+        "coverage": {
+          "query_rows_total": 3,
+          "query_rows_returned": 3,
+          "max_query_rows": 500,
+          "queries_truncated": false,
+          "anonymized_tail_impressions": 40
+        },
+        "brand_split": {
+          "state": "MEASURED",
+          "evidence_label": "INFERENCE",
+          "confidence": "CANDIDATE",
+          "patterns": [
+            "untitled portraits",
+            "untitledportraits",
+            "untitledportraits test"
+          ],
+          "brand": {
+            "clicks": 9,
+            "impressions": 40,
+            "ctr": 0.225,
+            "position": 1.2,
+            "queries": 1
+          },
+          "non_brand": {
+            "clicks": 5,
+            "impressions": 420,
+            "ctr": 0.011904761904761904,
+            "position": 9.428571428571429,
+            "queries": 2
+          },
+          "comparison": {
+            "brand": {
+              "clicks": 0,
+              "impressions": 0,
+              "ctr": 0,
+              "position": null,
+              "queries": 0
+            },
+            "non_brand": {
+              "clicks": 3,
+              "impressions": 200,
+              "ctr": 0.015,
+              "position": 7,
+              "queries": 1
+            }
+          }
+        },
+        "queries": [
+          {
+            "query": "portrait studio",
+            "clicks": 5,
+            "impressions": 300,
+            "ctr": 0.016666666666666666,
+            "position": 6,
+            "brand_class": "non_brand"
+          },
+          {
+            "query": "headshot near me",
+            "clicks": 0,
+            "impressions": 120,
+            "ctr": 0,
+            "position": 18,
+            "brand_class": "non_brand"
+          },
+          {
+            "query": "untitled portraits",
+            "clicks": 9,
+            "impressions": 40,
+            "ctr": 0.225,
+            "position": 1.2,
+            "brand_class": "brand"
+          }
+        ],
+        "pages": {
+          "state": "NOT_MEASURED",
+          "rows": null,
+          "reason": "measure komutu sayfa boyutunu çağırmıyor (yalnız detail)"
+        }
+      },
+      "ga4": {
+        "state": "NOT_CONNECTED",
+        "state_reason": "set SEARCH_GROWTH_GA4_CREDENTIALS_JSON (see docs/integrations/)",
+        "confidence": "UNKNOWN",
+        "evidence_label": "FACT",
+        "retrieved_at": null,
+        "source": {
+          "system": "google_analytics_4",
+          "property": "100017"
+        },
+        "metrics": {
+          "sessions": null,
+          "engaged_sessions": null,
+          "conversions": null,
+          "revenue": null
+        }
+      },
+      "search_opportunity_inputs": {
+        "state": "MEASURED",
+        "state_reason": null,
+        "evidence_label": "INFERENCE",
+        "confidence": "CANDIDATE",
+        "opportunity_count": 2,
+        "criteria": {
+          "excludes_brand": true,
+          "min_impressions": 20,
+          "min_position": 5,
+          "max_position": 30,
+          "top": 15,
+          "score": "impressions / position"
+        },
+        "candidates": [
+          {
+            "query": "portrait studio",
+            "impressions": 300,
+            "clicks": 5,
+            "position": 6,
+            "score": 50
+          },
+          {
+            "query": "headshot near me",
+            "impressions": 120,
+            "clicks": 0,
+            "position": 18,
+            "score": 6.666666666666667
+          }
+        ],
+        "query_page_rows": {
+          "state": "NOT_MEASURED",
+          "rows": null,
+          "reason": "sorgu×sayfa kırılımı mevcut ölçümde yok"
+        }
+      }
+    },
+    "myhappymade": {
+      "site_id": "myhappymade",
+      "generated_at": "2026-10-02T06:40:00.000Z",
+      "gsc_state": "CONNECTED",
+      "opportunity_count": 1,
+      "period": {
+        "label": "son 28 gün",
+        "start": "2026-09-03",
+        "end": "2026-09-30"
+      },
+      "comparison_period": {
+        "label": "geçen yıl aynı dönem",
+        "kind": "year_over_year",
+        "start": "2025-09-04",
+        "end": "2025-10-01"
+      },
+      "gsc": {
+        "state": "MEASURED",
+        "state_reason": null,
+        "confidence": "CONFIRMED",
+        "evidence_label": "FACT",
+        "retrieved_at": "2026-10-02T06:40:00.000Z",
+        "source": {
+          "system": "google_search_console",
+          "property": "sc-domain:myhappymade.test",
+          "api": "searchAnalytics.query",
+          "search_type": "web",
+          "data_state": "final"
+        },
+        "totals": {
+          "clicks": 4,
+          "impressions": 100,
+          "ctr": 0.04,
+          "position": 11
+        },
+        "totals_source": "api_total_row",
+        "comparison": {
+          "state": "MEASURED",
+          "state_reason": null,
+          "confidence": "CONFIRMED",
+          "evidence_label": "FACT",
+          "totals": {
+            "clicks": 0,
+            "impressions": 0,
+            "ctr": 0,
+            "position": null
+          },
+          "delta": {
+            "clicks": {
+              "abs": 4,
+              "pct": null
+            },
+            "impressions": {
+              "abs": 100,
+              "pct": null
+            },
+            "position_abs": null,
+            "evidence_label": "INFERENCE",
+            "confidence": "CANDIDATE"
+          }
+        },
+        "rows_complete": true,
+        "coverage": {
+          "query_rows_total": 1,
+          "query_rows_returned": 1,
+          "max_query_rows": 500,
+          "queries_truncated": false,
+          "anonymized_tail_impressions": 20
+        },
+        "brand_split": {
+          "state": "MEASURED",
+          "evidence_label": "INFERENCE",
+          "confidence": "CANDIDATE",
+          "patterns": [
+            "myhappymade",
+            "myhappymade test"
+          ],
+          "brand": {
+            "clicks": 0,
+            "impressions": 0,
+            "ctr": 0,
+            "position": null,
+            "queries": 0
+          },
+          "non_brand": {
+            "clicks": 4,
+            "impressions": 80,
+            "ctr": 0.05,
+            "position": 11,
+            "queries": 1
+          },
+          "comparison": {
+            "brand": {
+              "clicks": 0,
+              "impressions": 0,
+              "ctr": 0,
+              "position": null,
+              "queries": 0
+            },
+            "non_brand": {
+              "clicks": 0,
+              "impressions": 0,
+              "ctr": 0,
+              "position": null,
+              "queries": 0
+            }
+          }
+        },
+        "queries": [
+          {
+            "query": "handmade gifts",
+            "clicks": 4,
+            "impressions": 80,
+            "ctr": 0.05,
+            "position": 11,
+            "brand_class": "non_brand"
+          }
+        ],
+        "pages": {
+          "state": "NOT_MEASURED",
+          "rows": null,
+          "reason": "measure komutu sayfa boyutunu çağırmıyor (yalnız detail)"
+        }
+      },
+      "ga4": {
+        "state": "NOT_CONNECTED",
+        "state_reason": "set SEARCH_GROWTH_GA4_CREDENTIALS_JSON (see docs/integrations/)",
+        "confidence": "UNKNOWN",
+        "evidence_label": "FACT",
+        "retrieved_at": null,
+        "source": {
+          "system": "google_analytics_4",
+          "property": "100011"
+        },
+        "metrics": {
+          "sessions": null,
+          "engaged_sessions": null,
+          "conversions": null,
+          "revenue": null
+        }
+      },
+      "search_opportunity_inputs": {
+        "state": "MEASURED",
+        "state_reason": null,
+        "evidence_label": "INFERENCE",
+        "confidence": "CANDIDATE",
+        "opportunity_count": 1,
+        "criteria": {
+          "excludes_brand": true,
+          "min_impressions": 20,
+          "min_position": 5,
+          "max_position": 30,
+          "top": 15,
+          "score": "impressions / position"
+        },
+        "candidates": [
+          {
+            "query": "handmade gifts",
+            "impressions": 80,
+            "clicks": 4,
+            "position": 11,
+            "score": 7.2727272727272725
+          }
+        ],
+        "query_page_rows": {
+          "state": "NOT_MEASURED",
+          "rows": null,
+          "reason": "sorgu×sayfa kırılımı mevcut ölçümde yok"
+        }
+      }
+    }
+  }
+}

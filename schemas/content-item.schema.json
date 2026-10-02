@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "search-growth-os/content-item",
+  "title": "Icerik hatti kaydi (sgos.content-item.v1). Taslak govdesi tasimaz; yalniz dosya referansi.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "site", "id", "opportunity_source", "gsc_rows", "classification", "stage", "evidence_label", "confidence", "approval", "risk"],
+  "properties": {
+    "schema": { "const": "sgos.content-item.v1" },
+    "site": { "type": "string" },
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,95}$" },
+    "opportunity_source": { "enum": ["gsc_evidence", "editorial"], "description": "Kaynak ekseni; kanit etiketi DEGIL. editorial kayit gsc_rows tasiyamaz." },
+    "gsc_rows": { "type": "array", "items": { "$ref": "#/$defs/row" } },
+    "classification": { "enum": ["new_page", "refresh", "consolidate", "skip"] },
+    "stage": { "enum": ["GSC_EVIDENCE", "OPPORTUNITY", "CLASSIFICATION", "DRAFT", "REVIEW", "PR", "HUMAN_APPROVAL", "MERGE", "DEPLOYMENT_VERIFICATION", "LATER_MEASUREMENT"] },
+    "evidence_label": { "enum": ["FACT", "INFERENCE", "HYPOTHESIS", "RECOMMENDATION", "IMPLEMENTED_CHANGE", "VERIFIED_RESULT"] },
+    "confidence": { "enum": ["CONFIRMED", "CANDIDATE", "FALSE_POSITIVE", "UNKNOWN"] },
+    "draft_ref": { "type": "string", "pattern": "^sites/[a-z0-9_-]+/drafts/[^<>\\n]+$", "maxLength": 300 },
+    "approval": {
+      "type": "object", "additionalProperties": false, "required": ["state", "approver"],
+      "properties": {
+        "state": { "enum": ["pending", "approved", "rejected"] },
+        "approver": { "type": ["string", "null"], "description": "Insan adi; asla varsayilan/bot degil. approved degilken null." },
+        "approved_at": { "type": "string" }
+      }
+    },
+    "risk": { "enum": ["low", "medium", "high"] },
+    "pr": {
+      "type": "object", "additionalProperties": false, "required": ["url", "draft"],
+      "properties": { "url": { "type": "string" }, "draft": { "const": true }, "merged_at": { "type": "string" }, "deployed_at": { "type": "string" } }
+    },
+    "expected_change": {
+      "type": "object", "additionalProperties": false, "required": ["text", "test"],
+      "properties": { "text": { "type": "string", "minLength": 1 }, "test": { "type": "string", "minLength": 1, "description": "Hipotezi dogrulayacak/curutecek test." } }
+    }
+  },
+  "$defs": {
+    "metric": { "oneOf": [{ "type": "number", "minimum": 0 }, { "const": "UNKNOWN" }] },
+    "row": {
+      "type": "object", "additionalProperties": false,
+      "required": ["site", "impressions", "clicks", "position", "source", "date_start", "date_end"],
+      "properties": {
+        "site": { "type": "string" }, "query": { "type": "string" }, "page": { "type": "string" },
+        "impressions": { "$ref": "#/$defs/metric" }, "clicks": { "$ref": "#/$defs/metric" }, "position": { "$ref": "#/$defs/metric" },
+        "source": { "const": "gsc" },
+        "date_start": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" }, "date_end": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" }
+      }
+    }
+  }
+}

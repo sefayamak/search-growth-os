@@ -1,0 +1,237 @@
+{
+  "schema": "sgos.measure-report.v1",
+  "generated_at": "2026-10-02T09:00:00.000Z",
+  "provenance": {
+    "tool": "search-growth-os",
+    "command": "measure",
+    "tool_version": "0.1.0",
+    "commit": null,
+    "registry_path": null,
+    "notes": [
+      "GSC: searchAnalytics.query (web, dataState final), sorgu boyutu + boyutsuz site toplamı; dönem karşılaştırması yıl-yıl.",
+      "GA4: measure komutu çağırmaz; metrikler null ve state UNKNOWN/NOT_CONNECTED.",
+      "Marka/marka-dışı: registry brand_entities/people_entities/domain desenleriyle kural-tabanlı sınıflama (INFERENCE/CANDIDATE)."
+    ]
+  },
+  "semantics": {
+    "unknown_is_never_zero": true,
+    "states": {
+      "MEASURED": "Canlı çağrı yanıt verdi; değerler ham ölçümdür (0 gerçek sıfırdır).",
+      "NOT_CONNECTED": "Kimlik ya da registry property'si yok; değerler null.",
+      "UNKNOWN": "Ölçüm denenmedi/yapılamadı; değerler null.",
+      "ERROR": "Çağrı hata verdi; değerler null, sebep state_reason'da."
+    }
+  },
+  "sites": {
+    "pamistanbul": {
+      "site_id": "pamistanbul",
+      "generated_at": "2026-10-02T09:00:00.000Z",
+      "gsc_state": "CONNECTED",
+      "opportunity_count": 2,
+      "period": {
+        "label": "son 28 gun",
+        "start": "2026-09-04",
+        "end": "2026-10-01"
+      },
+      "comparison_period": {
+        "label": "gecen yil",
+        "kind": "year_over_year",
+        "start": "2025-09-05",
+        "end": "2025-10-02"
+      },
+      "gsc": {
+        "state": "MEASURED",
+        "state_reason": null,
+        "confidence": "CONFIRMED",
+        "evidence_label": "FACT",
+        "retrieved_at": "2026-10-02T09:00:00.000Z",
+        "source": {
+          "system": "google_search_console",
+          "property": "sc-domain:pamistanbul.com",
+          "api": "searchAnalytics.query",
+          "search_type": "web",
+          "data_state": "final"
+        },
+        "totals": {
+          "clicks": 74,
+          "impressions": 1335,
+          "ctr": 0.05543071161048689,
+          "position": 6
+        },
+        "totals_source": "api_total_row",
+        "comparison": {
+          "state": "MEASURED",
+          "state_reason": null,
+          "confidence": "CONFIRMED",
+          "evidence_label": "FACT",
+          "totals": {
+            "clicks": 31,
+            "impressions": 400,
+            "ctr": 0.0775,
+            "position": 6
+          },
+          "delta": {
+            "clicks": {
+              "abs": 43,
+              "pct": 138.70967741935485
+            },
+            "impressions": {
+              "abs": 935,
+              "pct": 233.75
+            },
+            "position_abs": 0,
+            "evidence_label": "INFERENCE",
+            "confidence": "CANDIDATE"
+          }
+        },
+        "rows_complete": true,
+        "coverage": {
+          "query_rows_total": 5,
+          "query_rows_returned": 5,
+          "max_query_rows": 500,
+          "queries_truncated": false,
+          "anonymized_tail_impressions": 0
+        },
+        "brand_split": {
+          "state": "MEASURED",
+          "evidence_label": "INFERENCE",
+          "confidence": "CANDIDATE",
+          "patterns": [
+            "pamistanbul",
+            "pam istanbul"
+          ],
+          "brand": {
+            "clicks": 40,
+            "impressions": 400,
+            "ctr": 0.1,
+            "position": 1.2,
+            "queries": 1
+          },
+          "non_brand": {
+            "clicks": 34,
+            "impressions": 935,
+            "ctr": 0.03636363636363636,
+            "position": 6.2727272727272725,
+            "queries": 4
+          },
+          "comparison": {
+            "brand": {
+              "clicks": 30,
+              "impressions": 300,
+              "ctr": 0.1,
+              "position": 1.3,
+              "queries": 1
+            },
+            "non_brand": {
+              "clicks": 1,
+              "impressions": 100,
+              "ctr": 0.01,
+              "position": 12,
+              "queries": 1
+            }
+          }
+        },
+        "queries": [
+          {
+            "query": "havlu modelleri",
+            "clicks": 30,
+            "impressions": 500,
+            "ctr": 0.06,
+            "position": 3,
+            "brand_class": "non_brand"
+          },
+          {
+            "query": "pamistanbul",
+            "clicks": 40,
+            "impressions": 400,
+            "ctr": 0.1,
+            "position": 1.2,
+            "brand_class": "brand"
+          },
+          {
+            "query": "organik pamuk havlu",
+            "clicks": 3,
+            "impressions": 300,
+            "ctr": 0.01,
+            "position": 8.5,
+            "brand_class": "non_brand"
+          },
+          {
+            "query": "pamuklu bornoz fiyat",
+            "clicks": 1,
+            "impressions": 120,
+            "ctr": 0.008333333333333333,
+            "position": 14,
+            "brand_class": "non_brand"
+          },
+          {
+            "query": "pamuk pestemal",
+            "clicks": 0,
+            "impressions": 15,
+            "ctr": 0,
+            "position": 9,
+            "brand_class": "non_brand"
+          }
+        ],
+        "pages": {
+          "state": "NOT_MEASURED",
+          "rows": null,
+          "reason": "measure komutu sayfa boyutunu çağırmıyor (yalnız detail)"
+        }
+      },
+      "ga4": {
+        "state": "NOT_CONNECTED",
+        "state_reason": "registry'de ga4_property yok",
+        "confidence": "UNKNOWN",
+        "evidence_label": "FACT",
+        "retrieved_at": null,
+        "source": {
+          "system": "google_analytics_4",
+          "property": null
+        },
+        "metrics": {
+          "sessions": null,
+          "engaged_sessions": null,
+          "conversions": null,
+          "revenue": null
+        }
+      },
+      "search_opportunity_inputs": {
+        "state": "MEASURED",
+        "state_reason": null,
+        "evidence_label": "INFERENCE",
+        "confidence": "CANDIDATE",
+        "opportunity_count": 2,
+        "criteria": {
+          "excludes_brand": true,
+          "min_impressions": 20,
+          "min_position": 5,
+          "max_position": 30,
+          "top": 15,
+          "score": "impressions / position"
+        },
+        "candidates": [
+          {
+            "query": "organik pamuk havlu",
+            "impressions": 300,
+            "clicks": 3,
+            "position": 8.5,
+            "score": 35.294117647058826
+          },
+          {
+            "query": "pamuklu bornoz fiyat",
+            "impressions": 120,
+            "clicks": 1,
+            "position": 14,
+            "score": 8.571428571428571
+          }
+        ],
+        "query_page_rows": {
+          "state": "NOT_MEASURED",
+          "rows": null,
+          "reason": "sorgu×sayfa kırılımı mevcut ölçümde yok"
+        }
+      }
+    }
+  }
+}

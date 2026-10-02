@@ -1,0 +1,54 @@
+{
+  "site": "pamistanbul",
+  "generated_at": "2026-10-02T09:00:00.000Z",
+  "index_alarms": {
+    "site": "pamistanbul",
+    "generated_at": "2026-10-02T09:00:00.000Z",
+    "coverage": {
+      "coverage_basis": "sample",
+      "sample_size": 3,
+      "universe_size": "UNKNOWN",
+      "note": "URL Inspection ORNEKLEMI; sitenin tamamini temsil etmez. Ornekten tum site icin oran cikarilmaz."
+    },
+    "alarms": [
+      {
+        "url": "https://www.pamistanbul.com/a",
+        "evidence_label": "INFERENCE",
+        "confidence": "CANDIDATE",
+        "review_status": "REVIEW_REQUIRED",
+        "first_observed_not_indexed": "2026-09-30T06:00:00.000Z",
+        "last_observed_not_indexed": "2026-10-01T07:00:00.000Z",
+        "hours_between": 25,
+        "observations": 2,
+        "latest_verdict": "NOT_INDEXED",
+        "confirming_test": "Manuel URL Inspection (Search Console arayuzunde canli test) + sayfanin gercek HTTP/robots/canonical durumunu elle dogrula",
+        "statement": "Indekslenmesi beklenen URL, 2 ornek gozleminde indekste dogrulanmadi (son karar NOT_INDEXED). Bu bir cikarimdir: URL Inspection ornekleme gecikmesi veya Google tarafi gecici durum olabilir."
+      }
+    ],
+    "status": "ALARMS",
+    "unassessed_in_latest": 0,
+    "checked": "Kosul: sitemap'te + Google fetch basarili + canonical kendisi + indekslenebilir; ardisik >=2 gozlemde INDEXED degil (NOT_INDEXED/NEUTRAL/UNKNOWN) ve ilk-son fark >24 saat."
+  },
+  "canonical_backlog": {
+    "site": "pamistanbul",
+    "generated_at": "2026-10-02T09:00:00.000Z",
+    "evidence_label": "INFERENCE",
+    "confidence": "UNKNOWN",
+    "review_status": "REVIEW_REQUIRED",
+    "coverage_basis": "sample",
+    "total": 0,
+    "by_status": {
+      "OPEN": 0,
+      "ACKNOWLEDGED": 0,
+      "RESOLVED_BY_OWNER": 0
+    },
+    "aging_open": {
+      "0-7d": 0,
+      "8-30d": 0,
+      "31-90d": 0,
+      ">90d": 0
+    },
+    "items": [],
+    "note": "Kayitlar ornekleme ile gozlenir; NOT_OBSERVED = bu turda gorulmedi, COZULDU degil. Yalniz sahip owner_status ile RESOLVED_BY_OWNER yazar."
+  }
+}

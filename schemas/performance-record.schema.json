@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "search-growth-os/performance-record",
+  "title": "One PageSpeed Insights measurement of one URL of one site. A missing metric is null, never 0.",
+  "type": "object",
+  "required": ["schema", "site", "url", "strategy", "measured_at", "date", "lcp_ms", "inp_ms", "cls", "ttfb_ms", "perf_score", "source", "field_scope", "state", "evidence", "confidence", "provider", "ratings"],
+  "properties": {
+    "schema": { "const": "sgos.performance.v1" },
+    "site": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$" },
+    "url": { "type": "string" },
+    "strategy": { "enum": ["mobile", "desktop"] },
+    "measured_at": { "type": "string", "format": "date-time" },
+    "date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+    "lcp_ms": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+    "inp_ms": { "type": ["number", "null"], "exclusiveMinimum": 0, "description": "Lab runs have no INP: null." },
+    "cls": { "type": ["number", "null"], "minimum": 0 },
+    "ttfb_ms": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+    "perf_score": { "type": ["integer", "null"], "minimum": 0, "maximum": 100, "description": "Lighthouse performance category, always lab." },
+    "source": { "enum": ["field", "lab", "none"] },
+    "field_scope": { "enum": ["url", "origin", null] },
+    "state": { "enum": ["MEASURED", "UNKNOWN", "NOT_CONNECTED", "ERROR"] },
+    "evidence": { "const": "FACT" },
+    "confidence": { "enum": ["CONFIRMED", "CANDIDATE", "FALSE_POSITIVE", "UNKNOWN"] },
+    "provider": { "const": "PageSpeed Insights API v5" },
+    "error_code": { "type": "string", "maxLength": 60 },
+    "field_category": {
+      "type": "object",
+      "description": "CrUX category (FAST/AVERAGE/SLOW) as reported by the provider; separate from our threshold INFERENCE.",
+      "additionalProperties": { "enum": ["FAST", "AVERAGE", "SLOW"] }
+    },
+    "ratings": {
+      "type": "object",
+      "required": ["label", "confidence", "values", "thresholds_ref"],
+      "properties": {
+        "thresholds_ref": {
+          "type": "object",
+          "required": ["source", "accessed", "status"],
+          "properties": {
+            "source": { "type": "string" },
+            "accessed": { "type": "string", "description": "NOT_RETRIEVED_THIS_SESSION unless the source was actually fetched." },
+            "status": { "enum": ["DOCUMENTED_ASSUMPTION", "VERIFIED_AGAINST_SOURCE"] }
+          }
+        },
+        "label": { "const": "INFERENCE" },
+        "confidence": { "enum": ["CANDIDATE", "UNKNOWN"] },
+        "values": {
+          "type": "object",
+          "required": ["lcp_ms", "inp_ms", "cls", "ttfb_ms"],
+          "additionalProperties": { "enum": ["GOOD", "NEEDS_IMPROVEMENT", "POOR", "UNKNOWN"] }
+        }
+      }
+    }
+  }
+}
