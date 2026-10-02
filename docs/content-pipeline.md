@@ -57,20 +57,49 @@ kontrol eder: satırın `site` değeri farklıysa (`CROSS_SITE_ROW`) ya da `page
 (`SITE_NOT_ONBOARDED`): ölçüm her siteye yapılır, tavsiye yalnız onboard edilmiş siteye
 (`policies/portfolio-isolation.md`).
 
-## Kanıttan sınıflandırma (`classifyFromEvidence`)
+## Kanıttan sınıflandırma (`classifyFromEvidence(rows, policy?)`)
 
-Çıktı her zaman `INFERENCE`; `CONFIRMED` **olamaz** (eşik bir kuraldır, ölçüm değil).
-Yalnız ölçülmüş `impressions >= 50` ve sayısal `position` taşıyan satırlar sayılır; gerisi `UNKNOWN`.
+Çıktı her zaman `INFERENCE`; `CONFIRMED` **olamaz** (eşik bir kuraldır, ölçüm değil). Politika da
+bunu değiştirmez. Yalnız ölçülmüş `impressions >= min_impressions` ve sayısal `position` taşıyan
+satırlar sayılır; gerisi `UNKNOWN`.
 
-| Durum | Sınıf | Güven |
+| Durum (varsayılan değerlerle) | Sınıf | Güven |
 |---|---|---|
 | Satır yok / hepsi UNKNOWN / eşik altı | `skip` | `UNKNOWN` (neye bakıldığı `reason`'da) |
-| Aynı sorgu >=2 sayfada gösterim alıyor | `consolidate` | `CANDIDATE` |
-| En iyi pozisyon 8–20 | `refresh` | `CANDIDATE` |
-| En iyi pozisyon < 8 | `skip` | `CANDIDATE` |
-| En iyi pozisyon > 20 | `new_page` | `CANDIDATE` |
+| Aynı sorgu >=`consolidate_min_pages` sayfada gösterim alıyor | `consolidate` | `CANDIDATE` |
+| En iyi pozisyon `refresh_position_min`–`refresh_position_max` (8–20) | `refresh` | `CANDIDATE` |
+| En iyi pozisyon < `refresh_position_min` | `skip` | `CANDIDATE` |
+| En iyi pozisyon > `refresh_position_max` | `new_page` | `CANDIDATE` |
 
-Eşikler (50 gösterim, 8/20) başlangıç varsayımıdır; sahibi değiştirebilir.
+### ContentPolicy (eşikler varsayımdır)
+
+Eşikler (50 gösterim, 8/20, 2 sayfa) ölçüm değil **başlangıç varsayımıdır**; artık koda gömülü değil,
+`ContentPolicy` olarak verilir. Politika kaynağı (`provenance`) **ayrı bir alandır**, kanıt etiketi
+değildir: altı etiket (FACT, INFERENCE, HYPOTHESIS, RECOMMENDATION, IMPLEMENTED_CHANGE,
+VERIFIED_RESULT) aynen kalır, yeni etiket eklenmedi.
+
+```ts
+{ min_impressions, refresh_position_min, refresh_position_max, consolidate_min_pages,
+  provenance: { origin: "policy", status: "DEFAULT_ASSUMPTION" | "OWNER_SET", set_by, note } }
+```
+
+- **Varsayılan** (`DEFAULT_CONTENT_POLICY`): `{50, 8, 20, 2}`, `provenance = {origin:"policy",
+  status:"DEFAULT_ASSUMPTION", set_by:"unset", note}`. Politika verilmezse (`undefined`/`null`/`{}`) sistem
+  bununla çalışır.
+- **Kısmi politika:** eksik alanlar varsayılanla tamamlanır ve durum `DEFAULT_ASSUMPTION` kalır
+  (`note` hangi alanların tamamlandığını yazar). `OWNER_SET` yalnız **tüm** alanlar verilmiş, `set_by`
+  insan adı (bot/`claude`/`default` değil) ve `status: "OWNER_SET"` açıkça yazılmışsa olur.
+- **Fail-closed:** `NaN`, `Infinity`, negatif, string, `refresh_position_min > refresh_position_max`,
+  `position < 1`, bilinmeyen anahtar, bozuk `provenance` → `POLICY_REJECTED:<kod,...>` fırlatır; hiçbir
+  değer sessizce düzeltilmez. `resolvePolicy(x)` aynı kontrolü fırlatmadan `{ok:false, errors}` döner.
+- **`require_policy: true`:** tam ve `OWNER_SET` politika yoksa varsayılana düşülmez; çıktı
+  `skip` / `UNKNOWN` olur (`reason` nedenini yazar).
+- **Çıktı politikayı kaydeder:** `Classified.policy` sınıflandırmayı üreten değerleri ve `provenance`'ı
+  taşır; politika sınıfı değiştirebilir ama `evidence_label=INFERENCE` ve `confidence` hiçbir zaman
+  politikadan `CONFIRMED` olmaz.
+- **Dosyadan yükleme (isteğe bağlı):** `loadContentPolicy(path)` yerel JSON okur (ağ yok), doğrular,
+  bozuksa fırlatır. Şema + örnek: `schemas/content-policy.schema.json`. `config/content-policy.json`
+  bu depoda **yoktur**; politikayı belirlemek sahibin kararıdır.
 
 ## Bağlama (henüz yapılmadı)
 

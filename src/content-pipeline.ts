@@ -4,6 +4,7 @@
 // ve bir asamadan digerine gecisin izinli olup olmadigini soyler. Sistemin "olcer, insan merge eder"
 // kuralini kod seviyesinde tutar: taslak govdesi kayitta YOKTUR (yalniz dosya referansi), onay
 // insan adidir ve hicbir zaman varsayilmaz.
+import { readFileSync } from "node:fs";
 import type { Confidence, EvidenceLabel, OpportunitySource } from "./types.ts";
 import type { SiteEntry } from "./registry.ts";
 
@@ -175,14 +176,100 @@ export function attachRow(item: ContentItem, row: GscRow, registry: readonly Sit
   return { ...item, gsc_rows: [...item.gsc_rows, row] };
 }
 
-export interface Classified { classification: Classification; evidence_label: EvidenceLabel; confidence: Confidence; reason: string; rows_used: number; rows_unknown: number }
-export const MIN_IMPRESSIONS = 50;
+/** Politika kaynagi KANIT etiketi degildir: ayri eksen. Alti kanit etiketi degismez; burada yeni etiket yok. */
+export interface PolicyProvenance { origin: "policy"; status: "DEFAULT_ASSUMPTION" | "OWNER_SET"; set_by: string; note: string }
+export interface ContentPolicyValues {
+  min_impressions: number;
+  refresh_position_min: number;
+  refresh_position_max: number;
+  /** Kanibalizasyon adayi icin ayni sorgunun gosterim aldigi en az sayfa sayisi. */
+  consolidate_min_pages: number;
+}
+export interface ContentPolicy extends ContentPolicyValues { provenance: PolicyProvenance }
+/** Disaridan gelen (kismi olabilir) politika girdisi. `require_policy`: varsayilana dusme, skip/UNKNOWN don. */
+export interface ContentPolicyInput extends Partial<ContentPolicyValues> { provenance?: Partial<PolicyProvenance>; require_policy?: boolean }
 
-/** Kanittan siniflandirma. Cikti her zaman INFERENCE'tir ve CONFIRMED OLAMAZ: esikler bir kural, olcum degil. */
-export function classifyFromEvidence(rows: readonly GscRow[]): Classified {
-  const usable = rows.filter((r) => typeof r.impressions === "number" && typeof r.position === "number" && r.impressions >= MIN_IMPRESSIONS);
-  const base = { evidence_label: "INFERENCE" as const, rows_used: usable.length, rows_unknown: rows.length - usable.length };
-  if (!usable.length) return { ...base, classification: "skip", confidence: "UNKNOWN", reason: rows.length ? `${rows.length} satir var ama hicbiri yeterli olculmus gosterim tasimiyor (esik ${MIN_IMPRESSIONS}; UNKNOWN sayilir)` : "kanit satiri yok" };
+// Bu sayilar olcum degil, baslangic VARSAYIMIDIR; sahibi degistirebilir. Kanit etiketi/guveni etkilemez.
+export const DEFAULT_CONTENT_POLICY: Readonly<ContentPolicy> = Object.freeze({
+  min_impressions: 50, refresh_position_min: 8, refresh_position_max: 20, consolidate_min_pages: 2,
+  provenance: Object.freeze({ origin: "policy" as const, status: "DEFAULT_ASSUMPTION" as const, set_by: "unset", note: "Esikler (50 gosterim, pozisyon 8-20, >=2 sayfa) olculmus degil, baslangic varsayimi; sahibi belirlemedi." }),
+});
+export const MIN_IMPRESSIONS = DEFAULT_CONTENT_POLICY.min_impressions;
+
+const VALUE_KEYS = ["min_impressions", "refresh_position_min", "refresh_position_max", "consolidate_min_pages"] as const;
+const POLICY_KEYS = [...VALUE_KEYS, "provenance", "require_policy"];
+const PROV_KEYS = ["origin", "status", "set_by", "note"];
+const num = (v: unknown, min: number) => typeof v === "number" && Number.isFinite(v) && v >= min;
+
+export type PolicyResolution =
+  | { ok: true; policy: ContentPolicy; defaulted: boolean; require_policy: boolean }
+  | { ok: false; errors: string[] };
+
+/** Politikayi dogrular ve eksik alanlari varsayilanla tamamlar. Gecersiz deger SESSIZCE duzeltilmez: reddedilir. */
+export function resolvePolicy(input?: unknown): PolicyResolution {
+  if (input === undefined || input === null) return { ok: true, policy: { ...DEFAULT_CONTENT_POLICY }, defaulted: true, require_policy: false };
+  if (typeof input !== "object" || Array.isArray(input)) return { ok: false, errors: ["POLICY_NOT_OBJECT"] };
+  const p = input as Record<string, unknown>;
+  const e: string[] = [];
+  for (const k of Object.keys(p)) if (!POLICY_KEYS.includes(k)) e.push(`POLICY_UNKNOWN_KEY:${k}`);
+  if (p.require_policy !== undefined && typeof p.require_policy !== "boolean") e.push("POLICY_BAD_REQUIRE_POLICY");
+  if (p.min_impressions !== undefined && !num(p.min_impressions, 0)) e.push("POLICY_BAD_MIN_IMPRESSIONS");
+  for (const k of ["refresh_position_min", "refresh_position_max"] as const) if (p[k] !== undefined && !num(p[k], 1)) e.push(`POLICY_BAD_${k.toUpperCase()}`);
+  if (p.consolidate_min_pages !== undefined && !(num(p.consolidate_min_pages, 2) && Number.isInteger(p.consolidate_min_pages))) e.push("POLICY_BAD_CONSOLIDATE_MIN_PAGES");
+  let prov: Record<string, unknown> | undefined;
+  if (p.provenance !== undefined) {
+    if (!p.provenance || typeof p.provenance !== "object" || Array.isArray(p.provenance)) e.push("POLICY_BAD_PROVENANCE");
+    else {
+      prov = p.provenance as Record<string, unknown>;
+      for (const k of Object.keys(prov)) if (!PROV_KEYS.includes(k)) e.push(`POLICY_PROVENANCE_UNKNOWN_KEY:${k}`);
+      if (prov.origin !== undefined && prov.origin !== "policy") e.push("POLICY_PROVENANCE_BAD_ORIGIN");
+      if (prov.status !== undefined && prov.status !== "DEFAULT_ASSUMPTION" && prov.status !== "OWNER_SET") e.push("POLICY_PROVENANCE_BAD_STATUS");
+      if (prov.set_by !== undefined && (typeof prov.set_by !== "string" || !prov.set_by.trim())) e.push("POLICY_PROVENANCE_BAD_SET_BY");
+      if (prov.note !== undefined && typeof prov.note !== "string") e.push("POLICY_PROVENANCE_BAD_NOTE");
+    }
+  }
+  const d = DEFAULT_CONTENT_POLICY;
+  const v = { min_impressions: (p.min_impressions ?? d.min_impressions) as number, refresh_position_min: (p.refresh_position_min ?? d.refresh_position_min) as number, refresh_position_max: (p.refresh_position_max ?? d.refresh_position_max) as number, consolidate_min_pages: (p.consolidate_min_pages ?? d.consolidate_min_pages) as number };
+  if (!e.length && v.refresh_position_min > v.refresh_position_max) e.push("POLICY_POSITION_MIN_GT_MAX");
+  if (e.length) return { ok: false, errors: e };
+  const missing = VALUE_KEYS.filter((k) => p[k] === undefined);
+  const claimsOwner = prov?.status === "OWNER_SET" && typeof prov.set_by === "string" && !NON_HUMAN.test(prov.set_by);
+  // OWNER_SET yalniz TUM alanlar acikca verilmis ve insan adi varsa; kismi/adsiz politika varsayim sayilir.
+  const owner = claimsOwner && missing.length === 0;
+  const provenance: PolicyProvenance = owner
+    ? { origin: "policy", status: "OWNER_SET", set_by: (prov!.set_by as string).trim(), note: typeof prov!.note === "string" ? prov!.note : "" }
+    : { origin: "policy", status: "DEFAULT_ASSUMPTION", set_by: "unset", note: missing.length ? `kismi politika; varsayilanla tamamlanan alanlar: ${missing.join(", ")}` : (prov?.status === "OWNER_SET" ? "OWNER_SET talebi insan adi olmadigi icin kabul edilmedi" : d.provenance.note) };
+  const defaulted = missing.length === VALUE_KEYS.length;
+  return { ok: true, policy: { ...v, provenance }, defaulted, require_policy: p.require_policy === true };
+}
+
+/** Politika dosyasini (JSON) okur; ag yok. Bozuk dosya/JSON/deger fail-closed: firlatir, varsayilana dusmez. */
+export function loadContentPolicy(path: string): ContentPolicyInput {
+  let raw: string;
+  try { raw = readFileSync(path, "utf8"); } catch { throw new Error(`POLICY_FILE_UNREADABLE:${path}`); }
+  let j: unknown;
+  try { j = JSON.parse(raw); } catch { throw new Error(`POLICY_FILE_BAD_JSON:${path}`); }
+  const r = resolvePolicy(j);
+  if (!r.ok) throw new Error(`POLICY_REJECTED:${r.errors.join(",")}`);
+  return j as ContentPolicyInput;
+}
+
+export interface Classified { classification: Classification; evidence_label: EvidenceLabel; confidence: Confidence; reason: string; rows_used: number; rows_unknown: number; policy: ContentPolicy }
+
+/** Kanittan siniflandirma. Cikti her zaman INFERENCE'tir ve CONFIRMED OLAMAZ: esikler bir kural, olcum degil.
+ *  `policy` yoksa DEFAULT_CONTENT_POLICY (DEFAULT_ASSUMPTION) kullanilir; gecersizse POLICY_REJECTED firlatir.
+ *  Cikti hangi politikanin (deger + kaynak) urettigini `policy` alaninda tasir. */
+export function classifyFromEvidence(rows: readonly GscRow[], policyInput?: ContentPolicyInput | null): Classified {
+  const res = resolvePolicy(policyInput);
+  if (!res.ok) throw new Error(`POLICY_REJECTED:${res.errors.join(",")}`);
+  const policy = res.policy;
+  const base0 = { evidence_label: "INFERENCE" as const, policy };
+  if (res.require_policy && policy.provenance.status !== "OWNER_SET") {
+    return { ...base0, rows_used: 0, rows_unknown: rows.length, classification: "skip", confidence: "UNKNOWN", reason: "require_policy: sahibi tarafindan tam belirlenmis politika yok; varsayilan esiklerle siniflandirma yapilmadi" };
+  }
+  const usable = rows.filter((r) => typeof r.impressions === "number" && typeof r.position === "number" && r.impressions >= policy.min_impressions);
+  const base = { ...base0, rows_used: usable.length, rows_unknown: rows.length - usable.length };
+  if (!usable.length) return { ...base, classification: "skip", confidence: "UNKNOWN", reason: rows.length ? `${rows.length} satir var ama hicbiri yeterli olculmus gosterim tasimiyor (esik ${policy.min_impressions}; UNKNOWN sayilir)` : "kanit satiri yok" };
   // Ayni sorgu birden fazla sayfada gosterim aliyorsa: kanibalizasyon adayi.
   const byQuery = new Map<string, Set<string>>();
   for (const r of usable) {
@@ -191,9 +278,10 @@ export function classifyFromEvidence(rows: readonly GscRow[]): Classified {
     if (!byQuery.has(k)) byQuery.set(k, new Set());
     byQuery.get(k)!.add(r.page);
   }
-  if ([...byQuery.values()].some((s) => s.size >= 2)) return { ...base, classification: "consolidate", confidence: "CANDIDATE", reason: "ayni sorgu >=2 sayfada gosterim aliyor (kanibalizasyon adayi)" };
+  if ([...byQuery.values()].some((s) => s.size >= policy.consolidate_min_pages)) return { ...base, classification: "consolidate", confidence: "CANDIDATE", reason: `ayni sorgu >=${policy.consolidate_min_pages} sayfada gosterim aliyor (kanibalizasyon adayi)` };
   const best = Math.min(...usable.map((r) => r.position as number));
-  if (best >= 8 && best <= 20) return { ...base, classification: "refresh", confidence: "CANDIDATE", reason: `en iyi pozisyon ${best} (8-20) ve gosterim var: yenileme adayi` };
-  if (best < 8) return { ...base, classification: "skip", confidence: "CANDIDATE", reason: `pozisyon ${best} < 8: zaten ust sirada, bu hat icin acik firsat yok` };
-  return { ...base, classification: "new_page", confidence: "CANDIDATE", reason: `en iyi pozisyon ${best} > 20: mevcut sayfa karsilamiyor olabilir, yeni sayfa adayi` };
+  const { refresh_position_min: lo, refresh_position_max: hi } = policy;
+  if (best >= lo && best <= hi) return { ...base, classification: "refresh", confidence: "CANDIDATE", reason: `en iyi pozisyon ${best} (${lo}-${hi}) ve gosterim var: yenileme adayi` };
+  if (best < lo) return { ...base, classification: "skip", confidence: "CANDIDATE", reason: `pozisyon ${best} < ${lo}: zaten ust sirada, bu hat icin acik firsat yok` };
+  return { ...base, classification: "new_page", confidence: "CANDIDATE", reason: `en iyi pozisyon ${best} > ${hi}: mevcut sayfa karsilamiyor olabilir, yeni sayfa adayi` };
 }

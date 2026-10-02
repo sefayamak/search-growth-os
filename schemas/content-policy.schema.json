@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sgos.content-policy.v1",
+  "title": "ContentPolicy: classifyFromEvidence esikleri (varsayim, olcum degil)",
+  "description": "Opsiyonel. Dosya yolu loadContentPolicy(path) ile verilir. config/content-policy.json bu repoda YOKTUR; bu yalniz sema + ornektir. Politika kaynagi (provenance) kanit etiketi DEGILDIR; INFERENCE/CANDIDATE sinifi bundan CONFIRMED olmaz. Eksik alan varsayilanla dolar (DEFAULT_ASSUMPTION); gecersiz deger reddedilir.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "min_impressions": { "type": "number", "minimum": 0, "description": "Varsayilan 50 (DEFAULT_ASSUMPTION)" },
+    "refresh_position_min": { "type": "number", "minimum": 1, "description": "Varsayilan 8" },
+    "refresh_position_max": { "type": "number", "minimum": 1, "description": "Varsayilan 20; >= refresh_position_min olmali" },
+    "consolidate_min_pages": { "type": "integer", "minimum": 2, "description": "Varsayilan 2" },
+    "require_policy": { "type": "boolean", "description": "true: tam ve sahipli politika yoksa varsayilana dusme, skip/UNKNOWN don" },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "origin": { "const": "policy" },
+        "status": { "enum": ["DEFAULT_ASSUMPTION", "OWNER_SET"] },
+        "set_by": { "type": "string", "minLength": 1, "description": "Insan adi; bot/claude/default kabul edilmez" },
+        "note": { "type": "string" }
+      }
+    }
+  },
+  "examples": [
+    {
+      "min_impressions": 50,
+      "refresh_position_min": 8,
+      "refresh_position_max": 20,
+      "consolidate_min_pages": 2,
+      "require_policy": false,
+      "provenance": { "origin": "policy", "status": "OWNER_SET", "set_by": "Sefa Yamak", "note": "ornek: 28 gunluk GSC incelemesinden sonra belirlendi" }
+    }
+  ]
+}

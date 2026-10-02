@@ -2,10 +2,12 @@
 // (ihlal gecmesin) testi. Ag yok, Clarity yok.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { loadRegistry } from "../src/registry.ts";
 import {
-  STAGES, validateItem, validateTransition, attachRow, classifyFromEvidence, validateRow,
+  STAGES, validateItem, validateTransition, attachRow, classifyFromEvidence, validateRow, resolvePolicy, loadContentPolicy, DEFAULT_CONTENT_POLICY,
   type ContentItem, type GscRow, type SiteRef,
 } from "../src/content-pipeline.ts";
 
@@ -153,4 +155,103 @@ test("siniflandirma: ust sira, >20 ve kanibalizasyon", () => {
   assert.equal(classifyFromEvidence([row(A, { position: 35 })]).classification, "new_page");
   const two = classifyFromEvidence([row(A, { position: 9, page: `https://${dom(A)}/a` }), row(A, { position: 12, page: `https://${dom(A)}/b` })]);
   assert.equal(two.classification, "consolidate");
+});
+
+// --- ContentPolicy: esikler varsayim, kaynagi ayri alanda; kanit etiketi/guveni degismez ---
+const cls = (over: Partial<GscRow>, pol?: any) => classifyFromEvidence([row(A, over)], pol);
+const OWNER = { status: "OWNER_SET" as const, set_by: "Sefa Yamak", note: "28g GSC incelemesi" };
+
+test("politika: impressions siniri 49/50 (yanlis-pozitif + yanlis-negatif)", () => {
+  assert.equal(cls({ impressions: 49, position: 10 }).classification, "skip");
+  assert.equal(cls({ impressions: 49, position: 10 }).confidence, "UNKNOWN");
+  assert.equal(cls({ impressions: 50, position: 10 }).classification, "refresh");
+  assert.equal(cls({ impressions: 50, position: 10 }).rows_used, 1);
+});
+test("politika: pozisyon sinirlari 7.9/8 ve 20/20.1", () => {
+  assert.equal(cls({ position: 7.9 }).classification, "skip");
+  assert.equal(cls({ position: 8 }).classification, "refresh");
+  assert.equal(cls({ position: 20 }).classification, "refresh");
+  assert.equal(cls({ position: 20.1 }).classification, "new_page");
+});
+test("politika: yoksa varsayilan DEFAULT_ASSUMPTION ile calisir; cikti politikayi kaydeder", () => {
+  for (const c of [cls({}), cls({}, undefined), cls({}, null), cls({}, {})]) {
+    assert.equal(c.policy.provenance.status, "DEFAULT_ASSUMPTION");
+    assert.equal(c.policy.provenance.set_by, "unset");
+    assert.equal(c.policy.provenance.origin, "policy");
+    assert.equal(c.policy.min_impressions, 50);
+    assert.deepEqual([c.policy.refresh_position_min, c.policy.refresh_position_max], [8, 20]);
+    assert.ok(c.policy.provenance.note.length > 0);
+  }
+  assert.equal(DEFAULT_CONTENT_POLICY.provenance.status, "DEFAULT_ASSUMPTION");
+});
+test("politika: degisen politika siniflandirmayi deterministik degistirir; politikadan CONFIRMED olmaz", () => {
+  const r = { position: 25, impressions: 30 };
+  assert.equal(cls(r).classification, "skip");
+  const pol = { min_impressions: 20, refresh_position_min: 5, refresh_position_max: 30, consolidate_min_pages: 2, provenance: OWNER };
+  const a = cls(r, pol), b = cls(r, pol);
+  assert.deepEqual(a, b);
+  assert.equal(a.classification, "refresh");
+  assert.deepEqual([a.evidence_label, a.confidence], ["INFERENCE", "CANDIDATE"]);
+  assert.deepEqual([a.policy.provenance.status, a.policy.provenance.set_by, a.policy.min_impressions, a.policy.refresh_position_max], ["OWNER_SET", "Sefa Yamak", 20, 30]);
+  assert.equal(cls({ position: 4 }, pol).classification, "skip");
+  assert.equal(cls({ position: 4 }, { ...pol, refresh_position_min: 4 }).classification, "refresh");
+  const two = [row(A, { position: 9, page: `https://${dom(A)}/a` }), row(A, { position: 12, page: `https://${dom(A)}/b` })];
+  assert.equal(classifyFromEvidence(two, { consolidate_min_pages: 3 }).classification, "refresh");
+  for (const c of [a, cls({ impressions: 1 }, pol), classifyFromEvidence([], pol)]) assert.notEqual(c.confidence, "CONFIRMED");
+});
+test("politika: kismi politika varsayilanla tamamlanir, OWNER_SET sayilmaz; sahte sahip kabul edilmez", () => {
+  const c = cls({ impressions: 30, position: 10 }, { min_impressions: 25 });
+  assert.equal(c.classification, "refresh");
+  assert.equal(c.policy.provenance.status, "DEFAULT_ASSUMPTION");
+  assert.match(c.policy.provenance.note, /refresh_position_min/);
+  const full = { min_impressions: 25, refresh_position_min: 8, refresh_position_max: 20 };
+  assert.equal(cls({}, { ...full, consolidate_min_pages: 2, provenance: OWNER }).policy.provenance.status, "OWNER_SET");
+  assert.equal(cls({}, { ...full, consolidate_min_pages: 2, provenance: { status: "OWNER_SET", set_by: "claude" } }).policy.provenance.status, "DEFAULT_ASSUMPTION");
+  assert.equal(cls({}, { ...full, provenance: OWNER }).policy.provenance.status, "DEFAULT_ASSUMPTION");
+});
+test("politika: gecersiz politika fail-closed reddedilir (sessiz duzeltme yok)", () => {
+  const bad: any[] = [
+    { min_impressions: NaN }, { min_impressions: -1 }, { min_impressions: "50" }, { min_impressions: Infinity },
+    { refresh_position_min: 0.5 }, { refresh_position_min: 21 }, { refresh_position_min: 30, refresh_position_max: 10 },
+    { refresh_position_max: "20" }, { consolidate_min_pages: 1 }, { consolidate_min_pages: 2.5 },
+    { surprise: 1 }, "50", [], { require_policy: "yes" }, { provenance: "x" }, { provenance: { status: "CONFIRMED" } },
+    { provenance: { origin: "gsc" } }, { provenance: { set_by: "" } }, { provenance: { label: "EDITORIAL" } },
+  ];
+  for (const p of bad) {
+    assert.equal(resolvePolicy(p).ok, false, JSON.stringify(p));
+    assert.throws(() => classifyFromEvidence([row()], p), /POLICY_REJECTED/, JSON.stringify(p));
+  }
+  assert.ok((resolvePolicy({ refresh_position_min: 30, refresh_position_max: 10 }) as any).errors.includes("POLICY_POSITION_MIN_GT_MAX"));
+  assert.equal(resolvePolicy({ min_impressions: 0 }).ok, true);
+  assert.equal(resolvePolicy({ refresh_position_min: 10, refresh_position_max: 10 }).ok, true);
+});
+test("politika: require_policy varsayilana dusmez, skip/UNKNOWN doner; tam sahipli politika siniflandirir", () => {
+  const c = cls({ position: 10 }, { require_policy: true });
+  assert.deepEqual([c.classification, c.confidence, c.evidence_label], ["skip", "UNKNOWN", "INFERENCE"]);
+  assert.match(c.reason, /require_policy/);
+  assert.equal(c.policy.provenance.status, "DEFAULT_ASSUMPTION");
+  const ok = cls({ position: 10 }, { require_policy: true, min_impressions: 50, refresh_position_min: 8, refresh_position_max: 20, consolidate_min_pages: 2, provenance: OWNER });
+  assert.equal(ok.classification, "refresh");
+  assert.equal(cls({ position: 10 }, { require_policy: true, min_impressions: 50 }).classification, "skip");
+});
+test("politika: JSON dosyasindan yuklenir; bozuk dosya/JSON/deger firlatir; ornek sema gecerli", () => {
+  const dir = mkdtempSync(join(tmpdir(), "sgos-pol-"));
+  const f = (n: string, body: string) => { const p = join(dir, n); writeFileSync(p, body); return p; };
+  const good = loadContentPolicy(f("ok.json", JSON.stringify({ min_impressions: 40, provenance: OWNER })));
+  assert.equal(cls({ impressions: 40, position: 10 }, good).classification, "refresh");
+  assert.throws(() => loadContentPolicy(join(dir, "yok.json")), /POLICY_FILE_UNREADABLE/);
+  assert.throws(() => loadContentPolicy(f("b.json", "{bozuk")), /POLICY_FILE_BAD_JSON/);
+  assert.throws(() => loadContentPolicy(f("n.json", JSON.stringify({ min_impressions: -5 }))), /POLICY_REJECTED/);
+  const schema = JSON.parse(readFileSync(new URL("../schemas/content-policy.schema.json", import.meta.url), "utf8"));
+  assert.equal(schema.additionalProperties, false);
+  assert.deepEqual(Object.keys(schema.properties).sort(), ["consolidate_min_pages", "min_impressions", "provenance", "refresh_position_max", "refresh_position_min", "require_policy"]);
+  assert.equal(resolvePolicy(schema.examples[0]).ok, true);
+});
+test("politika: yeni kanit etiketi yok (EDITORIAL dahil); politika kaynagi ayri eksen", () => {
+  const schema = JSON.parse(readFileSync(new URL("../schemas/content-policy.schema.json", import.meta.url), "utf8"));
+  assert.ok(!/EDITORIAL/i.test(JSON.stringify(schema)));
+  const c = cls({}, { provenance: OWNER });
+  assert.ok(!/EDITORIAL/i.test(JSON.stringify(c)));
+  assert.equal(c.evidence_label, "INFERENCE");
+  assert.ok(!("evidence_label" in c.policy) && !("evidence_label" in c.policy.provenance));
 });
