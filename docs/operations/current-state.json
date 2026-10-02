@@ -1,0 +1,102 @@
+{
+  "schema": "sgos.handoff-state.v1",
+  "repository": "sefayamak/search-growth-os",
+  "canonical_branch": "main",
+  "state_based_on_main_sha": "a3ce11cdef02f91ae7533403337f09be9c7a3345",
+  "generated_at": "2026-10-02T13:30:00Z",
+  "phase": {
+    "name": "Development backlog closure / Clarity takeover validation pending",
+    "last_completed": "Phase 8: single-fetch measure refactor implemented and verified in PR #45 (not merged)",
+    "summary": "Sprint modules, CLI wiring, persistence hardening and takeover E2E tests are on main. FULL_TAKEOVER validation has NOT run."
+  },
+  "open_prs": [
+    {
+      "number": 45,
+      "title": "feat(measure): tek GSC fetch — Markdown + measure-report-latest.json ayni kosudan",
+      "draft": true,
+      "hold": true,
+      "head_sha": "cfd12c802de6b159240083bd27229ebdd4e202a7",
+      "ci": "success (last verified 2026-10-02)",
+      "merge_readiness": "MERGE_NOW_SAFE, owner decision pending",
+      "reason": "Workflow change (measure.yml); first live run Mon 2026-10-05 is also the first measure.yml use of persist-history.sh. Single-fetch refactor is implemented in the PR; merge is the owner's decision."
+    }
+  ],
+  "hold_prs": [45],
+  "merged_capabilities": [
+    { "pr": 30, "name": "owner-offline runbook", "sha": "854bf71" },
+    { "pr": 31, "name": "clarity takeover status evaluator (offline)", "sha": "ba55520" },
+    { "pr": 32, "name": "deployment verifier + timeline", "sha": "d60b972" },
+    { "pr": 33, "name": "content opportunity + editor pipeline state model", "sha": "ad2bc24" },
+    { "pr": 34, "name": "index alarms + canonical backlog", "sha": "1c60d11" },
+    { "pr": 35, "name": "internal-link + schema/entity agent contracts (recommend-only)", "sha": "4dfc496" },
+    { "pr": 36, "name": "lighthouse/CWV via PSI (NOT_LIVE_VALIDATED)", "sha": "d07b981" },
+    { "pr": 37, "name": "change safety v1 (no writer exists)", "sha": "d27b336" },
+    { "pr": 38, "name": "orchestration model + per-site scorecard", "sha": "a2c8700" },
+    { "pr": 40, "name": "safe persistence script (persist-history.sh)", "sha": "8e3e831" },
+    { "pr": 41, "name": "sgos.measure-report.v1 machine-readable measure output", "sha": "d13c9a5" },
+    { "pr": 42, "name": "time-dependent test fix", "sha": "dfed8d5" },
+    { "pr": 43, "name": "persistence hardening (secret-looking filenames, autostash)", "sha": "d08bd51" },
+    { "pr": 39, "name": "CLI wiring: 12 read-only/local commands", "sha": "488d1a6" },
+    { "pr": 44, "name": "takeover status end-to-end tests", "sha": "e7bcde9" },
+    { "pr": 46, "name": "docs sync", "sha": "a3ce11c" }
+  ],
+  "migration": {
+    "clarity": {
+      "coverage_validation": { "date": "2026-10-02", "result": "COVERAGE_VALIDATION_SUCCESS" },
+      "full_takeover": {
+        "state": "PENDING",
+        "completed": 0,
+        "required": 2,
+        "next_required": "2026-10-03 UTC: exactly one clarity-daily dispatch; 7/7 measurement_success AND 7/7 fresh, same source_run_id",
+        "day_2": "a separate, later UTC day"
+      },
+      "success_criterion": "measurement_success = MEASURED && CONFIRMED && rows_complete==true (confirmed zero qualifies)"
+    },
+    "legacy": {
+      "name": "site-health-monitor (CCR routine)",
+      "status": "ENABLED",
+      "basis": "LAST_KNOWN (owner statement; not re-read from this repo)",
+      "disable": "OWNER_ONLY, only after FULL_TAKEOVER 2/2"
+    }
+  },
+  "schedules": [
+    { "workflow": "clarity-daily.yml", "cron": "20 7 * * *", "gated": true, "gate_variable": "SEARCH_GROWTH_CLARITY_DAILY_ENABLED", "gate_live_value": "UNKNOWN", "manual_dispatch": true },
+    { "workflow": "measure.yml", "cron": "40 6 * * 1", "gated": false, "note": "weekly; first persist-history.sh use here is Mon 2026-10-05 unless clarity-daily runs first" },
+    { "workflow": "portfolio-check.yml", "cron": "10 6 * * 1", "gated": false },
+    { "workflow": "search-audit.yml", "cron": "40 6 * * 1", "gated": false },
+    { "workflow": "legacy site-health-monitor (CCR, outside this repo)", "cron": "daily ~06:10Z", "gated": false, "basis": "LAST_KNOWN" }
+  ],
+  "credentials": {
+    "clarity_canonical": {
+      "configured": true,
+      "rotation_pending": true,
+      "secret_names": ["SEARCH_GROWTH_CLARITY_TOKENS_JSON"],
+      "basis": "coverage validation 2026-10-02 succeeded with these credentials",
+      "note": "Old legacy credentials must remain until safe cutover; rotation is owner-only and only after the legacy routine is disabled."
+    },
+    "gsc": { "configured": true, "rotation_pending": true, "secret_names": ["SEARCH_GROWTH_GSC_CREDENTIALS_JSON"], "basis": "weekly measure 2026-09-28 reported 7/7 GSC OK" },
+    "ga4": { "configured": true, "rotation_pending": false, "secret_names": ["SEARCH_GROWTH_GA4_CREDENTIALS_JSON"], "basis": "connection smoke OK; measure does not call GA4 metrics" },
+    "legacy_routine": { "configured": "UNKNOWN", "rotation_pending": true, "note": "Plaintext credentials in the legacy routine prompt are a known exposure; owner-only cleanup after cutover." }
+  },
+  "owner_gates": [
+    { "action": "Clarity dispatch (clarity-daily, clarity.yml, force=true)", "owner_only": true },
+    { "action": "disable legacy site-health-monitor", "owner_only": true },
+    { "action": "credential rotation/revoke", "owner_only": true },
+    { "action": "enable SEARCH_GROWTH_CLARITY_DAILY_ENABLED / any new schedule", "owner_only": true },
+    { "action": "production site mutation", "owner_only": true },
+    { "action": "merge PR #45 (and any feature PR)", "owner_only": true }
+  ],
+  "next_action": {
+    "date": "2026-10-03",
+    "summary": "After the legacy ~06:10Z run completes: verify no canonical same-day measurement, then exactly ONE clarity-daily dispatch; verify 7/7 fresh; verify persistence commit; run clarity-takeover-status. On a red run: NO second dispatch, diagnose log/artifact/persistence first.",
+    "safe_today": "Read-only work, tests, docs, draft PRs."
+  },
+  "known_risks": [
+    "persist-history.sh has never run in GitHub Actions; first live use is the clarity-daily dispatch or Mon 2026-10-05 measure.yml",
+    "Clarity quota 10 requests/project/day: legacy 3 + clarity-daily 3 + clarity.yml 3 = 9/10; a blind re-dispatch can exhaust it",
+    "Most sprint modules are IMPLEMENTED_NOT_LIVE_VALIDATED (PSI response shape, deployment probe, index alarms, scorecard on real artifacts)",
+    "GA4 metrics are not measured (measure does not call GA4)",
+    "Legacy routine and flag live values are UNKNOWN from this repo",
+    "Orchestration validator reports 1 expected ERROR (DUPLICATE_SCHEDULER: legacy + clarity-daily) until cutover completes"
+  ]
+}
