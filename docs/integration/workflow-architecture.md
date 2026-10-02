@@ -1,7 +1,7 @@
 # Workflow mimarisi — #31–#38 yetenekleri mevcut iş grafiğine nasıl oturur
 
 **Durum (2026-10-02):** yalnız plan. `.github/` altına **hiçbir dosya eklenmedi**; önerilen YAML aşağıda metin olarak durur ve geçici bir worktree'de
-(`origin/main` + 8 dal + bağlama yaması) doğrulandı: PyYAML ile sözdizimi, `orchestration-check --drift` (drift yok), `npm run typecheck` (temiz).
+(o sırada `origin/main` + 8 dal + eski bağlama yaması) doğrulandı: PyYAML ile sözdizimi, `orchestration-check --drift` (drift yok), `npm run typecheck` (temiz). **Güncelleme:** üretici PR'ların hepsi (#31–#38, #40, #41) artık `origin/main`'de ve 12 komut `src/cli.ts`'te gerçek koddur (`cli-wiring-plan.md`); yama dosyası silindi.
 Her zamanlanmış iş **bir repo değişkeniyle kapalı** gelir ve açılması owner onayı ister. Hiçbir iş üretim sitesine yazmaz; yazma yalnız bu depodaki
 `data/` yollarına ve yalnız tek yazıcı işle yapılır.
 
@@ -37,7 +37,7 @@ Gözlemler:
 
 | Yetenek | Karar | Gerekçe |
 |---|---|---|
-| Clarity takeover durumu (#31) | **`clarity-daily.yml` içinde bir adım** (salt-okunur, ağsız) + scorecard raporunda | Zaten Clarity işinin sahibi dosya; yeni zamanlayıcı yok. Koşu kaydı üreticisi eksik (B4) |
+| Clarity takeover durumu (#31) | **`clarity-daily.yml` içinde bir adım** (salt-okunur, ağsız) + scorecard raporunda | Zaten Clarity işinin sahibi dosya; yeni zamanlayıcı yok. Kanıt `data/clarity-history` içindeki `source_run_id`'dir (koşu-kaydı dosyası/`--runs` yok; B4 çözüldü) |
 | İndeks alarmı + canonical backlog (#34) | **Yeni `index-alarms.yml`** (günlük, gated) | `index-probe.yml`'e eklemek bilerek reddedildi: dosya "elle, contents: read, schedule YOK" kararını taşıyor ve test zorluyor. Aynı CLI, aynı `index-probe` concurrency grubu → elle probe ile zamanlanmış koşu aynı anda çalışmaz. Probe'u workflow içinde bir kez koşup alarm adımını besler; tek yazıcı |
 | Performans / CWV (#36) | **Yeni `lighthouse.yml`** (haftalık, gated) | `measure.yml`'e eklenmedi: PSI tek istek 20–40 sn (üretici belgesi) → `measure`'ın 20 dk timeout'unu zorlar ve GSC+GA4 ölçümünü kırmızı yapabilir; ayrı secret ve ayrı kota havuzu; bağımsız kapı/rollback. `portfolio-check`/`search-audit` bilerek secret'sız → uymaz |
 | Deployment çizelgesi (#32) | **Yeni `deployment-timeline.yml`** (haftalık yoklama, gated). **Olay-tetikli DEĞİL** | Deploy olayları 7 ayrı **site** deposunda oluşur; bu depodaki `deployment_status` tetikleyicisi onları görmez. Olay iletmek site depolarına dokunmak demek → kapsam dışı. Registry'deki `repository` alanından `GET /deployments` yoklaması. Canlı SHA doğrulaması yok → tüm olaylar `UNVERIFIED` |
@@ -95,8 +95,8 @@ Pazartesi dışında günlük işler dışında bir şey koşmaz. Cron dakikalar
 |---|---|---|---|
 | `data/clarity-history/` | `clarity-daily.yml` | `clarity` (**`clarity.yml` ile paylaşımlı**: Clarity kotası) | scorecard, takeover-status |
 | `data/performance-history/` | `lighthouse.yml` | `lighthouse` | scorecard |
-| `data/index-history/`, `data/canonical-backlog/` | `index-alarms.yml` | `index-probe` (**elle `index-probe.yml` ile paylaşımlı**) | scorecard (B1: şu an okuyamıyor) |
-| `data/deployment-timeline/` | `deployment-timeline.yml` | `deployment-timeline` | scorecard (B1) |
+| `data/index-history/`, `data/canonical-backlog/` | `index-alarms.yml` | `index-probe` (**elle `index-probe.yml` ile paylaşımlı**) | scorecard (B1 çözüldü: #38 üretici şeklini okuyor) |
+| `data/deployment-timeline/` | `deployment-timeline.yml` | `deployment-timeline` | scorecard (B1 çözüldü) |
 | `reports/measure-latest.md`, `reports/runs/<tarih>-measure.md`, `content/topic-ledger.json` | `measure.yml` | `measure` | insanlar/ajanlar |
 | scorecard çıktısı | — (commit **yok**; artifact + summary) | `scorecard` | — |
 
@@ -184,7 +184,7 @@ index 3f8fdd9..0128b3b 100644
 @@ -92,4 +92,10 @@ jobs:
            git push
  
-+      # Salt-okunur ve agsiz: commit'li gecmisten takeover zinciri. Kosu kaydi (--runs) verilmedikce tazelik UNKNOWN ve FULL_TAKEOVER iddia edilmez.
++      # Salt-okunur ve agsiz: commit'li gecmisten takeover zinciri. Kanit history'deki source_run_id: yoksa tazelik UNKNOWN ve FULL_TAKEOVER iddia edilmez (--runs yok).
 +      - name: Takeover durumu
 +        if: always()
 +        run: |
@@ -638,9 +638,9 @@ Her adımda **owner**: PR'ı ready yapar ve merge eder (CLAUDE.md: draft aç, me
 
 | Faz | Adım | Kabul ölçütü (ölçülür, tahmin değil) |
 |---|---|---|
-| **0 Merge** | 0.1 #31–#38'i incele/merge (sıra serbest). 0.2 bağlama PR'ı (`cli-wiring.patch`) | `npm run typecheck` temiz; `npm test` geçer (bu oturumda 669 → yama ile 682). `orchestration-check` exit **1** (beklenen) |
-| **1 Scorecard** (salt-okunur) | 1.1 `scorecard.yml` PR'ı + model/test (yalnız `scorecard-weekly` → GATED). 1.2 Elle dispatch. 1.3 `SEARCH_GROWTH_SCORECARD_ENABLED=true` | Özet: girdisi olmayan boyut **UNKNOWN**, hiçbiri yanlış `OK` değil (B1 nedeniyle index/deployment/opportunity UNKNOWN beklenir). 1.4 İlk Pazartesi 08:10 koşusu görülür |
-| **2 Clarity cutover** (mevcut sıra; bu plan değiştirmez) | `docs/integrations/clarity-daily.md` "Cutover" 1–8. Kanıt aracı: `clarity-takeover-status` (koşu kaydı eksikliği B4) | 7/7 `measurement_success`, iki ayrı UTC gün, her birinde 7/7 taze. **Legacy kapatma ve credential rotation owner eylemidir** |
+| **0 Merge** | 0.1 #31–#38, #40, #41 **MERGE EDİLDİ** (yapıldı). 0.2 bağlama PR'ı (`src/cli.ts` 12 komut + `tests/cli-wiring.test.ts`; `cli-wiring.patch` silindi) — owner incelemesi/merge'ü bekliyor | `npm run typecheck` temiz; `npm test` geçer, 0 skip. `orchestration-check` exit **1** (beklenen) |
+| **1 Scorecard** (salt-okunur) | 1.1 `scorecard.yml` PR'ı + model/test (yalnız `scorecard-weekly` → GATED). 1.2 Elle dispatch. 1.3 `SEARCH_GROWTH_SCORECARD_ENABLED=true` | Özet: girdisi olmayan boyut **UNKNOWN**, hiçbiri yanlış `OK` değil (girdisi henüz üretilmemiş boyutlar UNKNOWN beklenir; B1 çözüldü, veri gelince okunur). 1.4 İlk Pazartesi 08:10 koşusu görülür |
+| **2 Clarity cutover** (mevcut sıra; bu plan değiştirmez) | `docs/integrations/clarity-daily.md` "Cutover" 1–8. Kanıt aracı: `clarity-takeover-status` (kanıt = history `source_run_id`; B4 çözüldü) | 7/7 `measurement_success`, iki ayrı UTC gün, her birinde 7/7 taze. **Legacy kapatma ve credential rotation owner eylemidir** |
 | **3 Lighthouse** | 3.1 Owner PSI anahtarı üretir, secret `SEARCH_GROWTH_PAGESPEED_API_KEY`. 3.2 PR+model. 3.3 Dispatch `site=pamistanbul`, `write_history=false`. 3.4 Artifact'ı şemayla karşılaştır (**ilk canlı doğrulama; üretici belgesi canlı PSI ile doğrulanmadığını söylüyor**). 3.5 7 site, `write_history=true`. 3.6 Değişken | 3.4: kayıtlar şemaya uyar, eksik metrik `null`/UNKNOWN (sıfır değil), anahtar log/artifact'ta yok. 3.5: `data/performance-history/*.json` main'de, çift kayıt yok. PSI kotası/maliyeti bu depoda **UNKNOWN** → owner teyit |
 | **4 Index alarms** | Ön koşul: owner `segmented` zamanlanmış koşuyu ve R2'yi kabul eder. 4.1 PR+model. 4.2 Dispatch iki ayrı günde. 4.3 Değişken | `data/index-history/pamistanbul.json` iki snapshot; **aynı URL'nin ≥2 snapshot'ta görülme oranı raporlanır** (alarm etkinliğinin ön koşulu; ölçülmedi). Alarm yoksa "değerlendirilemeyen URL" sayısı yazılı |
 | **5 Deployment** | 5.1 Owner salt-okunur token üretir (7 depo). 5.2 PR+model. 5.3 Dispatch `write_history=false`. 5.4 `write_history=true`. 5.5 Değişken | Her site için olay sayısı ve `REDDEDILDI` satırları görünür; tüm olaylar `UNVERIFIED`; token yoksa `NOT_CONNECTED`. **Canlı SHA probe'u bu planın dışında (site sahibi kararı)** |
@@ -669,7 +669,7 @@ Adımlar arası bağımlılık: 1 → 2/3/4/5 herhangi sırada (birbirinden bağ
 
 | # | Risk | Etki | Azaltma |
 |---|---|---|---|
-| R1 | **Scorecard ↔ üretici şema uyuşmazlığı** (index `snapshots` vs `records`; deployment `site` vs `site_id`, `generated_at` yok). Ölçüldü (`cli-wiring-plan.md` B1) | iki boyut veri gelse de `UNKNOWN`; `MISMATCH` deploy görünmez. **Güvenli yönde** (yanlış `OK` yok) ama kör | #38 okuyucusunu düzelt (K1); faz 1 kabulünde UNKNOWN beklenir |
+| R1 | ~~Scorecard ↔ üretici şema uyuşmazlığı~~ **ÇÖZÜLDÜ (#38)**: scorecard üreticilerin gerçek şeklini okuyor; üretici fixture'larıyla doğrulandı (`cli-wiring-plan.md` B1, `tests/scorecard-contract.test.ts`) | artık yalnız veri yoksa `UNKNOWN` | izleme: üretici şeması değişirse sözleşme testi düşer |
 | R2 | **İndeks alarmı örnekleme sorunu (ölçülmedi):** alarm aynı URL'nin ≥2 ardışık gözleminde (>24 sa) doğar; `segmented` rotasyonu stateless ve günlük → aynı URL'nin tekrar örneklenme sıklığı bilinmiyor. `--urls` listesi `segmented` ile birlikte kullanılamıyor, `gsc` stratejisinde sitemap üyeliği UNKNOWN → alarm üretilemez | alarm hiç ya da çok seyrek çıkabilir ("sorun yok" izlenimi) | Faz 4'te tekrar-gözlem oranını **ölç ve raporla**; yetersizse küçük sabit izleme listesi için `inspect-index` değişikliği ayrı karar |
 | R3 | `orchestration-check` legacy kapanana kadar kırmızı | CI'da zorunlu kapı yapılırsa herkesi bloke eder | scorecard'da `continue-on-error`, faz 6'da kaldır; `tests.yml`'e **eklenmez** |
 | R4 | İki mevcut koruma testi (index-probe schedule yok; model `PLANNED`) bilinçli güncelleme ister | yanlış PR sırası testleri kırar | PR başına tek iş çevir; `index-probe.yml` dokunulmaz |
@@ -679,6 +679,6 @@ Adımlar arası bağımlılık: 1 → 2/3/4/5 herhangi sırada (birbirinden bağ
 | R8 | Deployment: `created_at` kayıt zamanıdır, canlıya çıkış anı değil; Vercel Git entegrasyonunun GitHub Deployments kaydı oluşturduğu bu depoda **doğrulanmadı**; token kapsamı 7 depo | zaman penceresi kayar; olay hiç gelmeyebilir | tüm olaylar `UNVERIFIED`; `correlate` yalnız INFERENCE/CANDIDATE; boş sonuç "deploy yok" diye yazılmaz |
 | R9 | Branch protection eklenirse bot push'u kırılır | tüm yazıcılar kırmızı | önceden owner'a bildir; alternatif PR tabanlı yazım ayrı karar |
 | R10 | Üretici modüller canlı veriyle uçtan uca denenmedi (yalnız fixture); `index-alarms` gerçek `index-probe` JSON'uyla, `deployment-ingest` gerçek GitHub yanıtıyla ilk kez canlıda | ilk koşu şema sürprizi | faz kabulleri `write_history=false` ilk koşuyu şart koşar |
-| R11 | Takeover koşu kaydı üreticisi yok (B4) | zincir hiç `FULL_TAKEOVER_2_OF_2` olmaz | ayrı küçük iş; o zamana kadar legacy kapatma kararı elle `clarity-daily` çıktılarından |
+| R11 | ~~Takeover koşu kaydı üreticisi yok~~ **ÇÖZÜLDÜ (#31)**: kanıt history `source_run_id`'dir; `--runs`/koşu-kaydı dosyası yok (B4) | — | zincir `clarity-daily` geçmişinden hesaplanır; legacy kapatma kararı owner'ındır |
 | R12 | Değişiklik ledger'ının yazarı yok; kill-switch dosyası depoda yok → `change-eval` strict modda her şeyi engeller | yanlış negatif (boş ledger = bütçe boş) ya da kullanışsız | yalnız bilgi aracı; yazma yolu eklenmeden otomatiğe bağlanmaz |
 | R13 | GitHub zamanlanmış koşuları geciktirebilir; scorecard sıraya güvenmez | bayat girdi | `UNKNOWN-STALE` (varsayılan sınırlar) |

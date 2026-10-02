@@ -34,8 +34,22 @@
 //                                   read-only URL Inspection SAMPLE for pamistanbul only (NOT full coverage).
 //                                   gsc (default) = candidates from the last 28 days of GSC pages;
 //                                   segmented = sitemap + GSC, split into risk segments, stateless daily rotation
-import { mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
-import { join, dirname } from "node:path";
+//   clarity-takeover-status [registry] [--history dir] [--json]                      OFFLINE: takeover zinciri (commit'li history'den; kanit = source_run_id)
+//   deployment-timeline <timeline.json> [--registry path] [--site id]                OFFLINE: cizelge dogrulama + ozet
+//   deployment-ingest <providerJson> --site id --provider github|vercel [--timeline dir] [--write]   OFFLINE: kayitli saglayici JSON'u -> cizelge
+//   content-validate <file.json> [--registry path] [--to STAGE]                      OFFLINE: icerik kaydi / asama gecisi dogrulama
+//   content-classify <rows.json>                                                     OFFLINE: GSC satirlarindan INFERENCE/CANDIDATE siniflandirma
+//   index-alarms [registry] --site id [--probe index-probe.json] [--data dir] [--write]   OFFLINE: indeks alarmi + canonical backlog (ORNEKLEM)
+//   agent-contracts-validate <oneriler.json> [--registry path]                       OFFLINE: ic link / schema-entity onerisi sozlesmesi
+//   performance-measure [registry] [--site id] [--url u]... [--urls-per-site N] [--strategy mobile,desktop] [--max-requests N] [--history dir] [--write] [--out dir]
+//                                   AG (PageSpeed Insights); anahtar PAGESPEED_API_KEY ortam degiskeni; anahtar yoksa NOT_CONNECTED, istek yok
+//   change-eval <proposal.json> [--ledger file] [--kill-switch path] [--allow-absent-kill-switch] [--now iso]   OFFLINE: degisiklik butcesi/kill-switch karari (uygulama izni DEGIL)
+//   change-lint <planned-actions.json> [--registry path]                             OFFLINE: planlanan eylemlerde dogrudan uretim yazma taramasi
+//   scorecard [registry] [--site id] [--json] [--clarity d] [--performance d] [--index d] [--deployments d] [--measure f]   OFFLINE: site basina 6 boyutlu durum karti
+//   orchestration-check [--drift] [--json]                                           OFFLINE: is/kota/cron modeli dogrulama (+ workflow drift)
+//   <yukaridaki 12 entegrasyon komutundan biri> --help   kullanim satirini basar (exit 0, yan etki yok)
+import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from "node:fs";
+import { join, dirname, relative, resolve, isAbsolute } from "node:path";
 import { crawl } from "./crawler.ts";
 import { assessPortfolio, cadenceToMarkdown } from "./cadence.ts";
 import { inspectPortfolio, llmsTxtToMarkdown } from "./llmstxt.ts";
@@ -53,9 +67,34 @@ function opt(name: string): string | undefined;
 function opt(name: string, def?: string) { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] : def; }
 const flag = (name: string) => args.includes(`--${name}`);
 
+// ---- Entegrasyon komutlari (docs/integration/cli-wiring-plan.md): kullanim satirlari, --help, ortak korumalar.
+const INTEGRATION_USAGE: Record<string, string> = {
+  "clarity-takeover-status": "clarity-takeover-status [registry] [--history dir] [--json]   (OFFLINE; kanit = history source_run_id; exit 1: registry/okuma hatasi)",
+  "deployment-timeline": "deployment-timeline <timeline.json> [--registry path] [--site id]   (OFFLINE; exit 1: bozuk/yabanci-site/yok dosya)",
+  "deployment-ingest": "deployment-ingest <providerJson> --site id --provider github|vercel [--registry path] [--timeline dir] [--write]   (OFFLINE; VERIFIED uretmez; --write yalniz repo-yerel dizine)",
+  "content-validate": "content-validate <file.json> [--registry path] [--to STAGE]   (OFFLINE; exit 1: herhangi bir gecersiz kayit)",
+  "content-classify": "content-classify <rows.json> [--registry path]   (OFFLINE; tek siteye ait GscRow dizisi ya da { rows }; karisik/yabanci site reddedilir; cikti her zaman INFERENCE)",
+  "index-alarms": "index-alarms [registry] --site id [--probe index-probe.json] [--data dir] [--write] [--now iso]   (OFFLINE; --write yalniz --probe ile ve repo-yerel dizine)",
+  "agent-contracts-validate": "agent-contracts-validate <oneriler.json> [--registry path]   (OFFLINE; [{ kind: internal_link|schema_entity, input }]; exit 1: ACCEPTED olmayan oge)",
+  "performance-measure": "performance-measure [registry] [--site id] [--url u]... [--urls-per-site N] [--strategy mobile,desktop] [--max-requests N] [--history dir] [--write] [--out dir]   (AG: yalniz PageSpeed Insights GET; anahtar PAGESPEED_API_KEY ortam degiskeni, CLI argumani REDDEDILIR; anahtar yok = NOT_CONNECTED, istek yok)",
+  "change-eval": "change-eval <proposal.json> [--registry path] [--ledger file] [--kill-switch path] [--allow-absent-kill-switch] [--now iso]   (OFFLINE; varsayilan strict: kill-switch dosyasi yoksa engellenir; exit 1: ALLOW_FOR_REVIEW disi)",
+  "change-lint": "change-lint <planned-actions.json> [--registry path]   (OFFLINE; statik tarama; exit 1: ihlal)",
+  "scorecard": "scorecard [registry] [--site id] [--json] [--clarity dir] [--performance dir] [--index dir] [--deployments dir] [--measure file]   (OFFLINE; eksik girdi = UNKNOWN)",
+  "orchestration-check": "orchestration-check [--drift] [--json]   (OFFLINE; exit 1: ERROR bulgusu ya da drift)",
+};
+// Yeni komutlarda beklenmeyen istisna yigin izi degil tek satir hata + exit 1 olur (mevcut komutlarin davranisi degismez).
+const isIntegrationCmd = (c: string | undefined) => c !== undefined && Object.hasOwn(INTEGRATION_USAGE, c);
+// Yazma hedefi yalniz bu deponun (cwd) icinde olabilir: ../ ya da mutlak yol ile baska yere yazmak reddedilir.
+function localOnly(p: string, what: string): string {
+  const rel = relative(process.cwd(), resolve(p));
+  if (rel.startsWith("..") || isAbsolute(rel)) throw new Error(`${what}: yazma hedefi repo-yerel olmali (cwd altinda): ${p}`);
+  return p;
+}
+
 function slug(u: string) { return u.replace(/^https?:\/\//, "").replace(/[^a-z0-9.-]+/gi, "_"); }
 
 async function main() {
+  if (isIntegrationCmd(cmd) && (flag("help") || args.includes("-h"))) { console.log(`kullanim: ${INTEGRATION_USAGE[cmd!]}`); return; }
   switch (cmd) {
     case "crawl":
     case "audit": {
@@ -791,9 +830,234 @@ async function main() {
       catch { console.log(`agent-trace okunamadı: ${String(file).slice(0, 120)}`); }
       return;
     }
+    // ---- Entegrasyon (docs/integration/cli-wiring-plan.md). Hepsi SALT-OKUNUR: uretim sitesine, Vercel'e, GitHub'a yazan komut YOK.
+    // Dosya girdili komutlar `<dosya> [--registry path]` (import-health deseni); registry odakli olanlar `[registry]` (clarity-daily deseni).
+    case "clarity-takeover-status": {
+      const ts = await import("./clarity-takeover-status.ts");
+      let s: ReturnType<typeof ts.loadAndEvaluate>;
+      try { s = ts.loadAndEvaluate(args[1] && !args[1].startsWith("--") ? args[1] : "config/sites.yaml", opt("history", join("data", "clarity-history"))); }
+      catch (e) { console.error((e as Error).message); process.exitCode = 1; return; }
+      console.log(flag("json") ? JSON.stringify(s, null, 2) : ts.statusToMarkdown(s));
+      // Okunamayan/bozuk site gecmisi rapora yazilir AMA kirmizidir (okuma hatasi != "zincir yok"); zincir NONE / NOT_SUCCESS gunler hata degildir.
+      if (s.site_problems.length) process.exitCode = 1;
+      return;
+    }
+    case "deployment-timeline":
+    case "deployment-ingest": {
+      const dt = await import("./deployment-timeline.ts");
+      const file = args[1];
+      if (!file || file.startsWith("--")) { console.error(cmd === "deployment-timeline" ? "kullanim: deployment-timeline <timeline.json> [--registry path] [--site id]" : "kullanim: deployment-ingest <providerJson> --site id --provider github|vercel [--registry path] [--timeline dir] [--write]"); process.exitCode = 1; return; }
+      const reg = loadRegistry(opt("registry", join("config", "sites.yaml")));
+      if (!reg.ok || !reg.registry) { console.error(reg.errors.join("\n")); process.exitCode = 1; return; }
+      try {
+        if (cmd === "deployment-timeline") {
+          const tl = dt.parseTimeline(readFileSync(file, "utf8"));
+          if (!reg.registry.sites.some((x) => x.id === tl.site)) throw new dt.TimelineError(`site registry'de yok: ${tl.site}`);
+          if (opt("site") && opt("site") !== tl.site) throw new dt.TimelineError(`--site ${opt("site")} ile dosya sitesi ${tl.site} uyusmuyor`);
+          const by = (k: "environment" | "verification_state") => Object.entries(tl.events.reduce<Record<string, number>>((a, e) => ({ ...a, [e[k]]: (a[e[k]] ?? 0) + 1 }), {})).map(([n, c]) => `${n}=${c}`).join(" ") || "-";
+          console.log(`deployment-timeline ${tl.site}: ${tl.events.length} olay · ortam ${by("environment")} · dogrulama ${by("verification_state")}`);
+          console.log("VERIFIED yalniz canli SHA ile eslesme demektir; UNVERIFIED/UNKNOWN 'deploy dogrulandi' diye okunmaz.");
+          return;
+        }
+        const site = opt("site"), provider = opt("provider");
+        if (!site || !reg.registry.sites.some((x) => x.id === site)) throw new dt.TimelineError(`site registry'de yok: ${String(site)}`);
+        if (provider !== "github" && provider !== "vercel") throw new dt.TimelineError("--provider github | vercel olmali");
+        const raw = JSON.parse(readFileSync(file, "utf8"));
+        const parsed = provider === "github" ? dt.parseGithubDeployments(raw, site, new Date().toISOString()) : dt.parseVercelDeployments(raw, site, new Date().toISOString());
+        const tlDir = opt("timeline", join("data", "deployment-timeline"));
+        if (flag("write")) localOnly(tlDir, "--timeline");
+        const path = join(tlDir, `${site}.json`);
+        let tl = existsSync(path) ? dt.parseTimeline(readFileSync(path, "utf8")) : dt.emptyTimeline(site);
+        let added = 0;
+        for (const e of parsed.events) { const r = dt.appendEvent(tl, e); tl = r.timeline; if (r.added) added++; }
+        console.log(`deployment-ingest ${site} (${provider}): ${parsed.events.length} olay okundu · ${added} yeni · ${parsed.rejected.length} reddedildi`);
+        for (const r of parsed.rejected) console.log(`REDDEDILDI #${r.index}: ${r.reason}`);
+        if (flag("write")) { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, JSON.stringify(tl, null, 2) + "\n"); console.log(`yazildi: ${path}`); }
+        else console.log("(--write verilmedi: hicbir dosya yazilmadi)");
+      } catch (e) { console.error(`${cmd} HATA: ${(e as Error).message}`); process.exitCode = 1; }
+      return;
+    }
+    case "content-validate":
+    case "content-classify": {
+      const cp = await import("./content-pipeline.ts");
+      const file = args[1];
+      if (!file || file.startsWith("--")) { console.error(`kullanim: ${cmd} <dosya.json>${cmd === "content-validate" ? " [--registry path] [--to STAGE]" : " [--registry path]"}`); process.exitCode = 1; return; }
+      let data: unknown;
+      try { data = JSON.parse(readFileSync(file, "utf8")); } catch { console.error(`dosya okunamadi ya da JSON degil: ${file}`); process.exitCode = 1; return; }
+      if (cmd === "content-classify") {
+        const rows = Array.isArray(data) ? data : (data as { rows?: unknown })?.rows;
+        if (!Array.isArray(rows)) { console.error("girdi GscRow dizisi ya da { rows: [...] } olmali"); process.exitCode = 1; return; }
+        // Portfoy izolasyonu: tek siteye ait, kayitli siteden gelen satirlar. Karisik/yabanci/sitesiz satir sessizce havuzlanmaz (kural 3).
+        const creg = loadRegistry(opt("registry", join("config", "sites.yaml")));
+        if (!creg.ok || !creg.registry) { console.error(creg.errors.join("\n")); process.exitCode = 1; return; }
+        if (!rows.length) { console.error("satir yok: siniflandirilacak girdi bos (UNKNOWN, uydurma sonuc uretilmez)"); process.exitCode = 1; return; }
+        const rowSites = new Set(rows.map((r) => (r && typeof r === "object" && typeof (r as { site?: unknown }).site === "string" ? (r as { site: string }).site : "")));
+        if (rowSites.size !== 1 || rowSites.has("")) { console.error("SITE IZOLASYONU: her satir ayni `site` degerini tasimali (karisik ya da sitesiz satir reddedildi)"); process.exitCode = 1; return; }
+        const rowSite = [...rowSites][0];
+        if (!creg.registry.sites.some((x) => x.id === rowSite)) { console.error(`site bulunamadi: ${rowSite}`); process.exitCode = 1; return; }
+        console.log(JSON.stringify(cp.classifyFromEvidence(rows as Parameters<typeof cp.classifyFromEvidence>[0]), null, 2));
+        return;
+      }
+      const reg = loadRegistry(opt("registry", join("config", "sites.yaml")));
+      if (!reg.ok || !reg.registry) { console.error(reg.errors.join("\n")); process.exitCode = 1; return; }
+      const to = opt("to");
+      if (to && !(cp.STAGES as readonly string[]).includes(to)) { console.error(`gecersiz --to: ${to}`); process.exitCode = 1; return; }
+      let bad = 0;
+      for (const item of Array.isArray(data) ? data : [data]) {
+        if (!item || typeof item !== "object" || Array.isArray(item)) { console.log("GECERSIZ ?/?: kayit nesne degil"); bad++; continue; }
+        const ref = item as { site?: string; id?: string };
+        const res = to ? cp.validateTransition(item as Parameters<typeof cp.validateTransition>[0], to as Parameters<typeof cp.validateTransition>[1], reg.registry.sites) : cp.validateItem(item, reg.registry.sites);
+        console.log(res.ok ? `OK ${ref?.site}/${ref?.id}${to ? ` -> ${to}` : ""}` : `GECERSIZ ${ref?.site}/${ref?.id}: ${res.errors.join("; ")}`);
+        if (!res.ok) bad++;
+      }
+      if (bad) process.exitCode = 1;
+      return;
+    }
+    case "index-alarms": {
+      const ia = await import("./index-alarms.ts");
+      const siteId = opt("site");
+      if (!siteId) { console.error("kullanim: index-alarms [registry] --site id [--probe <index-probe.json>] [--data dir] [--write] [--now iso]"); process.exitCode = 1; return; }
+      const reg = loadRegistry(args[1] && !args[1].startsWith("--") ? args[1] : "config/sites.yaml");
+      if (!reg.ok || !reg.registry) { console.error(reg.errors.join("\n")); process.exitCode = 1; return; }
+      if (!reg.registry.sites.some((x) => x.id === siteId)) { console.error(`site bulunamadi: ${siteId}`); process.exitCode = 1; return; }
+      const root = opt("data", "data"), now = opt("now") ?? new Date().toISOString();
+      try {
+        let h = ia.loadHistory(siteId, root), b = ia.loadBacklog(siteId, root);
+        const probeFile = opt("probe");
+        if (probeFile) {
+          const probe = JSON.parse(readFileSync(probeFile, "utf8"))?.probe as Parameters<typeof ia.snapshotFromProbe>[0] | undefined;
+          if (!probe || !Array.isArray(probe.results)) throw new Error(`${probeFile}: index-probe cikti dosyasi degil (probe.results yok)`);
+          if (probe.site !== siteId) throw new Error(`SITE IZOLASYONU: ${probeFile} ${String(probe.site)} sitesine ait, --site ${siteId}`);
+          h = ia.appendSnapshot(h, ia.snapshotFromProbe(probe, now));
+          b = ia.updateBacklog(b, probe.results, now);
+          if (flag("write")) { localOnly(root, "--data"); ia.saveHistory(h, root); ia.saveBacklog(b, root); }
+        } else if (flag("write")) throw new Error("--write yalniz --probe ile anlamli (kaydedilecek yeni gozlem yok)");
+        console.log(ia.reportToMarkdown(ia.buildReport(h, b, now)));
+        if (!flag("write")) console.log("(--write verilmedi: hicbir dosya yazilmadi)");
+      } catch (e) { console.error(`index-alarms HATA: ${(e as Error).message}`); process.exitCode = 1; }
+      return;
+    }
+    case "agent-contracts-validate": {
+      const ac = await import("./agent-contracts.ts");
+      const file = args[1];
+      if (!file || file.startsWith("--")) { console.error("kullanim: agent-contracts-validate <oneriler.json> [--registry path]   (dizi: { kind: internal_link | schema_entity, input })"); process.exitCode = 1; return; }
+      const reg = loadRegistry(opt("registry", join("config", "sites.yaml")));
+      if (!reg.ok || !reg.registry) { console.error(reg.errors.join("\n")); process.exitCode = 1; return; }
+      let data: unknown;
+      try { data = JSON.parse(readFileSync(file, "utf8")); } catch { console.error(`dosya okunamadi ya da JSON degil: ${file}`); process.exitCode = 1; return; }
+      if (!Array.isArray(data)) { console.error("girdi { kind, input } dizisi olmali"); process.exitCode = 1; return; }
+      const items: Parameters<typeof ac.renderReviewQueue>[0] = [];
+      for (const [i, it] of data.entries()) {
+        const k = (it as { kind?: string })?.kind, input = (it as { input?: unknown })?.input;
+        if (k !== "internal_link" && k !== "schema_entity") { console.error(`oge ${i}: kind internal_link | schema_entity olmali`); process.exitCode = 1; return; }
+        items.push({ kind: k, input, result: k === "internal_link" ? ac.validateInternalLink(input, reg.registry) : ac.validateSchemaEntity(input, reg.registry) });
+      }
+      console.log(ac.renderReviewQueue(items));
+      const sum = ac.summarize(items);
+      console.log(`ozet: ${Object.entries(sum).map(([k, v]) => `${k}=${v}`).join(" ")}`);
+      if (items.some((x) => x.result.verdict !== "ACCEPTED")) process.exitCode = 1;   // ACCEPTED = uygulama izni degil, yalniz sozlesmeye uygun
+      return;
+    }
+    // AG: yalniz PageSpeed Insights (Google). Anahtar yalniz ortam degiskeninden (PAGESPEED_API_KEY); CLI argumani olarak REDDEDILIR ve yankilanmaz.
+    case "performance-measure": {
+      const pf = await import("./performance.ts");
+      if (args.some((a) => /^--?[\w-]*(key|token|secret)/i.test(a))) { console.error("anahtar/token/secret CLI argumani olarak kabul edilmez (deger yankilanmaz); PAGESPEED_API_KEY ortam degiskenini (GitHub Secret) kullan."); process.exitCode = 1; return; }
+      const reg = loadRegistry(args[1] && !args[1].startsWith("--") ? args[1] : "config/sites.yaml");
+      if (!reg.ok || !reg.registry) { console.error(reg.errors.join("\n")); process.exitCode = 1; return; }
+      const only = opt("site");
+      if (only && !reg.registry.sites.some((x) => x.id === only)) { console.error(`site bulunamadi: ${only}`); process.exitCode = 1; return; }
+      const urls = args.flatMap((a, i) => (a === "--url" && args[i + 1] ? [args[i + 1]] : []));
+      if (urls.length && !only) { console.error("--url yalniz --site ile (baska sitenin URL'i reddedilir)"); process.exitCode = 1; return; }
+      const strategies = opt("strategy", "mobile").split(",").filter((x) => x === "mobile" || x === "desktop") as Array<"mobile" | "desktop">;
+      if (!strategies.length) { console.error("--strategy mobile | desktop | mobile,desktop"); process.exitCode = 1; return; }
+      const num = (n: string): number | undefined => { const v = opt(n); if (v === undefined) return undefined; const x = Number(v); if (!Number.isInteger(x) || x < 1) throw new Error(`--${n} pozitif tam sayi olmali`); return x; };
+      const urlsPerSite = num("urls-per-site"), maxRequests = num("max-requests");
+      const historyDir = opt("history", join("data", "performance-history"));
+      const outDir = opt("out");
+      if (flag("write")) localOnly(historyDir, "--history");
+      if (outDir) localOnly(outDir, "--out");
+      const rep = await pf.runPerformance({
+        sites: reg.registry.sites, siteFilter: only ? [only] : undefined, urlsBySite: only && urls.length ? { [only]: urls } : undefined,
+        urlsPerSite, strategies, maxRequests,
+        historyDir, writeHistory: flag("write"),
+      });
+      const md = pf.reportMarkdown(rep);
+      console.log(md);
+      if (!flag("write")) console.log("(--write verilmedi: gecmis dosyasina yazilmadi)");
+      const out = outDir;
+      if (out) { mkdirSync(out, { recursive: true }); writeFileSync(join(out, "performance-report.json"), JSON.stringify(rep, null, 2) + "\n"); writeFileSync(join(out, "performance-report.md"), md); }
+      // NOT_CONNECTED (anahtar yok) kimlik yok demektir, hata degil; bozuk gecmis ve ERROR kayit isi kirmizi yapar.
+      // Acikca verilen --url baska siteye aitse (host disi) reddedilir: sessiz atlanmaz, cikis 1 (portfoy izolasyonu).
+      if (urls.length && rep.sites.some((s) => s.rejected_urls.length)) process.exitCode = 1;
+      if (rep.sites.some((s) => s.action === "HISTORY_CORRUPT" || s.records.some((r) => r.state === "ERROR"))) process.exitCode = 1;
+      return;
+    }
+    case "change-eval":
+    case "change-lint": {
+      const cs = await import("./change-safety.ts");
+      const file = args[1];
+      if (!file || file.startsWith("--")) { console.error(cmd === "change-eval" ? "kullanim: change-eval <proposal.json> [--registry path] [--ledger file] [--kill-switch path] [--allow-absent-kill-switch] [--now iso]" : "kullanim: change-lint <planned-actions.json> [--registry path]"); process.exitCode = 1; return; }
+      const reg = loadRegistry(opt("registry", join("config", "sites.yaml")));
+      if (!reg.ok || !reg.registry) { console.error(reg.errors.join("\n")); process.exitCode = 1; return; }
+      let data: unknown;
+      try { data = JSON.parse(readFileSync(file, "utf8")); } catch { console.error(`dosya okunamadi ya da JSON degil: ${file}`); process.exitCode = 1; return; }
+      if (cmd === "change-lint") {
+        if (!Array.isArray(data)) { console.error("girdi PlannedAction dizisi olmali"); process.exitCode = 1; return; }
+        const productionHosts = reg.registry.sites.flatMap((s) => [s.production_domain, s.canonical_hostname]).filter((h): h is string => !!h && !["UNKNOWN", "NOT_CONNECTED"].includes(h));
+        const lint = cs.lintPlannedActions(data as Parameters<typeof cs.lintPlannedActions>[0], { productionHosts });
+        for (const v of lint.violations) console.log(`IHLAL #${v.index} ${v.rule}: ${v.message}`);
+        console.log(lint.ok ? "change-lint: ihlal yok (statik tarama; degiskenle kurulan komutlari gormez)" : `change-lint: ${lint.violations.length} ihlal`);
+        if (!lint.ok) process.exitCode = 1;
+        return;
+      }
+      if (!data || typeof data !== "object" || Array.isArray(data)) { console.error("girdi bir proposal nesnesi olmali"); process.exitCode = 1; return; }
+      const p = data as Parameters<typeof cs.evaluate>[0];
+      let ledger: Parameters<typeof cs.evaluate>[1] = [];
+      if (opt("ledger")) { try { ledger = JSON.parse(readFileSync(opt("ledger")!, "utf8")); } catch { console.error("ledger okunamadi ya da JSON degil"); process.exitCode = 1; return; } }
+      // strict: kill-switch dosyasi YOKSA da engaged sayilir (fail-closed). Dosya depoda bilerek yok; ornek: schemas/kill-switch.example.json.
+      const ks = cs.readKillSwitch(opt("kill-switch", join("data", "kill-switch.json")), String(p?.site_id), { knownSiteIds: reg.registry.sites.map((x) => x.id), strict: !flag("allow-absent-kill-switch") });
+      const ev = cs.evaluate(p, ledger, { registry: reg.registry, killSwitch: ks, now: opt("now") ? new Date(opt("now")!) : new Date() });
+      console.log(JSON.stringify({ ...ev, kill_switch_source: ks.source }, null, 2));
+      console.log("ALLOW_FOR_REVIEW yalniz INCELEME icindir; uygulama izni degildir. Merge ve deploy her zaman insan eylemidir.");
+      if (ev.verdict !== "ALLOW_FOR_REVIEW") process.exitCode = 1;
+      return;
+    }
+    case "scorecard": {
+      const sc = await import("./scorecard.ts");
+      const reg = loadRegistry(args[1] && !args[1].startsWith("--") ? args[1] : "config/sites.yaml");
+      if (!reg.ok || !reg.registry) { console.error(reg.errors.join("\n")); process.exitCode = 1; return; }
+      const only = opt("site");
+      const sites = reg.registry.sites.filter((s) => !only || s.id === only);
+      if (!sites.length) { console.error(`site bulunamadi: ${only}`); process.exitCode = 1; return; }
+      // Kayitli HER site icin olcum karti (kural 3); tavsiye uretilmez. Eksik girdi = UNKNOWN, asla OK.
+      const paths = { clarityDir: opt("clarity", join("data", "clarity-history")), performanceDir: opt("performance", join("data", "performance-history")), indexDir: opt("index", join("data", "index-history")), deploymentDir: opt("deployments", join("data", "deployment-timeline")), measureFile: opt("measure") };
+      // Modul okunamayan dosyayi "yok" sayar (UNKNOWN: guvenli ama yaniltici sebep). CLI bozuk/eksik girdiyi acikca reddeder: sessizce UNKNOWN'a dusmez.
+      for (const o of ["clarity", "performance", "index", "deployments", "measure"]) if (opt(o) !== undefined && !existsSync(opt(o)!)) throw new Error(`--${o} yolu yok: ${opt(o)}`);
+      const artifactFiles = sites.flatMap((s) => [paths.clarityDir, paths.performanceDir, paths.indexDir, paths.deploymentDir].map((d) => join(d, `${s.id}.json`))).concat(paths.measureFile ? [paths.measureFile] : []);
+      for (const f of artifactFiles) if (existsSync(f)) { try { JSON.parse(readFileSync(f, "utf8")); } catch { throw new Error(`bozuk girdi (JSON degil): ${f}`); } }
+      const p = sc.buildPortfolio(sites.map((s) => sc.loadInputs(paths, s.id, s.onboarding_status)));
+      console.log(flag("json") ? JSON.stringify(p, null, 2) : sc.scorecardToMarkdown(p));
+      return;
+    }
+    case "orchestration-check": {
+      const oc = await import("./orchestration.ts");
+      const issues = oc.validateModel();
+      let drift: ReturnType<typeof oc.diffWorkflows> = [];
+      if (flag("drift")) {
+        const wd = join(".github", "workflows");
+        const wf: Record<string, string> = {};
+        for (const f of readdirSync(wd).filter((n) => n.endsWith(".yml"))) wf[f] = readFileSync(join(wd, f), "utf8");
+        drift = oc.diffWorkflows(wf);
+      }
+      console.log(flag("json") ? JSON.stringify({ issues, drift }, null, 2) : oc.modelToMarkdown(undefined, issues));
+      for (const d of drift) console.log(`DRIFT ${d.kind} ${d.workflow}: ${d.detail}`);
+      // ERROR = DUPLICATE_SCHEDULER dahil: legacy rutin DISABLED olana kadar bugun KIRMIZI olmasi beklenen bir durumdur (docs/integration/workflow-architecture.md).
+      if (issues.some((i) => i.severity === "ERROR") || drift.length) process.exitCode = 1;
+      return;
+    }
     default:
-      console.error("commands: crawl | audit | compliance | registry | integrations | measure | detail | topics | smoke | portfolio | llmstxt | import-health | inspect-index | clarity-smoke | clarity-measure | clarity-daily | brain-evidence | brain-handoff | brain-validate | brain-run | brain-trace-summary");
+      console.error("commands: crawl | audit | compliance | registry | integrations | measure | detail | topics | smoke | portfolio | llmstxt | import-health | inspect-index | clarity-smoke | clarity-measure | clarity-daily | brain-evidence | brain-handoff | brain-validate | brain-run | brain-trace-summary | clarity-takeover-status | deployment-timeline | deployment-ingest | content-validate | content-classify | index-alarms | agent-contracts-validate | performance-measure | change-eval | change-lint | scorecard | orchestration-check");
       process.exitCode = 1;
   }
 }
-main().catch((e) => { console.error(e); process.exitCode = 1; });
+main().catch((e) => { if (isIntegrationCmd(cmd)) console.error(`${cmd} HATA: ${e instanceof Error ? e.message : "beklenmeyen hata"}`); else console.error(e); process.exitCode = 1; });
