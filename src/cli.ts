@@ -14,6 +14,9 @@
 //   clarity-smoke [registry]        OFFLINE: token map shape, site routing and request budget (NO API call, NO token printed)
 //   clarity-measure [registry] [--site id] [--out dir]
 //                                   native Microsoft Clarity export: 3 requests/site/run, numOfDays=1; writes JSON+MD to --out (default clarity-out)
+//   clarity-daily [registry] [--site id] [--out dir] [--history dir] [--force] [--no-write-history]
+//                                   daily native Clarity: per-site UTC-day record (data/clarity-history), same-day guard (0 API calls if a usable
+//                                   record exists; --force overrides), deterministic alerts (friction increase, bot ratio). No LLM, no notification
 //   brain-evidence [registry] --site id --clarity <clarity-<site>.json> [--out file]
 //                                   normalize existing collector output into a sgos.brain.evidence-bundle.v1 file (local, no network)
 //   brain-handoff [registry] --site id --run-id N --repo owner/repo [--artifact-dir d] [--run-meta f] [--artifacts-meta f] [--handoff-run-id N] [--out dir=handoff-out]
@@ -483,6 +486,36 @@ async function main() {
       if (results.some((r) => r.measurement_state === "ERROR" || r.measurement_state === "PARTIAL") || parsed.problems.length) process.exitCode = 1;
       return;
     }
+    // Clarity gunluk: ayni token kurali (yalniz ortam degiskeni). Gecmis dosyalari --history altinda; commit workflow'da.
+    case "clarity-daily": {
+      const cl = await import("./adapters/clarity.ts");
+      const daily = await import("./clarity-daily.ts");
+      if (args.some((a) => /^--?(clarity[-_]?)?tokens?\b/i.test(a))) {
+        console.error(`Clarity token'i CLI argumani olarak kabul edilmez; ${cl.CLARITY_ENV} ortam degiskenini (GitHub Secret) kullan.`);
+        process.exitCode = 1; return;
+      }
+      const reg = loadRegistry(args[1] && !args[1].startsWith("--") ? args[1] : "config/sites.yaml");
+      if (!reg.ok || !reg.registry) { console.error(reg.errors.join("\n")); process.exitCode = 1; return; }
+      const only = opt("site");
+      const ids = reg.registry.sites.map((x) => x.id).filter((id) => !only || id === only);
+      if (only && !ids.length) { console.error(`site bulunamadi: ${only}`); process.exitCode = 1; return; }
+      const parsed = cl.parseClarityTokens(process.env[cl.CLARITY_ENV]);
+      const out = await daily.runDaily({
+        siteIds: ids, tokens: parsed.tokens, outDir: opt("out", "clarity-out"), historyDir: opt("history", join("data", "clarity-history")),
+        force: args.includes("--force"), writeHistory: !args.includes("--no-write-history"), sourceRunId: process.env.GITHUB_RUN_ID,
+      });
+      console.log(`Clarity günlük (${out.date} UTC):`);
+      for (const s of out.sites) {
+        const r = out.results.find((x) => x.site_id === s.site_id);
+        console.log(s.action === "MEASURED" && r ? `${cl.summaryLine(r)} · geçmiş ${s.history_action}` : `${s.action} ${s.site_id}${s.note ? ` — ${s.note}` : ""}`);
+      }
+      for (const a of out.alerts) console.log(`ALERT ${a.site_id} ${a.kind} — ${a.note}`);
+      for (const p of parsed.problems) console.log(`SORUN ${p}`);
+      console.log(`alert ${out.alerts.length} · HTTP denemesi ${out.http_attempts}`);
+      // ERROR / PARTIAL / bozuk gecmis gorunur kalsin (is kirmizi); NOT_CONNECTED, alert ve atlanan site degildir.
+      if (out.results.some((r) => r.measurement_state === "ERROR" || r.measurement_state === "PARTIAL") || out.sites.some((s) => s.action === "HISTORY_ERROR") || parsed.problems.length) process.exitCode = 1;
+      return;
+    }
     // Brain: bulut akil yuruten katman. Anahtar YALNIZCA ortam degiskeninden okunur; CLI argumani olarak
     // asla kabul edilmez ve reddedilirken degeri yankilanmaz.
     case "brain-evidence":
@@ -738,7 +771,7 @@ async function main() {
       return;
     }
     default:
-      console.error("commands: crawl | audit | compliance | registry | integrations | measure | detail | topics | smoke | portfolio | llmstxt | import-health | inspect-index | clarity-smoke | clarity-measure | brain-evidence | brain-handoff | brain-validate | brain-run | brain-trace-summary");
+      console.error("commands: crawl | audit | compliance | registry | integrations | measure | detail | topics | smoke | portfolio | llmstxt | import-health | inspect-index | clarity-smoke | clarity-measure | clarity-daily | brain-evidence | brain-handoff | brain-validate | brain-run | brain-trace-summary");
       process.exitCode = 1;
   }
 }

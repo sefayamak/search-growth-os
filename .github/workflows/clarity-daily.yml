@@ -1,0 +1,103 @@
+# Search Growth OS — Clarity GUNLUK toplama + gecmis + minimum alert (salt-okunur ölçüm)
+#
+# NEDEN VAR: eski site-health-monitor rutininin Clarity görevini (günlük toplama, gün-üzeri-gün geçmiş,
+# friction artışı / bot oranı alert'i) native hatta taşımak. Kapsam bundan ibarettir.
+#
+# !! KONTROLLÜ DEVİR (cutover) !! GitHub Actions cron'u bu dosya main'e girer girmez çalışır. Eski rutin
+# hâlâ açıkken ikinci günlük toplama Clarity kotasını (proje başına 10 istek/gün) yakar. Bu yüzden ZAMANLANMIŞ
+# koşu yalnız repo değişkeni SEARCH_GROWTH_CLARITY_DAILY_ENABLED == 'true' ise çalışır; değişken yoksa iş
+# ATLANIR (skipped, API çağrısı yok). Elle başlatma (workflow_dispatch) bayrağa bağlı DEĞİLDİR: insan eylemidir.
+# Sıra: docs/integrations/clarity-daily.md "Cutover".
+#
+# KOTA: site başına 3 istek (en fazla 4 HTTP denemesi). Aynı UTC günde kullanılabilir kaydı olan site için
+# API çağrısı YAPILMAZ (elle tekrar ve zamanlanmış koşu birbirinin kotasını yemez); `force` bunu bilerek aşar.
+# concurrency grubu `clarity.yml` ile AYNI: iki Clarity işi aynı anda koşmaz.
+# Eski rutin (~06:10 UTC, 3 istek/proje) açıkken: 3 + 3 = 6 / 10. 07:20 UTC bilerek eski rutinden sonradır.
+#
+# YAZMA: yalnız `data/clarity-history/` altına geçmiş commit'i (main). Hiçbir üretim sitesine, Vercel'e,
+# secret'a yazılmaz. Token YALNIZCA `secrets.*` -> env; komut satırına, loga, artifact'e, commit'e girmez.
+# Alert = step summary + `clarity-alerts.json` (artifact). Bildirim entegrasyonu YOK.
+
+name: Clarity daily (native, read-only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      site:
+        description: "Tek site kimliği (boş = registry'deki tüm siteler)."
+        type: string
+        default: ""
+      force:
+        description: "Aynı UTC günde kullanılabilir kayıt olsa bile yeniden ölç (KOTA harcar)."
+        type: boolean
+        default: false
+      commit_history:
+        description: "Günlük geçmişi main'e yaz (kapatırsan yalnız artifact üretir)."
+        type: boolean
+        default: true
+  schedule:
+    # 07:20 UTC — eski rutinin (~06:10) sonrası. Cutover bayrağı kapalıyken iş atlanır.
+    - cron: "20 7 * * *"
+
+permissions:
+  contents: write # yalnız data/clarity-history/ commit'i için
+
+concurrency:
+  group: clarity
+  cancel-in-progress: false
+
+jobs:
+  clarity-daily:
+    name: clarity günlük (3 istek / site)
+    if: github.event_name == 'workflow_dispatch' || vars.SEARCH_GROWTH_CLARITY_DAILY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: "24"
+
+      - name: Registry gate
+        run: node --experimental-strip-types src/cli.ts registry config/sites.yaml
+
+      - name: Clarity günlük
+        env:
+          SEARCH_GROWTH_CLARITY_TOKENS_JSON: ${{ secrets.SEARCH_GROWTH_CLARITY_TOKENS_JSON }}
+          SITE: ${{ inputs.site }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -o pipefail
+          case "$SITE" in ''|*[!a-z0-9]*) [ -z "$SITE" ] || { echo "site kimligi kucuk harf/rakam olmali"; exit 1; };; esac
+          FORCE_FLAG=""; [ "$FORCE" = "true" ] && FORCE_FLAG="--force"
+          node --experimental-strip-types src/cli.ts clarity-daily config/sites.yaml --out clarity-out --history data/clarity-history ${SITE:+--site "$SITE"} $FORCE_FLAG | tee clarity-daily.txt
+
+      - name: Ozet
+        if: always()
+        run: |
+          { cat clarity-out/clarity-daily.md 2>/dev/null || echo "Clarity gunluk raporu uretilemedi — adim loglarina bak."; } >> "$GITHUB_STEP_SUMMARY"
+
+      # Gecmis main zincirinde yasar: eski rutinin her gun ayri dala push etme hatasi tekrarlanmaz.
+      # Degisiklik yoksa commit yok. Yarisi onlemek icin commit sonrasi rebase.
+      - name: Gecmisi main'e yaz
+        if: always() && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || inputs.commit_history)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/clarity-history/
+          git diff --cached --quiet && { echo "gecmis degismedi"; exit 0; }
+          git commit -m "clarity: gunluk ozet $(date -u +%Y-%m-%d) (otomatik)"
+          git pull --rebase origin main
+          git push
+
+      - name: Artifact
+        if: always()
+        uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5.0
+        with:
+          name: clarity-daily-${{ github.run_id }}
+          path: |
+            clarity-out/
+            clarity-daily.txt
+          retention-days: 30
+          if-no-files-found: warn

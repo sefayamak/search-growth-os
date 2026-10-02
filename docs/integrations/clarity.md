@@ -113,4 +113,4 @@ SEARCH_GROWTH_CLARITY_TOKENS_JSON='...'                    node --experimental-s
 ## Legacy site-health-monitor sınırı
 
 Bu fazda eski rutin **kapatılmadı, değiştirilmedi, arşivlenmedi**. Native hat en az **2 başarılı takeover koşusu** üretmeden legacy Clarity yolu kapatılmaz.
-Kalıcı geçmiş (history) ve zamanlama ilk canlı doğrulamadan sonra ayrıca tasarlanır.
+Kalıcı geçmiş, günlük toplama, alert ve zamanlama: [`clarity-daily.md`](clarity-daily.md) (`clarity-daily` komutu, `clarity-daily.yml`; **canlı doğrulanmadı**, cutover bayrağı kapalı). `clarity.yml` bu fazın elle, salt-okunur hâli olarak değişmeden kalır.
