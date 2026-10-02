@@ -1,0 +1,9 @@
+{
+  "schema": "sgos.kill-switch.v1",
+  "_comment": "ORNEK, devrede degil. Kullanmak icin data/kill-switch.json olarak kopyalayin. Bu depoda data/kill-switch.json bilerek yok.",
+  "global": { "engaged": false, "reason": "", "engaged_at": "", "engaged_by": "" },
+  "sites": {
+    "pamistanbul": { "engaged": false, "reason": "", "engaged_at": "", "engaged_by": "" },
+    "spryhand": { "engaged": true, "reason": "ornek: beklenmeyen trafik dususu incelenirken dondur", "engaged_at": "2026-10-02T10:00:00Z", "engaged_by": "Sefa Yamak" }
+  }
+}
