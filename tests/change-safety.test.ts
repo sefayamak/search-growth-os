@@ -380,7 +380,12 @@ test("B gercek dosyadan: ABSENT dosya BLOCKED, taze okunmus kapali dosya gecer; 
   const k = readKillSwitch(join(d, "ks.json"), "pamistanbul", { knownSiteIds: IDS });
   assert.equal(k.source, "FILE");
   assert.ok(k.read_at && k.site_id === "pamistanbul");
-  assert.equal(authorizeProductionMutation({ ...bin(), killSwitch: k, now: new Date(k.read_at!) }).decision, "AUTHORIZED_FOR_HUMAN_EXECUTION");
+  // readKillSwitch read_at'i GERCEK saatten uretir (saat enjekte edilemez). Sabit tarihli ARM, duvar saati
+  // 2026-10-02T12:00Z'yi gecince suresi dolmus sayilip bu testi kirdi (zaman bombasi). Arm penceresi bu yuzden
+  // read_at'e gore turetilir: test hangi gun kosarsa kossun ayni sonucu verir.
+  const readAt = new Date(k.read_at!).getTime();
+  const arm: ArmToken = { ...ARM, armed_at: new Date(readAt - 30 * 60_000).toISOString(), scope: { ...ARM.scope, expires_at: new Date(readAt + 60 * 60_000).toISOString() } };
+  assert.equal(authorizeProductionMutation({ ...bin(), arm, killSwitch: k, now: new Date(k.read_at!) }).decision, "AUTHORIZED_FOR_HUMAN_EXECUTION");
   assert.ok(gates({ ...bin({ killSwitch: { engaged: false, source: "ABSENT", reason: "yok" } }), strict: false, allowAbsent: true } as any).includes("kill_switch"));
 });
 
