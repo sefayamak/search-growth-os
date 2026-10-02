@@ -1,0 +1,132 @@
+{
+  "schema": "sgos.performance-report.v1",
+  "generated_at": "2026-10-01T06:00:00.000Z",
+  "budget": {
+    "limit": 70,
+    "used": 2,
+    "unit": "psi_requests"
+  },
+  "thresholds_ref": {
+    "source": "web.dev/vitals",
+    "accessed": "NOT_RETRIEVED_THIS_SESSION",
+    "status": "DOCUMENTED_ASSUMPTION"
+  },
+  "validation_status": {
+    "psi_response_shape": "NOT_LIVE_VALIDATED",
+    "psi_quota_behaviour": "NOT_LIVE_VALIDATED",
+    "crux_availability_7_sites": "NOT_LIVE_VALIDATED",
+    "crux_cls_percentile_unit": "NOT_LIVE_VALIDATED",
+    "lab_inp_audit_presence": "NOT_LIVE_VALIDATED",
+    "cwv_thresholds": "DOCUMENTED_ASSUMPTION"
+  },
+  "unit_assumptions": {
+    "lcp_ms": "ms (CrUX percentile ve lab numericValue)",
+    "inp_ms": "ms (CrUX percentile)",
+    "ttfb_ms": "ms (CrUX percentile ve lab server-response-time numericValue)",
+    "cls": "birimsiz. CrUX percentile: tamsayi ise x100 (10 -> 0.10) VARSAYIMI; ondalikli sayi/dizge ise zaten birimsiz. Lab numericValue birimsiz."
+  },
+  "sites": [
+    {
+      "site": "pamistanbul",
+      "onboarding_status": "pilot_onboarding",
+      "action": "MEASURED",
+      "records": [
+        {
+          "schema": "sgos.performance.v1",
+          "site": "pamistanbul",
+          "url": "https://www.pamistanbul.com/",
+          "strategy": "mobile",
+          "measured_at": "2026-10-01T06:00:00.000Z",
+          "date": "2026-10-01",
+          "lcp_ms": 2900,
+          "inp_ms": 180,
+          "cls": 0.05,
+          "ttfb_ms": 600,
+          "perf_score": 80,
+          "source": "field",
+          "field_scope": "url",
+          "state": "MEASURED",
+          "evidence": "FACT",
+          "confidence": "CONFIRMED",
+          "provider": "PageSpeed Insights API v5",
+          "ratings": {
+            "label": "INFERENCE",
+            "confidence": "CANDIDATE",
+            "values": {
+              "lcp_ms": "NEEDS_IMPROVEMENT",
+              "inp_ms": "GOOD",
+              "cls": "GOOD",
+              "ttfb_ms": "GOOD"
+            },
+            "thresholds_ref": {
+              "source": "web.dev/vitals",
+              "accessed": "NOT_RETRIEVED_THIS_SESSION",
+              "status": "DOCUMENTED_ASSUMPTION"
+            }
+          }
+        },
+        {
+          "schema": "sgos.performance.v1",
+          "site": "pamistanbul",
+          "url": "https://www.pamistanbul.com/",
+          "strategy": "desktop",
+          "measured_at": "2026-10-01T06:00:00.000Z",
+          "date": "2026-10-01",
+          "lcp_ms": 3300,
+          "inp_ms": null,
+          "cls": 0.02,
+          "ttfb_ms": 400,
+          "perf_score": 60,
+          "source": "lab",
+          "field_scope": null,
+          "state": "MEASURED",
+          "evidence": "FACT",
+          "confidence": "CONFIRMED",
+          "provider": "PageSpeed Insights API v5",
+          "ratings": {
+            "label": "INFERENCE",
+            "confidence": "CANDIDATE",
+            "values": {
+              "lcp_ms": "NEEDS_IMPROVEMENT",
+              "inp_ms": "UNKNOWN",
+              "cls": "GOOD",
+              "ttfb_ms": "GOOD"
+            },
+            "thresholds_ref": {
+              "source": "web.dev/vitals",
+              "accessed": "NOT_RETRIEVED_THIS_SESSION",
+              "status": "DOCUMENTED_ASSUMPTION"
+            }
+          }
+        }
+      ],
+      "regressions": [
+        {
+          "label": "INFERENCE",
+          "confidence": "CANDIDATE",
+          "action": "REVIEW_REQUIRED",
+          "site": "pamistanbul",
+          "url": "https://www.pamistanbul.com/",
+          "strategy": "mobile",
+          "metric": "lcp_ms",
+          "source": "field",
+          "baseline_date": "2026-09-24",
+          "baseline": 2000,
+          "current": 2900,
+          "baseline_rating": "GOOD",
+          "current_rating": "NEEDS_IMPROVEMENT",
+          "relative_change": 0.45,
+          "causal_claim": "NONE",
+          "note": "lcp_ms: 2000 -> 2900 (GOOD -> NEEDS_IMPROVEMENT). Neden bilinmiyor; once ayni URL'de tekrar olcum ve son degisiklikler incelenmeli."
+        }
+      ],
+      "rejected_urls": [],
+      "truncated_urls": [],
+      "skipped": [],
+      "history_actions": [
+        "ADDED",
+        "ADDED"
+      ]
+    }
+  ]
+}
