@@ -57,7 +57,7 @@ Dosya: `data/kill-switch.json`, `schema: "sgos.kill-switch.v1"`. **Depoda varsay
 - Okuma **fail-closed**: okunamayan dosya, bozuk JSON, yanlis `schema`, boolean olmayan `engaged` (`"false"` dahil),
   eksik `global`, `knownSiteIds` verilmisse bilinmeyen site anahtari (yazim hatasi) => **engaged**.
 - Dosya **yoksa** (ENOENT) engaged degildir ama `source: "ABSENT"` olarak gorunur; `{strict: true}` bunu da engaged yapar.
-  Bu, dosyanin varsayilan olmamasi karariyla tutarli tek secenek; uretim baglantisi eklenirken `strict` kullanilmasi onerilir.
+  Bu yalniz Yol A icin kabul edilebilir; Yol B (bolum 7) ABSENT'i her zaman engeller, `strict` secimine birakilmaz.
 - Engaged iken `evaluate` `BLOCK_KILL_SWITCH` doner ve `advance` hicbir gecise izin vermez (yarim kalan degisiklik donar).
 
 ## 4. Onay durum makinesi
@@ -88,6 +88,53 @@ coklu URL indeksleme istegi, `productionHosts` host'larina GET/HEAD/OPTIONS disi
 Komut taramasi tirnak duyarlidir (`git commit -m "vercel --prod"` temiz) ve `bash -c "..."`, `sudo`, `npx`, `VAR=x` onlerini acar.
 Sinir: bu bir **statik** tarayicidir; degiskenle/kodlanmis kurulan komutlari (`$CMD`, base64) goremez. Gercek koruma yazma yolunun
 bu surumde hic olmamasi ve branch protection'dir; lint ikinci kattir.
+
+## 7. Iki yol: A (okuma/oneri) ve B (uretim mutasyonu)
+
+Kill-switch dosyasi yoksa (`ABSENT`) bugun engaged degildir; bu **yalniz Yol A** icin kabul edilebilir. Gelecekteki
+bir uretim yazicisi asla "fail-open" olmamali; bu yuzden iki yol kodda ayridir (`src/change-safety.ts` bolum 8).
+
+```
+                      kill-switch durumu
+                 ┌────────────┴─────────────┐
+   Yol A: READ_ONLY_RECOMMENDATION      Yol B: PRODUCTION_MUTATION
+   (rapor, taslak, PR onerisi)          (hayali uretim yazici)
+   checkReadOnlyRecommendation()        authorizeProductionMutation()
+   ABSENT / UNKNOWN: tolere edilir      ABSENT / UNKNOWN / okunamaz / bozuk / bayat: BLOCKED
+   engaged: DURUR                       engaged: BLOCKED
+                                        + 7 kapinin HEPSI gecmeli (opt-out bayragi YOK):
+                                          1 kill_switch  acikca okundu (source=FILE), acikca kapali,
+                                                         bu site icin, taze (<= 5 dk; yalniz daha siki yapilabilir)
+                                          2 armed        insan arm'i: armed_by + armed_at + scope.expires_at,
+                                                         omur <= 24 saat, otomasyon kimligi olamaz
+                                          3 arm_scope    arm.site_id ve change_class proposal ile ayni
+                                          4 approval     ChangeRecord OWNER_APPROVED + gecerli approver
+                                          5 rollback     validateRollback temiz
+                                          6 proposal/budget  evaluate temiz; butce-0 siniflar (robots,
+                                                         canonical, hreflang, redirect, schema) HIC gecmez
+                                          7 lint         lintPlannedActions temiz ve liste bos degil
+                                        sonuc: AUTHORIZED_FOR_HUMAN_EXECUTION | BLOCKED
+```
+
+- Tum kapilar degerlendirilir (kisa devre yok); `BLOCKED` sonucu basarisiz her kapiyi sebepleriyle listeler.
+  Herhangi bir istisna fail-closed `BLOCKED` olur, asla throw ya da yetki degil.
+- **Arm'i bu modul uretmez.** `ArmToken` yalniz bir tip ve dogrulayicidir; kurucu, varsayilan ya da cikarim yoktur.
+  Arm verisi insandan gelir; suresi dolar, baska site/sinifa tasinamaz, belirsiz sure verilemez.
+- **Tip sozlesmesi:** basarili karar `ProductionMutationAuthorization` tasir (marka'li tip, dondurulmus, modul-ici
+  `WeakSet` ile calisma zamaninda da dogrulanir). Hayali bir yazici `(auth: ProductionMutationAuthorization)` ister ve
+  ilk satirda `requireAuthorization(auth)` cagirir; sahte ya da kopyalanmis nesne tip denetiminde ve calisma zamaninda reddedilir.
+- Basari **uygulama degildir**: `AUTHORIZED_FOR_HUMAN_EXECUTION` yalniz bir insanin yurutmesi icin yetkidir. Bu repoda
+  yazici, ag cagrisi ya da dosya yazimi yoktur ve `data/kill-switch.json` uretilmemistir.
+- `KillSwitchState`'e iki opsiyonel alan eklendi: `site_id` (parse eder) ve `read_at` (`readKillSwitch` doldurur).
+  Elle kurulmus durumda `read_at` yoksa Yol B bunu bayat sayar.
+
+### Sinirlar
+
+- `read_at`/`site_id` cagiranin verdigi nesnede taklit edilebilir; tip markasi ve WeakSet yalniz bu modulun disindan
+  sahte yetki uretmeyi zorlastirir, bir saldirgan koduna karsi kriptografik garanti degildir. Gercek koruma yazma yolunun
+  olmamasi ve branch protection'dir.
+- Butce-0 siniflar Yol B'den gecmez (muhafazakar tercih); onlarin yolu insan state machine + PR'dir.
+- Arm'in kendisinin nasil saklanip imzalandigi (dosya, imza) bu PR'in kapsami disindadir.
 
 ## Baglanti icin gerekenler (bu PR'da yok)
 

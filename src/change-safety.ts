@@ -76,6 +76,10 @@ export interface KillSwitchState {
   source: "FILE" | "ABSENT" | "FAIL_CLOSED";
   scope?: "global" | "site";
   reason: string;
+  /** Yalniz parseKillSwitch doldurur: hangi site icin okundu. Yol B baska sitenin okumasini kabul etmez. */
+  site_id?: string;
+  /** Yalniz readKillSwitch doldurur (ISO, okuma ani). Yol B bayat okumayi kabul etmez; yoksa bayat sayilir. */
+  read_at?: string;
 }
 
 /** `siteId` verilirse yalniz o sitenin ya da global anahtara bakilir. `knownSiteIds` verilirse dosyadaki bilinmeyen
@@ -88,11 +92,11 @@ export function readKillSwitch(path: string, siteId: string, opts: { knownSiteId
     if ((e as NodeJS.ErrnoException)?.code === "ENOENT" && !opts.strict) return { engaged: false, source: "ABSENT", reason: "kill-switch dosyasi yok (engaged degil)" };
     return { engaged: true, source: "FAIL_CLOSED", reason: `kill-switch okunamadi: ${(e as NodeJS.ErrnoException)?.code ?? "hata"}` };
   }
-  return parseKillSwitch(text, siteId, opts);
+  return { ...parseKillSwitch(text, siteId, opts), read_at: new Date().toISOString() };
 }
 
 export function parseKillSwitch(text: string, siteId: string, opts: { knownSiteIds?: string[] } = {}): KillSwitchState {
-  const bad = (why: string): KillSwitchState => ({ engaged: true, source: "FAIL_CLOSED", reason: `kill-switch bozuk: ${why}` });
+  const bad = (why: string): KillSwitchState => ({ engaged: true, source: "FAIL_CLOSED", reason: `kill-switch bozuk: ${why}`, site_id: siteId });
   let d: unknown;
   try { d = JSON.parse(text); } catch { return bad("JSON degil"); }
   if (!d || typeof d !== "object" || Array.isArray(d)) return bad("kok nesne degil");
@@ -108,10 +112,10 @@ export function parseKillSwitch(text: string, siteId: string, opts: { knownSiteI
     if (flag(v) === undefined) return bad(`sites.${k}.engaged boolean degil`);
   }
   const why = (n: unknown) => { const r = (n as { reason?: unknown })?.reason; return typeof r === "string" && r ? r : "sebep belirtilmemis"; };
-  if (gv) return { engaged: true, source: "FILE", scope: "global", reason: `global durdurma: ${why(g)}` };
+  if (gv) return { engaged: true, source: "FILE", scope: "global", reason: `global durdurma: ${why(g)}`, site_id: siteId };
   const s = (sites as Record<string, unknown>)[siteId];
-  if (s !== undefined && flag(s)) return { engaged: true, source: "FILE", scope: "site", reason: `${siteId} durduruldu: ${why(s)}` };
-  return { engaged: false, source: "FILE", reason: "kill-switch kapali" };
+  if (s !== undefined && flag(s)) return { engaged: true, source: "FILE", scope: "site", reason: `${siteId} durduruldu: ${why(s)}`, site_id: siteId };
+  return { engaged: false, source: "FILE", reason: "kill-switch kapali", site_id: siteId };
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -369,4 +373,171 @@ export function lintPlannedActions(actions: PlannedAction[], opts: { productionH
     }
   });
   return { ok: v.length === 0, violations: v };
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// 8) Iki yol: READ_ONLY_RECOMMENDATION (A) ve PRODUCTION_MUTATION (B)
+// ---------------------------------------------------------------------------------------------------------
+// Bu bolumde YAZAN hicbir sey yok: yalniz karar uretir. Yol B'nin en iyi sonucu "AUTHORIZED_FOR_HUMAN_EXECUTION"dur;
+// uygulamayi bir insan yapar. Ileride bir yazici yazilirsa imzasi ProductionMutationAuthorization ister.
+
+export const PATHS = ["READ_ONLY_RECOMMENDATION", "PRODUCTION_MUTATION"] as const;
+export type MutationPath = (typeof PATHS)[number];
+
+/** Yol A (rapor, taslak, PR onerisi): ABSENT/UNKNOWN tolere edilir, engaged ise yine durur. */
+export function checkReadOnlyRecommendation(ks: KillSwitchState): { path: "READ_ONLY_RECOMMENDATION"; allowed: boolean; reasons: string[] } {
+  const path = "READ_ONLY_RECOMMENDATION" as const;
+  try {
+    if (!ks || typeof ks.engaged !== "boolean") return { path, allowed: false, reasons: ["kill-switch durumu gecersiz"] };
+    if (ks.engaged) return { path, allowed: false, reasons: [ks.reason] };
+    return { path, allowed: true, reasons: [`kill-switch engaged degil (kaynak: ${ks.source})`] };
+  } catch (e) { return { path, allowed: false, reasons: [`istisna: ${String(e)}`] }; }
+}
+
+/** Yazici ARM durumu. Bu modul BUNU URETMEZ: ne kurucu ne varsayilan vardir; yalniz insanin verdigi girdi dogrulanir.
+ *  Eksik / suresi dolmus / kapsam disi arm yok sayilir; cikarim ya da varsayilan yok. */
+export interface ArmToken {
+  armed: true;
+  armed_by: string;
+  armed_at: string;
+  scope: { site_id: string; change_classes: ChangeClass[]; expires_at: string };
+}
+/** Bir arm en fazla bu kadar yasar: sureyi uzatmak kodun karari olamaz (sahip daha kisa verebilir). */
+export const MAX_ARM_TTL_MS = 24 * 3_600_000;
+/** Kill-switch okumasi bundan eskiyse bayat. Yol B'de kapatma bayragi yoktur; yalniz daha siki verilebilir. */
+export const KILL_SWITCH_MAX_AGE_MS = 5 * 60_000;
+
+declare const AUTH_BRAND: unique symbol; // yalniz tip: calisma zamaninda yok; sahte nesne tip denetimini gecemez
+export interface ProductionMutationAuthorization {
+  readonly [AUTH_BRAND]: true;
+  readonly proposal_id: string;
+  readonly site_id: string;
+  readonly change_class: ChangeClass;
+  readonly targets: readonly string[];
+  readonly authorized_at: string;
+  readonly arm_expires_at: string;
+}
+const ISSUED = new WeakSet<object>(); // calisma zamani ikinci kilit: yalniz authorizeProductionMutation icinde eklenir
+export function isProductionMutationAuthorization(x: unknown): x is ProductionMutationAuthorization { return typeof x === "object" && x !== null && ISSUED.has(x); }
+/** Hayali bir yazicinin ilk satiri: sahte/yok nesne atar. Imza `auth: ProductionMutationAuthorization` ister. */
+export function requireAuthorization(x: unknown): ProductionMutationAuthorization {
+  if (!isProductionMutationAuthorization(x)) throw new Error("ProductionMutationAuthorization yok ya da sahte");
+  return x;
+}
+
+export const MUTATION_GATES = ["kill_switch", "armed", "arm_scope", "approval", "rollback", "proposal", "budget", "lint"] as const;
+export type MutationGate = (typeof MUTATION_GATES)[number];
+export interface GateFailure { gate: MutationGate; reasons: string[] }
+
+export interface ProductionMutationInput {
+  proposal: ChangeProposal;
+  /** Insanin acikca verdigi arm; modul uretmez. */
+  arm?: ArmToken;
+  /** Onay kaydi: durum OWNER_APPROVED, bu proposal'a ait, gecmisteki OWNER_APPROVED gecisi onaylayanla ayni. */
+  record?: ChangeRecord;
+  approver?: Approver;
+  killSwitch: KillSwitchState;
+  ledger: LedgerEntry[];
+  plannedActions: PlannedAction[];
+  registry: Registry;
+  now: Date;
+  budgets?: EvaluateOptions["budgets"];
+  productionHosts?: string[];
+  /** Yalniz DAHA SIKI yapabilir (min alinir); gevsetme yolu yok. */
+  killSwitchMaxAgeMs?: number;
+}
+
+export type MutationDecision =
+  | { path: "PRODUCTION_MUTATION"; decision: "AUTHORIZED_FOR_HUMAN_EXECUTION"; failed: []; authorization: ProductionMutationAuthorization; note: string }
+  | { path: "PRODUCTION_MUTATION"; decision: "BLOCKED"; failed: GateFailure[] };
+
+const NOTE = "yalniz insan uygulamasi icin yetki; bu kodda uygulayan hicbir sey yok";
+const ms = (v: unknown): number => (typeof v === "string" ? Date.parse(v) : NaN);
+
+function killGate(i: ProductionMutationInput, now: number): string[] {
+  const k = i.killSwitch, r: string[] = [];
+  if (!k || typeof k !== "object") return ["kill-switch okunmamis"];
+  if (k.source !== "FILE") r.push(`kill-switch acikca okunmadi (kaynak: ${String(k.source)}): ABSENT/UNKNOWN/FAIL_CLOSED Yol B'de engel`);
+  if (k.engaged !== false) r.push(`kill-switch acikca kapali degil: ${String(k.reason)}`);
+  if (k.site_id !== i.proposal?.site_id) r.push("kill-switch bu site icin okunmamis");
+  const t = ms(k.read_at);
+  const max = Math.min(KILL_SWITCH_MAX_AGE_MS, Number.isFinite(i.killSwitchMaxAgeMs) && i.killSwitchMaxAgeMs! > 0 ? i.killSwitchMaxAgeMs! : KILL_SWITCH_MAX_AGE_MS);
+  if (Number.isNaN(t)) r.push("kill-switch okuma zamani yok: bayat sayilir");
+  else if (t > now || now - t > max) r.push("kill-switch okumasi bayat ya da gelecekte");
+  return r;
+}
+
+function armGates(i: ProductionMutationInput, now: number): { armed: string[]; scope: string[] } {
+  const a = i.arm as unknown as Record<string, any> | undefined, armed: string[] = [], scope: string[] = [];
+  if (!a || typeof a !== "object") return { armed: ["yazici ARM edilmemis (acik arm yok)"], scope: ["arm yok: kapsam dogrulanamaz"] };
+  if (a.armed !== true) armed.push("armed !== true");
+  if (!meaningful(a.armed_by)) armed.push("armed_by eksik"); else if (AUTOMATED.test(a.armed_by)) armed.push(`otomasyon kimligi arm edemez: ${a.armed_by}`);
+  const at = ms(a.armed_at);
+  if (Number.isNaN(at)) armed.push("armed_at gecersiz"); else if (at > now) armed.push("armed_at gelecekte");
+  const s = a.scope;
+  if (!s || typeof s !== "object") return { armed, scope: ["scope eksik"] };
+  const exp = ms(s.expires_at);
+  if (Number.isNaN(exp)) armed.push("scope.expires_at yok/gecersiz: sonsuz arm yok");
+  else {
+    if (exp <= now) armed.push("arm suresi dolmus");
+    if (!Number.isNaN(at) && exp - at > MAX_ARM_TTL_MS) armed.push(`arm omru ${MAX_ARM_TTL_MS / 3_600_000} saati asiyor`);
+  }
+  if (s.site_id !== i.proposal?.site_id) scope.push(`arm baska site icin: ${String(s.site_id)} != ${i.proposal?.site_id}`);
+  if (!Array.isArray(s.change_classes) || !s.change_classes.includes(i.proposal?.change_class)) scope.push(`arm bu degisiklik sinifini kapsamiyor: ${String(i.proposal?.change_class)}`);
+  return { armed, scope };
+}
+
+function approvalGate(i: ProductionMutationInput, now: number): string[] {
+  const r: string[] = [], p = i.proposal, rec = i.record;
+  const e = validateApprover(i.approver, p);
+  if (e) r.push(e); else if (Date.parse(i.approver!.approved_at) > now) r.push("approved_at gelecekte");
+  if (!rec || typeof rec !== "object") return [...r, "onay kaydi (ChangeRecord) yok"];
+  if (rec.proposal?.id !== p.id) r.push("onay kaydi baska degisikligin");
+  if (rec.state !== "OWNER_APPROVED") r.push(`kayit durumu OWNER_APPROVED degil: ${String(rec.state)}`);
+  const t = (rec.history ?? []).find((h) => h.to === "OWNER_APPROVED");
+  if (!t) r.push("gecmiste OWNER_APPROVED gecisi yok");
+  else if (!i.approver || t.by !== i.approver.name) r.push("onaylayan kayitla uyusmuyor");
+  return r;
+}
+
+/** Yol B. Tum kapilar degerlendirilir (kisa devre yok); biri basarisizsa ya da istisna atarsa BLOCKED.
+ *  Kapatma/gevsetme bayragi YOKTUR. Basari = AUTHORIZED_FOR_HUMAN_EXECUTION, uygulama degil. */
+export function authorizeProductionMutation(input: ProductionMutationInput): MutationDecision {
+  const failed: GateFailure[] = [];
+  const run = (gate: MutationGate, fn: () => string[]) => {
+    let reasons: string[];
+    try { reasons = fn(); } catch (e) { reasons = [`istisna (fail-closed): ${e instanceof Error ? e.message : String(e)}`]; }
+    if (reasons.length) failed.push({ gate, reasons });
+  };
+  try {
+    const now = input?.now instanceof Date ? input.now.getTime() : NaN;
+    if (Number.isNaN(now)) throw new Error("now gecersiz");
+    const p = input.proposal;
+    run("kill_switch", () => killGate(input, now));
+    let g: { armed: string[]; scope: string[] };
+    try { g = armGates(input, now); } catch (e) { g = { armed: [`istisna: ${String(e)}`], scope: [`istisna: ${String(e)}`] }; }
+    run("armed", () => g.armed); run("arm_scope", () => g.scope);
+    run("approval", () => approvalGate(input, now));
+    run("rollback", () => validateRollback(p?.rollback));
+    // evaluate'e "kapali" kill-switch veriyoruz: gercek kapi yukarida; burada yalniz diger sebepler gorunsun.
+    let ev: Evaluation | undefined;
+    run("proposal", () => {
+      ev = evaluate(p, input.ledger, { registry: input.registry, killSwitch: { engaged: false, source: "FILE", reason: "kapi ayri" }, now: input.now, budgets: input.budgets });
+      return ev.verdict === "REJECT_INVALID_PROPOSAL" || ev.verdict === "BLOCK_CROSS_SITE" ? ev.reasons : [];
+    });
+    // Butce-0 siniflar (HARD_GATED) Yol B'den gecemez: onlarin yolu insan state machine + PR'dir, otomatik yetki degil.
+    run("budget", () => (!ev ? ["butce degerlendirilemedi"] : ev.verdict === "ALLOW_FOR_REVIEW" || ev.verdict === "REJECT_INVALID_PROPOSAL" || ev.verdict === "BLOCK_CROSS_SITE" ? [] : ev.reasons));
+    run("lint", () => {
+      if (!Array.isArray(input.plannedActions) || input.plannedActions.length === 0) return ["planlanan eylem listesi yok/bos: lint edilemez"];
+      return lintPlannedActions(input.plannedActions, { productionHosts: input.productionHosts }).violations.map((v) => `[${v.index}] ${v.rule}: ${v.message}`);
+    });
+    if (failed.length === 0) {
+      const auth = Object.freeze({ proposal_id: p.id, site_id: p.site_id, change_class: p.change_class, targets: Object.freeze([...p.targets]), authorized_at: input.now.toISOString(), arm_expires_at: input.arm!.scope.expires_at }) as unknown as ProductionMutationAuthorization;
+      ISSUED.add(auth);
+      return { path: "PRODUCTION_MUTATION", decision: "AUTHORIZED_FOR_HUMAN_EXECUTION", failed: [], authorization: auth, note: NOTE };
+    }
+  } catch (e) {
+    failed.push({ gate: "proposal", reasons: [`istisna (fail-closed): ${e instanceof Error ? e.message : String(e)}`] });
+  }
+  return { path: "PRODUCTION_MUTATION", decision: "BLOCKED", failed };
 }

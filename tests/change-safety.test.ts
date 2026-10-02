@@ -289,3 +289,131 @@ test("splitCommands tirnak duyarli", () => {
   assert.deepEqual(splitCommands("a && b | c; d"), ["a", "b", "c", "d"]);
   assert.deepEqual(splitCommands("git commit -m \"x && y\" && ls"), ["git commit -m \"x && y\"", "ls"]);
 });
+
+// --- Iki yol: A (READ_ONLY_RECOMMENDATION) / B (PRODUCTION_MUTATION) -----------------------------------------
+import * as CS from "../src/change-safety.ts";
+import { readFileSync } from "node:fs";
+import {
+  authorizeProductionMutation, checkReadOnlyRecommendation, requireAuthorization, isProductionMutationAuthorization,
+  type ProductionMutationInput, type ProductionMutationAuthorization, type ArmToken, type MutationGate,
+} from "../src/change-safety.ts";
+
+const READ_OK: KillSwitchState = { engaged: false, source: "FILE", reason: "kapali", site_id: "pamistanbul", read_at: new Date(NOW.getTime() - 30_000).toISOString() };
+const ARM: ArmToken = { armed: true, armed_by: "Sefa Yamak", armed_at: "2026-10-02T09:30:00Z", scope: { site_id: "pamistanbul", change_classes: ["content"], expires_at: "2026-10-02T12:00:00Z" } };
+const SAFE = [{ kind: "open_draft_pr", branch: "claude/x" }];
+function approvedRecord(p = prop()) {
+  const a = advance(newRecord(p), "REVIEW_REQUIRED", { now: NOW, killSwitch: OPEN, evaluation: ev(p) });
+  if (!a.ok) return newRecord(p); // onay yolu zaten kapaliysa kayit PROPOSED kalir: ilgili kapi bunu yakalar
+  const b = advance(a.record, "OWNER_APPROVED", { now: NOW, killSwitch: OPEN, approver: OWNER });
+  return b.ok ? b.record : newRecord(p);
+}
+function bin(over: Partial<ProductionMutationInput> = {}): ProductionMutationInput {
+  const p = over.proposal ?? prop();
+  return { proposal: p, arm: ARM, record: approvedRecord(p), approver: OWNER, killSwitch: READ_OK, ledger: [], plannedActions: SAFE, registry: REG, now: NOW, ...over };
+}
+const gates = (i: ProductionMutationInput): MutationGate[] => { const d = authorizeProductionMutation(i); return d.decision === "BLOCKED" ? d.failed.map((f) => f.gate) : []; };
+
+test("FP: tum kapilar saglanirsa yalniz AUTHORIZED_FOR_HUMAN_EXECUTION (uygulama degil)", () => {
+  const d = authorizeProductionMutation(bin());
+  assert.equal(d.decision, "AUTHORIZED_FOR_HUMAN_EXECUTION");
+  if (d.decision !== "AUTHORIZED_FOR_HUMAN_EXECUTION") return;
+  assert.deepEqual(d.failed, []);
+  assert.match(d.note, /uygulayan hicbir sey yok/);
+  assert.equal(isProductionMutationAuthorization(d.authorization), true);
+  assert.equal(requireAuthorization(d.authorization), d.authorization);
+});
+
+test("FN: her kapi tek basina eksikse BLOCKED ve o kapi listelenir", () => {
+  const cases: [string, Partial<ProductionMutationInput>, MutationGate][] = [
+    ["kill-switch ABSENT", { killSwitch: { engaged: false, source: "ABSENT", reason: "yok", site_id: "pamistanbul", read_at: READ_OK.read_at } }, "kill_switch"],
+    ["kill-switch UNKNOWN/yok", { killSwitch: undefined as any }, "kill_switch"],
+    ["kill-switch FAIL_CLOSED", { killSwitch: { engaged: true, source: "FAIL_CLOSED", reason: "bozuk", site_id: "pamistanbul" } }, "kill_switch"],
+    ["kill-switch bayat", { killSwitch: { ...READ_OK, read_at: new Date(NOW.getTime() - 600_000).toISOString() } }, "kill_switch"],
+    ["kill-switch read_at yok", { killSwitch: { ...READ_OK, read_at: undefined } }, "kill_switch"],
+    ["kill-switch baska site icin", { killSwitch: { ...READ_OK, site_id: "spryhand" } }, "kill_switch"],
+    ["arm yok", { arm: undefined }, "armed"],
+    ["arm suresi dolmus", { arm: { ...ARM, scope: { ...ARM.scope, expires_at: "2026-10-02T09:59:00Z" } } }, "armed"],
+    ["arm expires_at yok (sonsuz)", { arm: { ...ARM, scope: { ...ARM.scope, expires_at: undefined as any } } }, "armed"],
+    ["arm 24 saati asiyor", { arm: { ...ARM, scope: { ...ARM.scope, expires_at: "2026-10-04T09:30:00Z" } } }, "armed"],
+    ["arm otomasyon kimligiyle", { arm: { ...ARM, armed_by: "claude-session" } }, "armed"],
+    ["arm armed_by bos", { arm: { ...ARM, armed_by: "" } }, "armed"],
+    ["arm armed:false", { arm: { ...ARM, armed: false as any } }, "armed"],
+    ["arm yanlis site", { arm: { ...ARM, scope: { ...ARM.scope, site_id: "spryhand" } } }, "arm_scope"],
+    ["arm yanlis sinif", { arm: { ...ARM, scope: { ...ARM.scope, change_classes: ["internal_link"] } } }, "arm_scope"],
+    ["onay (approver) yok", { approver: undefined }, "approval"],
+    ["onay: otomasyon", { approver: { ...OWNER, name: "github-actions" } }, "approval"],
+    ["onay kaydi yok", { record: undefined }, "approval"],
+    ["onay kaydi PROPOSED", { record: newRecord(prop()) }, "approval"],
+    ["rollback yok", { proposal: prop({ rollback: undefined }) }, "rollback"],
+    ["rollback dolgu", { proposal: prop({ rollback: { ...RB, method: "TODO" } }) }, "rollback"],
+    ["butce asildi", { ledger: [led("o", "content", ago(1), 5)] }, "budget"],
+    ["hard-gated sinif (butce 0)", { proposal: prop({ change_class: "robots" }), arm: { ...ARM, scope: { ...ARM.scope, change_classes: ["robots"] } } }, "budget"],
+    ["lint: main'e push", { plannedActions: [{ kind: "push_main" }] }, "lint"],
+    ["lint: bos eylem listesi", { plannedActions: [] }, "lint"],
+    ["cross-site hedef", { proposal: prop({ targets: ["https://spryhand.com/a"] }) }, "proposal"],
+  ];
+  for (const [name, over, gate] of cases) {
+    const d = authorizeProductionMutation(bin(over));
+    assert.equal(d.decision, "BLOCKED", name);
+    assert.ok(d.decision === "BLOCKED" && d.failed.some((f) => f.gate === gate && f.reasons.length > 0), `${name}: ${gate} listelenmedi`);
+  }
+});
+
+test("hicbir kapi kisa devre yapmaz: coklu ihlal hepsini listeler", () => {
+  const g = gates(bin({ arm: undefined, approver: undefined, plannedActions: [{ kind: "deploy" }], killSwitch: { ...READ_OK, source: "ABSENT" } }));
+  for (const x of ["kill_switch", "armed", "arm_scope", "approval", "lint"] as MutationGate[]) assert.ok(g.includes(x), x);
+});
+
+test("A vs B: ABSENT kill-switch A'yi gecirir, B'yi engeller; engaged ikisini de engeller", () => {
+  const absent: KillSwitchState = { engaged: false, source: "ABSENT", reason: "yok" };
+  assert.equal(checkReadOnlyRecommendation(absent).allowed, true);
+  assert.equal(authorizeProductionMutation(bin({ killSwitch: absent })).decision, "BLOCKED");
+  assert.equal(checkReadOnlyRecommendation(ENGAGED).allowed, false);
+  assert.ok(gates(bin({ killSwitch: { ...ENGAGED, site_id: "pamistanbul", read_at: READ_OK.read_at } })).includes("kill_switch"));
+  assert.equal(checkReadOnlyRecommendation(undefined as any).allowed, false);
+});
+
+test("B gercek dosyadan: ABSENT dosya BLOCKED, taze okunmus kapali dosya gecer; opt-out bayragi yok sayilir", () => {
+  const d = tmp();
+  assert.ok(gates(bin({ killSwitch: readKillSwitch(join(d, "yok.json"), "pamistanbul") })).includes("kill_switch"));
+  writeFileSync(join(d, "ks.json"), JSON.stringify({ schema: "sgos.kill-switch.v1", global: { engaged: false }, sites: {} }));
+  const k = readKillSwitch(join(d, "ks.json"), "pamistanbul", { knownSiteIds: IDS });
+  assert.equal(k.source, "FILE");
+  assert.ok(k.read_at && k.site_id === "pamistanbul");
+  assert.equal(authorizeProductionMutation({ ...bin(), killSwitch: k, now: new Date(k.read_at!) }).decision, "AUTHORIZED_FOR_HUMAN_EXECUTION");
+  assert.ok(gates({ ...bin({ killSwitch: { engaged: false, source: "ABSENT", reason: "yok" } }), strict: false, allowAbsent: true } as any).includes("kill_switch"));
+});
+
+test("fail-closed: istisna ve bozuk girdi BLOCKED, asla throw/AUTHORIZED", () => {
+  for (const bad of [undefined, null, {}, { now: "x" }, { ...bin(), now: new Date("x") }, { ...bin(), proposal: null }, { ...bin(), plannedActions: null }]) {
+    let d: ReturnType<typeof authorizeProductionMutation> | undefined;
+    assert.doesNotThrow(() => { d = authorizeProductionMutation(bad as any); });
+    assert.equal(d!.decision, "BLOCKED");
+  }
+  const boom = { ...bin(), get ledger(): LedgerEntry[] { throw new Error("patladi"); } };
+  assert.equal(authorizeProductionMutation(boom as any).decision, "BLOCKED");
+});
+
+test("tip sozlesmesi: yazici yetki nesnesi ister; sahte nesne tip ve calisma zamaninda reddedilir", () => {
+  // Hayali yazici (gercek degil, hicbir sey yapmaz): imza yetkiyi zorunlu kilar.
+  const hypotheticalWriter = (auth: ProductionMutationAuthorization): string => requireAuthorization(auth).proposal_id;
+  const forged = { proposal_id: "p1", site_id: "pamistanbul", change_class: "content", targets: [], authorized_at: "x", arm_expires_at: "y" };
+  // @ts-expect-error sahte nesne marka olmadan ProductionMutationAuthorization degildir
+  assert.throws(() => hypotheticalWriter(forged));
+  const d = authorizeProductionMutation(bin());
+  assert.equal(d.decision, "AUTHORIZED_FOR_HUMAN_EXECUTION");
+  if (d.decision !== "AUTHORIZED_FOR_HUMAN_EXECUTION") return;
+  assert.throws(() => requireAuthorization({ ...d.authorization })); // kopya da gecmez
+  assert.throws(() => requireAuthorization(undefined));
+  assert.equal(hypotheticalWriter(d.authorization), "p1");
+  assert.equal(Object.isFrozen(d.authorization), true);
+});
+
+test("arm tokeni modulden uretilemez: kurucu/varsayilan export yok; kaynakta yazma/ag yok", () => {
+  const names = Object.keys(CS);
+  assert.deepEqual(names.filter((n) => /^(make|create|issue|grant|build|new|default|mint)/i.test(n) && /arm|auth/i.test(n)), []);
+  assert.deepEqual(names.filter((n) => /arm/i.test(n) && typeof (CS as any)[n] === "function"), []);
+  const src = readFileSync(new URL("../src/change-safety.ts", import.meta.url), "utf8");
+  assert.equal(/armed\s*:\s*true\s*[,}]/.test(src), false); // yalniz `armed: true;` tip bildirimi var, deger literal'i yok
+  assert.equal(/writeFile|appendFile|fetch\(|node:https?|node:net|child_process/.test(src), false);
+});
