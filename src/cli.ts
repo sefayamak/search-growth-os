@@ -238,9 +238,13 @@ async function main() {
       const buf: string[] = [];
       const say = (l: string) => buf.push(l);
       const gscPre = searchConsole.status();
+      // sgos.measure-report.v1 icin ayni sonuclarin yapilandirilmis kaydi (Markdown'a dokunmaz).
+      const reportInputs: import("./measure-report.ts").SiteMeasureInput[] = [];
       for (const site of reg.registry.sites) {
         const prop = String(site.google_search_console_property);
         const ga = String(site.ga4_property);
+        const rec = (outcome: import("./measure-report.ts").SiteOutcome) =>
+          reportInputs.push({ siteId: site.id, gscProperty: prop, ga4Property: ga, patterns: brandPatterns(site), outcome, ga4Status: ga4.status() });
         say(`${site.id}`);
         say(`  GSC property : ${prop}`);
         say(`  GA4 property : ${ga}`);
@@ -252,8 +256,8 @@ async function main() {
         // eksik) ile property'nin registry'de bilinmemesi (o siteye ozel)
         // farkli islerdir; ikisini "NOT_CONNECTED" diye tek torbaya koymak,
         // hangisini duzeltecegini gizler.
-        if (gscPre.state === "NOT_CONNECTED") { say(`  veri         : NOT_CONNECTED — ${gscPre.envVar} yok`); continue; }
-        if (!prop || prop === "NOT_CONNECTED" || prop === "UNKNOWN") { say(`  veri         : NOT_CONNECTED — registry'de google_search_console_property yok`); continue; }
+        if (gscPre.state === "NOT_CONNECTED") { rec({ kind: "not_connected", reason: `${gscPre.envVar} yok` }); say(`  veri         : NOT_CONNECTED — ${gscPre.envVar} yok`); continue; }
+        if (!prop || prop === "NOT_CONNECTED" || prop === "UNKNOWN") { rec({ kind: "not_connected", reason: "registry'de google_search_console_property yok" }); say(`  veri         : NOT_CONNECTED — registry'de google_search_console_property yok`); continue; }
         try {
           // "toplam" SORGU kirilimindan degil, BOYUTSUZ (site-genel) cagridan
           // alinir. Sebebi: GSC dusuk hacimli sorgulari sorgu boyutunda satir
@@ -270,7 +274,8 @@ async function main() {
             searchConsole.searchAnalytics(prop, p.current, []),
             searchConsole.searchAnalytics(prop, p.yearAgo, []),
           ]);
-          if (now === null || nowTotal === null) { say(`  veri         : NOT_CONNECTED — kimlik okunamadı`); continue; }
+          if (now === null || nowTotal === null) { rec({ kind: "not_connected", reason: "kimlik okunamadı" }); say(`  veri         : NOT_CONNECTED — kimlik okunamadı`); continue; }
+          rec({ kind: "ok", current: now, yearAgo: then, currentTotal: nowTotal, yearAgoTotal: thenTotal });
           const a = splitByBrand(now, patterns);
           const b = then ? splitByBrand(then, patterns) : null;
           const totalRow = (rows: typeof nowTotal) => rows[0] ?? { clicks: 0, impressions: 0, ctr: 0, position: 0 };
@@ -296,6 +301,7 @@ async function main() {
         } catch (e) {
           // Yetki hatasi "veri yok" gibi gosterilmez: servis hesabi
           // property'ye eklenmemisse duzeltilecek sey budur.
+          rec({ kind: "error", message: (e as Error).message });
           say(`  veri         : HATA — ${(e as Error).message}`);
         }
       }
@@ -306,6 +312,20 @@ async function main() {
       if (gscPre.state === "NOT_CONNECTED") console.log("(kimlik yok — asagidaki her satir NOT_CONNECTED'dir, sifir DEGIL)");
       console.log("");
       for (const l of buf) console.log(l);
+      // Makine-okunur cikti YALNIZ --out verilirse yazilir; varsayilan davranis (yalniz stdout) degismedi.
+      if (flag("out")) {
+        const { buildMeasureReport } = await import("./measure-report.ts");
+        const outDir = opt("out", "reports/runs");
+        const report = buildMeasureReport(reportInputs, {
+          now: new Date(), current: p.current, yearAgo: p.yearAgo,
+          toolVersion: JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version,
+          commit: process.env.GITHUB_SHA ?? null, registryPath: args[1] ?? "config/sites.yaml",
+        });
+        mkdirSync(outDir, { recursive: true });
+        const file = join(outDir, "measure-report.json");
+        writeFileSync(file, JSON.stringify(report, null, 2) + "\n");
+        console.error(`written: ${file}`);
+      }
       return;
     }
     /**

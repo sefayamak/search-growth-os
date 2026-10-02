@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "search-growth-os/measure-report",
+  "title": "sgos.measure-report.v1 — machine-readable output of the `measure` command. UNKNOWN is never serialised as 0.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "generated_at", "provenance", "semantics", "sites"],
+  "properties": {
+    "schema": { "const": "sgos.measure-report.v1" },
+    "generated_at": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$" },
+    "provenance": {
+      "type": "object", "additionalProperties": false,
+      "required": ["tool", "command", "tool_version", "commit", "registry_path", "notes"],
+      "properties": {
+        "tool": { "const": "search-growth-os" },
+        "command": { "const": "measure" },
+        "tool_version": { "type": "string" },
+        "commit": { "type": ["string", "null"] },
+        "registry_path": { "type": ["string", "null"] },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "semantics": {
+      "type": "object", "additionalProperties": false,
+      "required": ["unknown_is_never_zero", "states"],
+      "properties": {
+        "unknown_is_never_zero": { "const": true },
+        "states": { "type": "object", "required": ["MEASURED", "NOT_CONNECTED", "UNKNOWN", "ERROR"], "additionalProperties": { "type": "string" } }
+      }
+    },
+    "sites": {
+      "type": "object",
+      "description": "Keyed by the exact registry site id. Each entry is self-contained: a consumer reads sites[<id>] and never touches another key.",
+      "additionalProperties": { "$ref": "#/$defs/site" }
+    }
+  },
+  "$defs": {
+    "state": { "enum": ["MEASURED", "NOT_CONNECTED", "UNKNOWN", "ERROR"] },
+    "evidenceLabel": { "enum": ["FACT", "INFERENCE", "HYPOTHESIS", "RECOMMENDATION", "IMPLEMENTED_CHANGE", "VERIFIED_RESULT"] },
+    "confidence": { "enum": ["CONFIRMED", "CANDIDATE", "FALSE_POSITIVE", "UNKNOWN"] },
+    "num": { "type": ["number", "null"], "description": "null = not measured. Never 0 for UNKNOWN." },
+    "period": {
+      "type": "object", "additionalProperties": false, "required": ["label", "start", "end"],
+      "properties": { "label": { "type": "string" }, "start": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" }, "end": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" } }
+    },
+    "totals": {
+      "type": "object", "additionalProperties": false, "required": ["clicks", "impressions", "ctr", "position"],
+      "properties": { "clicks": { "$ref": "#/$defs/num" }, "impressions": { "$ref": "#/$defs/num" }, "ctr": { "$ref": "#/$defs/num" }, "position": { "$ref": "#/$defs/num" } }
+    },
+    "delta": {
+      "type": "object", "additionalProperties": false, "required": ["abs", "pct"],
+      "properties": { "abs": { "$ref": "#/$defs/num" }, "pct": { "$ref": "#/$defs/num" } }
+    },
+    "brandTotals": {
+      "type": "object", "additionalProperties": false, "required": ["clicks", "impressions", "ctr", "position", "queries"],
+      "properties": { "clicks": { "type": "number" }, "impressions": { "type": "number" }, "ctr": { "type": "number" }, "position": { "$ref": "#/$defs/num" }, "queries": { "type": "number" } }
+    },
+    "site": {
+      "type": "object", "additionalProperties": false,
+      "required": ["site_id", "generated_at", "gsc_state", "opportunity_count", "period", "comparison_period", "gsc", "ga4", "search_opportunity_inputs"],
+      "properties": {
+        "site_id": { "type": "string" },
+        "generated_at": { "type": "string" },
+        "gsc_state": { "enum": ["CONNECTED", "NOT_CONNECTED", "ERROR", "UNKNOWN"] },
+        "opportunity_count": { "type": ["number", "null"] },
+        "period": { "$ref": "#/$defs/period" },
+        "comparison_period": {
+          "type": "object", "additionalProperties": false, "required": ["label", "kind", "start", "end"],
+          "properties": { "label": { "type": "string" }, "kind": { "const": "year_over_year" }, "start": { "type": "string" }, "end": { "type": "string" } }
+        },
+        "gsc": {
+          "type": "object", "additionalProperties": false,
+          "required": ["state", "state_reason", "confidence", "evidence_label", "retrieved_at", "source", "totals", "totals_source", "comparison", "rows_complete", "coverage", "brand_split", "queries", "pages"],
+          "properties": {
+            "state": { "$ref": "#/$defs/state" },
+            "state_reason": { "type": ["string", "null"] },
+            "confidence": { "$ref": "#/$defs/confidence" },
+            "evidence_label": { "$ref": "#/$defs/evidenceLabel" },
+            "retrieved_at": { "type": ["string", "null"] },
+            "source": {
+              "type": "object", "additionalProperties": false, "required": ["system", "property", "api", "search_type", "data_state"],
+              "properties": { "system": { "const": "google_search_console" }, "property": { "type": ["string", "null"] }, "api": { "const": "searchAnalytics.query" }, "search_type": { "const": "web" }, "data_state": { "const": "final" } }
+            },
+            "totals": { "$ref": "#/$defs/totals" },
+            "totals_source": { "enum": ["api_total_row", "api_empty_response", null] },
+            "comparison": {
+              "type": "object", "additionalProperties": false, "required": ["state", "state_reason", "confidence", "evidence_label", "totals", "delta"],
+              "properties": {
+                "state": { "$ref": "#/$defs/state" },
+                "state_reason": { "type": ["string", "null"] },
+                "confidence": { "$ref": "#/$defs/confidence" },
+                "evidence_label": { "$ref": "#/$defs/evidenceLabel" },
+                "totals": { "$ref": "#/$defs/totals" },
+                "delta": {
+                  "type": "object", "additionalProperties": false, "required": ["clicks", "impressions", "position_abs", "evidence_label", "confidence"],
+                  "properties": { "clicks": { "$ref": "#/$defs/delta" }, "impressions": { "$ref": "#/$defs/delta" }, "position_abs": { "$ref": "#/$defs/num" }, "evidence_label": { "$ref": "#/$defs/evidenceLabel" }, "confidence": { "$ref": "#/$defs/confidence" } }
+                }
+              }
+            },
+            "rows_complete": { "type": ["boolean", "null"] },
+            "coverage": {
+              "type": "object", "additionalProperties": false, "required": ["query_rows_total", "query_rows_returned", "max_query_rows", "queries_truncated", "anonymized_tail_impressions"],
+              "properties": {
+                "query_rows_total": { "$ref": "#/$defs/num" }, "query_rows_returned": { "$ref": "#/$defs/num" }, "max_query_rows": { "type": "number" },
+                "queries_truncated": { "type": ["boolean", "null"] }, "anonymized_tail_impressions": { "$ref": "#/$defs/num" }
+              }
+            },
+            "brand_split": {
+              "type": ["object", "null"], "additionalProperties": false,
+              "required": ["state", "evidence_label", "confidence", "patterns", "brand", "non_brand", "comparison"],
+              "properties": {
+                "state": { "$ref": "#/$defs/state" }, "evidence_label": { "$ref": "#/$defs/evidenceLabel" }, "confidence": { "$ref": "#/$defs/confidence" },
+                "patterns": { "type": "array", "items": { "type": "string" } },
+                "brand": { "$ref": "#/$defs/brandTotals" }, "non_brand": { "$ref": "#/$defs/brandTotals" },
+                "comparison": {
+                  "type": ["object", "null"], "additionalProperties": false, "required": ["brand", "non_brand"],
+                  "properties": { "brand": { "$ref": "#/$defs/brandTotals" }, "non_brand": { "$ref": "#/$defs/brandTotals" } }
+                }
+              }
+            },
+            "queries": {
+              "type": "array",
+              "items": {
+                "type": "object", "additionalProperties": false, "required": ["query", "clicks", "impressions", "ctr", "position", "brand_class"],
+                "properties": {
+                  "query": { "type": ["string", "null"] }, "clicks": { "type": "number" }, "impressions": { "type": "number" }, "ctr": { "type": "number" }, "position": { "type": "number" },
+                  "brand_class": { "enum": ["brand", "non_brand"] }
+                }
+              }
+            },
+            "pages": {
+              "type": "object", "additionalProperties": false, "required": ["state", "rows", "reason"],
+              "properties": { "state": { "const": "NOT_MEASURED" }, "rows": { "const": null }, "reason": { "type": "string" } }
+            }
+          }
+        },
+        "ga4": {
+          "type": "object", "additionalProperties": false, "required": ["state", "state_reason", "confidence", "evidence_label", "retrieved_at", "source", "metrics"],
+          "properties": {
+            "state": { "$ref": "#/$defs/state" }, "state_reason": { "type": ["string", "null"] }, "confidence": { "$ref": "#/$defs/confidence" },
+            "evidence_label": { "$ref": "#/$defs/evidenceLabel" }, "retrieved_at": { "type": ["string", "null"] },
+            "source": { "type": "object", "additionalProperties": false, "required": ["system", "property"], "properties": { "system": { "const": "google_analytics_4" }, "property": { "type": ["string", "null"] } } },
+            "metrics": {
+              "type": "object", "additionalProperties": false, "required": ["sessions", "engaged_sessions", "conversions", "revenue"],
+              "properties": { "sessions": { "$ref": "#/$defs/num" }, "engaged_sessions": { "$ref": "#/$defs/num" }, "conversions": { "$ref": "#/$defs/num" }, "revenue": { "$ref": "#/$defs/num" } }
+            }
+          }
+        },
+        "search_opportunity_inputs": {
+          "type": "object", "additionalProperties": false,
+          "required": ["state", "state_reason", "evidence_label", "confidence", "opportunity_count", "criteria", "candidates", "query_page_rows"],
+          "properties": {
+            "state": { "$ref": "#/$defs/state" }, "state_reason": { "type": ["string", "null"] },
+            "evidence_label": { "$ref": "#/$defs/evidenceLabel" }, "confidence": { "$ref": "#/$defs/confidence" },
+            "opportunity_count": { "type": ["number", "null"] },
+            "criteria": {
+              "type": "object", "additionalProperties": false, "required": ["excludes_brand", "min_impressions", "min_position", "max_position", "score", "top"],
+              "properties": { "excludes_brand": { "const": true }, "min_impressions": { "type": "number" }, "min_position": { "type": "number" }, "max_position": { "type": "number" }, "score": { "type": "string" }, "top": { "type": "number" } }
+            },
+            "candidates": {
+              "type": "array",
+              "items": {
+                "type": "object", "additionalProperties": false, "required": ["query", "impressions", "clicks", "position", "score"],
+                "properties": { "query": { "type": "string" }, "impressions": { "type": "number" }, "clicks": { "type": "number" }, "position": { "type": "number" }, "score": { "type": "number" } }
+              }
+            },
+            "query_page_rows": {
+              "type": "object", "additionalProperties": false, "required": ["state", "rows", "reason"],
+              "properties": { "state": { "const": "NOT_MEASURED" }, "rows": { "const": null }, "reason": { "type": "string" } }
+            }
+          }
+        }
+      }
+    }
+  }
+}
