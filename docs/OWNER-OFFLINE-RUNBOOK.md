@@ -77,3 +77,22 @@ Ofline durum hesaplayıcı: `docs/clarity-takeover-status.md` (ayrı draft PR).
 - Hiçbir üretim sitesine yazma yok; tüm değişiklik draft PR; merge yalnız owner.
 - Bot commit'leri yalnız `reports/` ve `data/clarity-history/` altına (main).
 - Beklenmeyen: workflow kırmızıysa Actions sekmesinden bak; kırmızı iş sahte veri üretmez (fail-closed).
+
+## 9. Mac kapalıyken ne ÇALIŞMAZ
+
+- **Claude Code yerel oturumu çalışmaz.** Oturum açık kalmadıkça hiçbir agent PR açmaz, CI kırmızısını düzeltmez, review yanıtlamaz. PR'lar owner dönene kadar olduğu gibi bekler.
+- Yalnız iki şey sürer: **GitHub Actions** (bkz. §1) ve **Anthropic'te çalışan legacy rutin** (bkz. §3). Bulut oturumundaki zamanlanmış check-in'ler garanti değildir; güvenme.
+- Kırmızı iş kendini onarmaz; owner dönünce Actions sekmesinden bakılır.
+
+## 10. Owner yokken ASLA OTOMATİK (NEVER AUTO)
+
+Hiçbir zamanlayıcı, agent veya workflow şunları owner'ın açık, o anki onayı olmadan yapmaz:
+
+- feature PR merge etmek (docs/test-only dahil),
+- legacy `site-health-monitor` rutinini kapatmak,
+- credential/token rotasyonu veya iptali,
+- schedule cutover (`SEARCH_GROWTH_CLARITY_DAILY_ENABLED` veya başka bir kapı değişkenini açmak),
+- production mutation (push, deploy, toplu indeksleme, robots/canonical/hreflang/schema/içerik yazımı),
+- `force=true` Clarity koşusu veya kota yakan keşif çağrısı.
+
+Önceden verilmiş genel onay bu listeyi kapsamaz: her madde için onay yeniden ve o işe özel verilir.
