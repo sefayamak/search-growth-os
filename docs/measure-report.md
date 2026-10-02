@@ -21,8 +21,34 @@ node --experimental-strip-types src/cli.ts measure config/sites.yaml --out repor
 `measure` daha önce bir `--out` seçeneği taşımıyordu; diğer komutların (`audit`, `portfolio`,
 `llmstxt`) kullandığı `--out <dizin>` kuralı aynen izlendi. **`--out` yoksa dosya yazılmaz**, yani
 mevcut workflow'un davranışı değişmez. `measure.yml`'e bu satırı eklemek ayrı bir iştir
-(workflow bu PR'da değiştirilmedi): `measure` adımına `--out reports/runs` ve
-"Raporu depoya yaz" adımına `git add reports/runs/measure-report.json`.
+(workflow bu PR'da değiştirilmedi): `measure.yml` bağlantısı artık yapıldı: bkz. **Workflow** bölümü (yol `reports/runs/` değil, aşağıdaki karar).
+
+## Workflow
+
+`measure.yml` (haftalık, Pzt 06:40 UTC) Markdown'a ek olarak bu JSON'u da üretir. Cron, izinler, concurrency, secret'lar ve
+kapılar değişmedi; tek yazıcı `measure.yml`, tek commit adımı mevcut `scripts/persist-history.sh` çağrısı.
+
+**Karar (owner onayına açık): ROLLING SNAPSHOT, append-only geçmiş DEĞİL.**
+
+- Kanonik yol: **`reports/measure-report-latest.json`**. Her koşu üzerine yazar. Tarihli kopya (`reports/runs/<tarih>-measure-report.json`) yazılmaz.
+- Gerekçe: tüketici skorkart (`src/scorecard.ts` `searchOpportunity`) TEK dosya okur (`sites[siteId]`) ve `generated_at` tazeliğini
+  10 gün eşiğiyle denetler; tek, değişmeyen bir yol ister. Dosya 7 site x en çok 500 sorgu satırı taşır (örnek: 2 site ~34 KB), haftalık
+  tarihli kopya yılda yüzlerce MB'a gidebilirdi ve hiçbir tüketicisi yok. Sürüm geçmişini zaten git tutar (`git log -p -- reports/measure-report-latest.json`);
+  insan okuyacaksa Markdown arşivi (`reports/runs/<tarih>-measure.md`) durur. Gerçek bir zaman serisi ihtiyacı doğarsa ayrı, sahipli ve
+  boyutu sınırlı bir tarihçe (history-ownership kaydıyla) tasarlanır; bu karar onu engellemez.
+- `reports/` öneki `persist-history.sh` izin listesinde zaten var; **izin listesi genişletilmedi**. Çağrıya yalnız `reports/measure-report-latest.json` eklendi.
+- Üretim: ayrı adım `Ölçüm raporu (JSON)` aynı `measure ... --out measure-json` komutunu (CLI `measure-json/measure-report.json` yazar)
+  `continue-on-error` ile çalıştırır. "Ölçüm" adımı (Markdown kaynağı) bayt-bayt aynı kaldı. Maliyet: `measure` günde bir kez yerine iki kez
+  GSC çağırır (aynı salt-okunur çağrılar); iki koşu arasında saniyeler olduğu için fark anlamsız, JSON kendi `period`/`generated_at`'ini taşır.
+- Hata davranışı (fail-safe, sessiz değil): JSON üretimi patlarsa **Markdown raporu ve commit yolu kırmızıya dönmez** (JSON ikincil çıktı; owner
+  kırmızı isterse adımdan `continue-on-error` kaldırılır). Ama `::warning::` ve step summary'ye "UYARI: JSON üretilemedi" yazılır, mevcut
+  `latest` dosyasına DOKUNULMAZ: bayat dosya 10 gün sonra skorkartta `UNKNOWN-STALE` olur; bozuk/boş dosya yazılmaz, taze görünen bayat veri olmaz.
+- Artifact (`measure-<run_id>`) hem `reports/measure-report-latest.json` hem ham `measure-json/measure-report.json`'ı içerir.
+- Skorkart bağlantısı: `--measure-report reports/measure-report-latest.json`.
+- Testler: `tests/measure-workflow.test.ts` (cron/izin/concurrency değişmezleri, tek persist çağrısı ve yollarının betikten okunan
+  izin listesine uyması, satır içi git yazımı yok, fail-safe, artifact, Markdown adımlarının dokunulmazlığı; CLI'yi sahte Google ile koşup
+  skorkartın dosyayı okuduğunu doğrular).
+- İlk canlı koşuda `persist-history.sh` ilk kez gerçek workflow'da çalışacak (ilk planlı koşu 2026-10-05); beklenen: `reports/measure-report-latest.json` yeni dosya olarak commit'lenir.
 
 ## Tek dosya, site anahtarlı `sites{}`
 

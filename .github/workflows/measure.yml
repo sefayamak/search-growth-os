@@ -78,6 +78,24 @@ jobs:
           set -o pipefail
           node --experimental-strip-types src/cli.ts measure config/sites.yaml | tee measure.txt
 
+      # Makine-okunur ölçüm raporu (`sgos.measure-report.v1`, docs/measure-report.md §Workflow).
+      # NİYE AYRI ADIM: yukarıdaki "Ölçüm" adımı Markdown'ın tek kaynağıdır ve bayt-bayt
+      # aynı kalmalı; JSON üretimi orada patlarsa Markdown yolu da kırmızı olurdu. Bu adım
+      # `continue-on-error`: başarısızlık ASLA sessiz değil ("JSON'unu yerleştir / durumu bildir"
+      # adımı uyarı + step summary yazar), ama Markdown raporunu ve commit'i engellemez.
+      # Stdout atılır (Markdown'a zaten "Ölçüm" adımı girdi); yalnız dosya önemli.
+      - name: Ölçüm raporu (JSON)
+        id: measure_json
+        continue-on-error: true
+        env:
+          SEARCH_GROWTH_GSC_CREDENTIALS_JSON: ${{ secrets.SEARCH_GROWTH_GSC_CREDENTIALS_JSON }}
+          SEARCH_GROWTH_GA4_CREDENTIALS_JSON: ${{ secrets.SEARCH_GROWTH_GA4_CREDENTIALS_JSON }}
+        run: |
+          set -o pipefail
+          rm -rf measure-json
+          node --experimental-strip-types src/cli.ts measure config/sites.yaml --out measure-json > /dev/null
+          test -s measure-json/measure-report.json
+
       # Gelir siteleri icin kirilim. Toplam sayi sorunun VARLIGINI gosterir,
       # sebebini gostermez: 58.071 gosterim / 204 tik, agirlikli sira 3,5 iken
       # TO %0,35 — o siradan %10-25 beklenir. Hangi sorgu ve sayfanin gosterimi
@@ -162,6 +180,23 @@ jobs:
           cp reports/measure-latest.md "reports/runs/$(date -u +%Y-%m-%d)-measure.md" 2>/dev/null \
             || { mkdir -p reports/runs; cp reports/measure-latest.md "reports/runs/$(date -u +%Y-%m-%d)-measure.md"; }
 
+      # JSON'u kanonik yola koyar (ROLLING SNAPSHOT: dosya her hafta üzerine yazılır; tarihli
+      # kopya YOK — 7 site x 500 sorgu haftalık MB'larca JSON; sürüm geçmişini git zaten tutar).
+      # YALNIZ bu workflow yazar (tek yazıcı); commit'i aşağıdaki TEK kalıcılık betiği çağrısı yapar. Üretim başarısızsa mevcut latest'e DOKUNULMAZ:
+      # eski dosya yaşlanır ve skorkart tazelik eşiğinde (10 gün) UNKNOWN-STALE der — bayat
+      # veri taze gibi görünmez, boş dosya da yazılmaz.
+      - name: Ölçüm JSON'unu yerleştir / durumu bildir
+        if: always()
+        run: |
+          if [ "${{ steps.measure_json.outcome }}" = "success" ] && [ -s measure-json/measure-report.json ]; then
+            mkdir -p reports
+            cp measure-json/measure-report.json reports/measure-report-latest.json
+            echo "- sgos.measure-report.v1 JSON: yazıldı (reports/measure-report-latest.json)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::sgos.measure-report.v1 JSON üretilemedi (adım sonucu: ${{ steps.measure_json.outcome }}). Markdown raporu etkilenmedi; reports/measure-report-latest.json güncellenmedi."
+            echo "- **UYARI: sgos.measure-report.v1 JSON üretilemedi** (sonuç: ${{ steps.measure_json.outcome }}). Markdown raporu etkilenmedi; reports/measure-report-latest.json GÜNCELLENMEDİ, skorkart bu dosyayı tazelik eşiğinden sonra UNKNOWN-STALE okur." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Özet
         if: always()
         run: cat reports/measure-latest.md >> "$GITHUB_STEP_SUMMARY" || echo "Rapor üretilemedi — adım loglarına bak." >> "$GITHUB_STEP_SUMMARY"
@@ -176,7 +211,7 @@ jobs:
           # Ortak güvenli kalıcılık sözleşmesi (docs/persistence-safety.md): izin listeli add, değişiklik
           # yoksa commit yok, fetch+rebase+sınırlı yeniden deneme, force yok, çatışmada kırmızı.
           bash scripts/persist-history.sh -m "ölçüm: $(date -u +%Y-%m-%d) (otomatik)" \
-            reports/measure-latest.md reports/runs/ content/topic-ledger.json
+            reports/measure-latest.md reports/runs/ content/topic-ledger.json reports/measure-report-latest.json
 
       - name: Artifact
         if: always()
@@ -185,6 +220,8 @@ jobs:
           name: measure-${{ github.run_id }}
           path: |
             reports/measure-latest.md
+            reports/measure-report-latest.json
+            measure-json/measure-report.json
             smoke.txt
             measure.txt
             detail.txt

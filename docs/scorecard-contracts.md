@@ -95,9 +95,9 @@ eşik/yorum INFERENCE'tır; INFERENCE hiçbir yerde CONFIRMED olmaz (`dimensionI
 - **Rapor dosyalarının kalıcı yeri tanımsız.** `performance-report` ve index raporu kalıcı bir yola yazılmıyor (yalnız `runPerformance`/`buildReport`
   dönüşü). Scorecard opsiyonel girdi olarak alır (`--performance-report`, `--index-report`); yoksa yalnız geçmişten hesaplar.
 - **#34 index-history'de `NOT_CONNECTED` durumu yok.** Boş örnek (`sample_size=0`) → UNKNOWN; bağlı olmama ile erken durma ayırt edilemez.
-- `sgos.measure-report.v1` üreticisi (#41) artık var ve scorecard gerçek şeklini okuyor (bkz. §5). Ama `measure.yml` henüz `--out reports/runs`
-  vermiyor ve `reports/runs/measure-report.json`'ı commit etmiyor (workflow bu PR'larda değiştirilmedi): dosya depoda oluşana kadar boyut
-  canlıda UNKNOWN kalır (`--measure-report reports/runs/measure-report.json`).
+- `sgos.measure-report.v1` üreticisi (#41) artık var ve scorecard gerçek şeklini okuyor (bkz. §5). `measure.yml` artık JSON'u üretir ve
+  `reports/measure-report-latest.json` olarak (rolling snapshot, bkz. `docs/measure-report.md` §Workflow) commit eder; ilk planlı koşu
+  2026-10-05'e kadar dosya depoda yoksa boyut UNKNOWN kalır (`--measure-report reports/measure-report-latest.json`).
 
 ## 5. `sgos.measure-report.v1` → `search_opportunity` (#41; `src/measure-report.ts`, `docs/measure-report.md`)
 
