@@ -52,6 +52,8 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || vars.SEARCH_GROWTH_CLARITY_DAILY_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      persisted_sha: ${{ steps.persist.outputs.persisted_sha }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
@@ -81,6 +83,7 @@ jobs:
       # Gecmis main zincirinde yasar: eski rutinin her gun ayri dala push etme hatasi tekrarlanmaz.
       # Degisiklik yoksa commit yok. Yarisi onlemek icin commit sonrasi rebase.
       - name: Gecmisi main'e yaz
+        id: persist
         if: always() && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || inputs.commit_history)
         run: |
           git config user.name "github-actions[bot]"
@@ -100,3 +103,30 @@ jobs:
             clarity-daily.txt
           retention-days: 30
           if-no-files-found: warn
+
+  # Option B: push-recursion kör noktasi (default GITHUB_TOKEN push'u tests.yml'in push tetigini
+  # TETIKLEMEZ). Persist adimi basariliysa, tam pushlanan SHA'yi acikca Tests'e verip dogrulatiyoruz.
+  # github.sha KULLANILMAZ (bu is'in tetikleyen ref'i, persist edilen commit degil). Bu is kirmizi
+  # olursa (continue-on-error / if: always() YOK), genel çalışma da kırmızı olur — gizlenmez.
+  verify-persistence:
+    name: dogrula — persisted SHA testleri gecer mi
+    needs: clarity-daily
+    if: needs.clarity-daily.outputs.persisted_sha != ''
+    permissions:
+      contents: read
+    uses: ./.github/workflows/tests-reusable.yml
+    with:
+      ref: ${{ needs.clarity-daily.outputs.persisted_sha }}
+
+  # Gözlemlenebilirlik (yük taşımaz — sadece durumu adlandırır): persist basarili oldu ama dogrulama
+  # kirmizi oldugunda PERSISTED_BUT_VERIFICATION_FAILED durumunu is ozetine yazar. verify-persistence
+  # zaten kirmiziyla genel calismayi kirmiziya cevirir; bu adim sadece neden'i acikca soyler.
+  verify-persistence-note:
+    name: not — persisted ama dogrulama basarisiz mi
+    needs: [clarity-daily, verify-persistence]
+    if: failure() && needs.clarity-daily.outputs.persisted_sha != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Durumu kaydet
+        run: |
+          echo "PERSISTED_BUT_VERIFICATION_FAILED: SHA ${{ needs.clarity-daily.outputs.persisted_sha }} main'e push edildi ama tests-reusable.yml bu SHA icin basarisiz oldu." >> "$GITHUB_STEP_SUMMARY"

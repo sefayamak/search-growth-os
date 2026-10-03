@@ -115,6 +115,22 @@ while ((attempt <= MAX_ATTEMPTS)); do
     fi
     if git push -q origin "HEAD:refs/heads/$BRANCH"; then
       echo "persist: push başarılı"
+      # Değişmez: LOCAL_PERSISTED_SHA == REMOTE_MAIN_SHA. Yerel HEAD'e güvenmek yerine push
+      # SONRASI origin/$BRANCH'i yeniden çözüp doğrula (fail-closed Option B gereği).
+      LOCAL_PERSISTED_SHA="$(git rev-parse HEAD)"
+      if ! git fetch -q origin "$BRANCH"; then
+        echo "persist: HATA — push sonrası origin/$BRANCH yeniden çözülemedi (fetch başarısız); persisted_sha YAYINLANMADI" >&2
+        exit 1
+      fi
+      REMOTE_MAIN_SHA="$(git rev-parse "origin/$BRANCH")"
+      if [[ "$LOCAL_PERSISTED_SHA" != "$REMOTE_MAIN_SHA" ]]; then
+        echo "persist: HATA — yerel push edilen SHA ($LOCAL_PERSISTED_SHA) remote main SHA'sinden ($REMOTE_MAIN_SHA) farkli; fail-closed, persisted_sha YAYINLANMADI" >&2
+        exit 1
+      fi
+      echo "persist: dogrulandi — persisted_sha=$REMOTE_MAIN_SHA"
+      if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+        echo "persisted_sha=$REMOTE_MAIN_SHA" >>"$GITHUB_OUTPUT"
+      fi
       exit 0
     fi
     echo "persist: push reddedildi (deneme $attempt)" >&2

@@ -7,6 +7,11 @@
 # Bu is ag ERISIMI GEREKTIRMEZ: testler kendi HTTP fixture sunucularini
 # ayaga kaldiriyor. Dolayisiyla bloke edici olmasi guvenli — gecici bir
 # dis kesinti bu isi kirmizi yakamaz.
+#
+# Test mantiginin TEK kopyasi tests-reusable.yml'dedir; bu dosya normal tetikler
+# (pull_request/push/workflow_dispatch) icin github.sha ile ona delege eder.
+# clarity-daily.yml de ayni reusable workflow'u, persist adiminin tam pushlanan
+# SHA'si ile cagirir (Option B: persist-sonrasi dogrulama, bkz. docs/persistence-safety.md).
 name: Tests
 
 on:
@@ -24,22 +29,6 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "24"        # native TypeScript type stripping
-
-
-      - run: npm install --no-audit --no-fund
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Testler
-        run: npm test
-
-      - name: Registry dogrulamasi
-        run: node --experimental-strip-types src/cli.ts registry config/sites.yaml
+    uses: ./.github/workflows/tests-reusable.yml
+    with:
+      ref: ${{ github.sha }}

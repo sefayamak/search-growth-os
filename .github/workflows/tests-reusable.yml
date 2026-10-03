@@ -1,0 +1,69 @@
+# Yeniden kullanılabilir test iş mantığı. tests.yml normal tetikler için github.sha ile çağırır;
+# clarity-daily.yml ise persist adımının tam push edilen SHA'si ile çağırır (Option B).
+#
+# ref girdisi her zaman tam checkout edilir (github.sha / bare default DEĞİL) ve checkout'tan
+# sonra HEAD, istenen ref'in çözülmüş SHA'sine karşı doğrulanır — uyuşmazlıkta iş kırmızı olur
+# (fail closed). Birincil çağıran (clarity-daily.yml) her zaman tam 40 karakterlik bir SHA geçirir;
+# ref bir dal/etiket adı olduğunda da doğrulama anlamlı çalışır (o zaman HEAD == o anki çözümü olur).
+name: Tests (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: "Checkout edilecek git ref'i veya SHA'si."
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: HEAD == istenen ref dogrulamasi (fail closed)
+        env:
+          REQUESTED_REF: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+          HEAD_SHA="$(git rev-parse HEAD)"
+          REQUESTED="$REQUESTED_REF"
+          echo "HEAD_SHA=$HEAD_SHA"
+          echo "REQUESTED_REF=$REQUESTED"
+          if [[ "$REQUESTED" =~ ^[0-9a-f]{40}$ ]]; then
+            # Girdi zaten tam SHA: dogrudan karsilastir.
+            if [[ "$HEAD_SHA" != "$REQUESTED" ]]; then
+              echo "::error::HEAD ($HEAD_SHA) istenen SHA'dan ($REQUESTED) farkli — fail closed"
+              exit 1
+            fi
+          else
+            # Girdi dal/etiket adi: checkout edilenin, o anda o ref'in cozuldugu SHA olup olmadigini dogrula.
+            RESOLVED="$(git rev-parse "origin/$REQUESTED" 2>/dev/null || git rev-parse "$REQUESTED")"
+            if [[ "$HEAD_SHA" != "$RESOLVED" ]]; then
+              echo "::error::HEAD ($HEAD_SHA) ref '$REQUESTED' cozumunden ($RESOLVED) farkli — fail closed"
+              exit 1
+            fi
+          fi
+          echo "dogrulandi: HEAD istenen ref ile eslesiyor"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"        # native TypeScript type stripping
+
+
+      - run: npm install --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Testler
+        run: npm test
+
+      - name: Registry dogrulamasi
+        run: node --experimental-strip-types src/cli.ts registry config/sites.yaml
