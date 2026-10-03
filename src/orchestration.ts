@@ -147,7 +147,7 @@ export const JOBS: Job[] = [
     writes: ["artifact:clarity-<run_id>"], depends_on: [], note: "schedule YOK; elle canli dogrulama. Ayni gun kota harcar." },
   { id: "index-probe", loop: "on_demand", cadence: "manual", runner: "github_actions", workflow: "index-probe.yml",
     api_calls_per_site: "UNKNOWN", quota_cost: { pool: "gsc-url-inspection", per_site: "UNKNOWN" }, state: "ACTIVE",
-    writes: ["artifact:index-probe-<run_id>"], depends_on: [], note: "Yalniz pamistanbul, ORNEKLEM (varsayilan 20, tavan 100)." },
+    writes: ["artifact:index-probe-<run_id>"], depends_on: [], note: "Registry'deki (config/sites.yaml) tum onboard siteler, siteler arasi IZOLE, ORNEKLEM (site basina varsayilan 20, tavan 100). index-alarms-daily hala PLANNED; bu PR alarm'i ACTIVE yapmaz." },
   { id: "brain", loop: "on_demand", cadence: "manual", runner: "github_actions", workflow: "brain.yml",
     api_calls_per_site: "UNKNOWN", quota_cost: null, state: "ACTIVE",
     writes: ["artifact:brain-evidence-<run_id>", "artifact:brain-run-<run_id>"], depends_on: ["clarity-manual"],
