@@ -157,7 +157,7 @@ test("G: marka / marka-disi — JSON, Markdown'daki satirlarla ayni sayilar", ()
 // H ----------------------------------------------------------------------------------------------------------------
 test("H: sorgu satirlari sinirli (500) ama toplamlar/marka ayrimi TUM satirlardan; kesme bayragi dogru", () => {
   const rows = Array.from({ length: 600 }, (_, i) => ({ query: `q${i}`, clicks: 1, impressions: 100 + i, ctr: 0.01, position: 8 }));
-  const input: SiteMeasureInput = { siteId: "x", gscProperty: "sc-domain:x.test", ga4Property: "1", patterns: ["zzz"], ga4Status: { state: "NOT_CONNECTED", note: "n" },
+  const input: SiteMeasureInput = { siteId: "x", gscProperty: "sc-domain:x.test", ga4Property: "1", patterns: ["zzz"], ga4Outcome: { kind: "not_connected", reason: "n" },
     outcome: { kind: "ok", current: rows, yearAgo: null, currentTotal: [{ clicks: 600, impressions: 99999, ctr: 0, position: 8 }], yearAgoTotal: null } };
   const s = buildSiteReport(input, { now: new Date("2026-10-02T06:40:00Z"), current: { label: "a", start: "2026-09-01", end: "2026-09-28" }, yearAgo: { label: "b", start: "2025-09-02", end: "2025-09-29" }, toolVersion: "t" });
   assert.equal(s.gsc.queries.length, 500);
@@ -199,7 +199,7 @@ test("J: bozuk upstream fail-closed — yalniz o site ERROR (null + sebep), Mark
 });
 
 test("J2: normalizasyon patlarsa (NaN) tek site ERROR olur, rapor ve diger siteler saglam", () => {
-  const ok = (id: string): SiteMeasureInput => ({ siteId: id, gscProperty: `sc-domain:${id}.test`, ga4Property: "1", patterns: [], ga4Status: { state: "NOT_CONNECTED", note: "n" },
+  const ok = (id: string): SiteMeasureInput => ({ siteId: id, gscProperty: `sc-domain:${id}.test`, ga4Property: "1", patterns: [], ga4Outcome: { kind: "not_connected", reason: "n" },
     outcome: { kind: "ok", current: [{ query: "a", clicks: 1, impressions: 10, ctr: 0.1, position: 3 }], yearAgo: null, currentTotal: [{ clicks: 1, impressions: 10, ctr: 0.1, position: 3 }], yearAgoTotal: null } });
   const broken = ok("b"); (broken.outcome as { current: unknown[] }).current = [{ query: "a", clicks: 1, ctr: 0.1, position: 3 }];
   const r = buildMeasureReport([ok("a"), broken, ok("c")], { now: new Date("2026-10-02T06:40:00Z"), current: { label: "a", start: "2026-09-01", end: "2026-09-28" }, yearAgo: { label: "b", start: "2025-09-02", end: "2025-09-29" }, toolVersion: "t" });
