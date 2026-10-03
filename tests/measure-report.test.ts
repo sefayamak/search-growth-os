@@ -136,19 +136,34 @@ test("UNKNOWN/NOT_CONNECTED/ERROR asla 0 olarak serilesmez", () => {
   for (const id of ["spryhand", "decideplan"]) assert.doesNotMatch(JSON.stringify(report.sites[id].gsc), /"(clicks|impressions|ctr|position)":0\b/);
 });
 
-test("GA4 hicbir sitede 0 uretmez: measure GA4'u cagirmaz; metrikler null", () => {
+test("GA4 kimlik yoksa hicbir sitede 0 uretmez: metrikler null, state NOT_CONNECTED", () => {
   for (const s of Object.values(report.sites)) {
-    assert.ok(s.ga4.state === "NOT_CONNECTED" || s.ga4.state === "UNKNOWN");
+    assert.equal(s.ga4.state, "NOT_CONNECTED");
     assert.deepEqual(Object.values(s.ga4.metrics), [null, null, null, null]);
   }
-  // Kimlik yokken NOT_CONNECTED; kimlik varken "cagrilmadi" => UNKNOWN (ERROR/MEASURED degil).
   assert.equal(report.sites.pamistanbul.ga4.state, "NOT_CONNECTED");
+});
+
+test("GA4 artik gercekten cagrilir: kimlik + registry property varsa MEASURED, gercek sayilarla; yoksa NOT_CONNECTED, 0 uydurulmaz", () => {
   const d = mkdtempSync(join(tmpdir(), "mr-ga-"));
   runMeasure(["--out", d], sa(), sa());
   const r: MeasureReport = JSON.parse(readFileSync(join(d, "measure-report.json"), "utf8"));
-  assert.equal(r.sites.pamistanbul.ga4.state, "UNKNOWN");
-  assert.deepEqual(Object.values(r.sites.pamistanbul.ga4.metrics), [null, null, null, null]);
-  assert.equal(r.sites.rightlisted.ga4.state, "NOT_CONNECTED", "registry'de ga4_property yok");
+  assert.equal(r.sites.pamistanbul.ga4.state, "MEASURED");
+  assert.deepEqual(r.sites.pamistanbul.ga4.metrics, { sessions: 120, engaged_sessions: 80, conversions: 5, revenue: 250.5 });
+  assert.equal(r.sites.pamistanbul.ga4.confidence, "CONFIRMED");
+  assert.equal(r.sites.pamistanbul.ga4.evidence_label, "FACT");
+  // Dogrulanmis sifir (API 200, satir yok) — MEASURED kalir, 0 gercek sayidir.
+  assert.equal(r.sites.spryhand.ga4.state, "MEASURED");
+  assert.deepEqual(r.sites.spryhand.ga4.metrics, { sessions: 0, engaged_sessions: 0, conversions: 0, revenue: 0 });
+  // GSC registry'de yok ama GA4 bagimsiz calisir — birbirine karismaz.
+  assert.equal(r.sites.decideplan.gsc.state, "NOT_CONNECTED");
+  assert.equal(r.sites.decideplan.ga4.state, "MEASURED");
+  assert.deepEqual(r.sites.decideplan.ga4.metrics, { sessions: 45, engaged_sessions: 30, conversions: 2, revenue: 0 });
+  // Registry'de ga4_property yok -> sebep ayri yazilir, uydurulmaz.
+  assert.equal(r.sites.rightlisted.ga4.state, "NOT_CONNECTED");
+  assert.match(r.sites.rightlisted.ga4.state_reason!, /ga4_property/);
+  assert.deepEqual(Object.values(r.sites.rightlisted.ga4.metrics), [null, null, null, null]);
+  assert.deepEqual(conforms(r), []);
   assert.deepEqual(semanticProblems(r), []);
 });
 
@@ -239,7 +254,7 @@ const row = (query: string, clicks: number, impressions: number, position: numbe
 const tot = (clicks: number, impressions: number, position: number) => [{ clicks, impressions, ctr: impressions ? clicks / impressions : 0, position }];
 const okInput = (siteId: string, patterns: string[], rows: ReturnType<typeof row>[], t = tot(10, 100, 5)): SiteMeasureInput => ({
   siteId, gscProperty: `sc-domain:${siteId}.test`, ga4Property: "123", patterns,
-  outcome: { kind: "ok", current: rows, yearAgo: rows, currentTotal: t, yearAgoTotal: t }, ga4Status: { state: "UNKNOWN", note: "n" },
+  outcome: { kind: "ok", current: rows, yearAgo: rows, currentTotal: t, yearAgoTotal: t }, ga4Outcome: { kind: "not_connected", reason: "n" },
 });
 
 test("truncation bayragi korunur: tablo sinirlanirsa queries_truncated=true ve toplam satir sayisi dogru", () => {
@@ -280,7 +295,7 @@ test("onceki donem yaniti yoksa karsilastirma UNKNOWN + null (0 degil)", () => {
 });
 
 test("hata mesaji yalnizca state_reason'da; metrik yok", () => {
-  const s = buildSiteReport({ siteId: "x", gscProperty: "sc-domain:x.test", ga4Property: "1", patterns: [], outcome: { kind: "error", message: "HTTP 500" }, ga4Status: { state: "UNKNOWN", note: "" } }, opts);
+  const s = buildSiteReport({ siteId: "x", gscProperty: "sc-domain:x.test", ga4Property: "1", patterns: [], outcome: { kind: "error", message: "HTTP 500" }, ga4Outcome: { kind: "not_connected", reason: "" } }, opts);
   assert.equal(s.gsc.state, "ERROR");
   assert.equal(s.gsc.state_reason, "HTTP 500");
   assert.equal(s.gsc.totals.clicks, null);

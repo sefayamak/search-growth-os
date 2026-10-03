@@ -22,6 +22,7 @@ export interface SearchConsoleAdapter {
 export interface Ga4Row { date?: string; landingPage?: string; source?: string; medium?: string; sessions: number; engagedSessions: number; conversions: number; eventName?: string; revenue?: number }
 export interface Ga4Adapter {
   status(): AdapterStatus;
+  totals(property: string, range: DateRange): Promise<Ga4Row[] | null>; // dimensionless site-wide aggregate (mirrors searchAnalytics(..., []))
   landingPages(property: string, range: DateRange): Promise<Ga4Row[] | null>;
   organicAcquisition(property: string, range: DateRange): Promise<Ga4Row[] | null>;
   aiReferrals(property: string, range: DateRange): Promise<Ga4Row[] | null>; // sources matching known AI referrers (chatgpt.com, perplexity.ai, copilot.microsoft.com, gemini.google.com, claude.ai)
@@ -84,6 +85,7 @@ export const searchConsole: SearchConsoleAdapter = {
 };
 export const ga4: Ga4Adapter = {
   status: () => liveStatus("Google Analytics 4", ga4Client.GA4_ENV, ga4Client.observedState()),
+  totals: ga4Client.totals,
   landingPages: ga4Client.landingPages,
   organicAcquisition: ga4Client.organicAcquisition,
   aiReferrals: ga4Client.aiReferrals,

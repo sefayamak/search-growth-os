@@ -35,10 +35,28 @@ const DATA = {
   },
 };
 
+// GA4 property id -> boyutsuz runReport yanitinda metricValues (sessions, engagedSessions, conversions, totalRevenue sirasiyla).
+// Dogrulanmis sifir icin bos rows kullan (null degil) — 100008 (spryhand) bunu test eder.
+const ga4Totals = (sessions, engagedSessions, conversions, revenue) =>
+  ({ rows: [{ metricValues: [{ value: String(sessions) }, { value: String(engagedSessions) }, { value: String(conversions) }, { value: String(revenue) }] }] });
+const GA4_DATA = {
+  "100011": ga4Totals(120, 80, 5, 250.5),      // pamistanbul, pamaistudio, myhappymade paylasiyor
+  "100008": { rows: [] },                       // spryhand — dogrulanmis sifir (API 200, satir yok)
+  "100010": ga4Totals(45, 30, 2, 0),            // decideplan — GSC registry'de yok ama GA4 bagimsiz calisir
+  "100017": ga4Totals(300, 200, 12, 890.25),    // untitledportraits
+};
+
 const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 globalThis.fetch = async (url, init = {}) => {
   const u = String(url);
   if (u.includes("oauth2.googleapis.com/token")) return json(200, { access_token: "fake-token", expires_in: 3600 });
+  const gaM = u.match(/properties\/([^/:]+):runReport/);
+  if (gaM) {
+    const prop = decodeURIComponent(gaM[1]);
+    const d = GA4_DATA[prop];
+    if (!d) return json(404, { error: "unknown GA4 property " + prop });
+    return json(200, d);
+  }
   const m = u.match(/sites\/([^/]+)\/searchAnalytics\/query/);
   if (!m) return json(404, { error: "unmocked " + u });
   const prop = decodeURIComponent(m[1]);

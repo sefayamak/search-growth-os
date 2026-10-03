@@ -209,7 +209,7 @@ test("round-trip/measure (#41): gercek buildMeasureReport cikti == fixture; scor
 });
 
 test("round-trip/measure FN: uretici NOT_CONNECTED/ERROR ciktisi -> scorecard asla OK/0 vermez; gercek sifir OK kalir", { skip: skip("src/measure-report.ts", measureMod, "PR #41") }, () => {
-  const mk = (outcome: unknown) => measureMod.buildMeasureReport([{ siteId: SITE, gscProperty: "sc-domain:pamistanbul.com", ga4Property: "NOT_CONNECTED", patterns: ["pamistanbul"], outcome, ga4Status: { state: "NOT_CONNECTED", note: "x" } }],
+  const mk = (outcome: unknown) => measureMod.buildMeasureReport([{ siteId: SITE, gscProperty: "sc-domain:pamistanbul.com", ga4Property: "NOT_CONNECTED", patterns: ["pamistanbul"], outcome, ga4Outcome: { kind: "not_connected", reason: "x" } }],
     { now: new Date(GEN_NOW), current: { label: "c", start: "2026-09-04", end: "2026-10-01" }, yearAgo: { label: "y", start: "2025-09-05", end: "2025-10-02" }, toolVersion: "0.1.0" });
   const st = (o: unknown) => get(buildScorecard({ site_id: SITE, measure: JSON.parse(JSON.stringify(mk(o))) }, NOW), "search_opportunity").state;
   assert.equal(st({ kind: "not_connected", reason: "token yok" }), "NOT_CONNECTED");
