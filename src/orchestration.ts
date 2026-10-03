@@ -158,11 +158,13 @@ export const JOBS: Job[] = [
     api_calls_per_site: 0, quota_cost: null, state: "ACTIVE", writes: [], depends_on: [],
     note: "Yeniden kullanilabilir test mantigi (on: workflow_call). Bagimsiz tetikleyici degil, callee: tests.yml (github.sha) ve clarity-daily.yml'in verify-persistence job'i (persisted_sha) cagirir. Schedule yok, main'e commit/push yok, data/ veya reports/ altina yazmaz (Option B, bkz. docs/persistence-safety.md)." },
 
-  // ---------------- PLANNED (yeni katmanlar; henuz kod/workflow yok) ----------------
+  // lighthouse-weekly: PLANNED -> ACTIVE (workflow olustu, PAGESPEED_API_KEY owner tarafindan GitHub Secret olarak eklendi).
   { id: "lighthouse-weekly", loop: "weekly", cadence: "weekly", cron: "10 7 * * 1", runner: "github_actions", workflow: "lighthouse.yml",
-    api_calls_per_site: "UNKNOWN", quota_cost: null, state: "PLANNED", writes: ["data/performance-history/*.json (commit, main)", "artifact:lighthouse-<run_id>"], depends_on: [],
-    commits_to_main: true, commit_group: TARGET_COMMIT_GROUP, push_strategy: "rebase_then_push",
-    note: "Planli saat oneri; workflow olusunca model guncellenir." },
+    api_calls_per_site: "UNKNOWN", quota_cost: null, state: "ACTIVE", writes: ["data/performance-history/*.json (commit, main)", "artifact:lighthouse-<run_id>"], depends_on: [],
+    commits_to_main: true, commit_group: TARGET_COMMIT_GROUP, push_strategy: "rebase_retry_bounded",
+    note: "scripts/persist-history.sh kullanir (clarity-daily ile ayni kalicilik sozlesmesi); secret yoksa src/performance.ts NOT_CONNECTED der, 0 uretmez." },
+
+  // ---------------- PLANNED (yeni katmanlar; henuz kod/workflow yok) ----------------
   { id: "index-alarms-daily", loop: "daily", cadence: "daily", cron: "40 7 * * *", runner: "github_actions", workflow: "index-alarms.yml",
     api_calls_per_site: "UNKNOWN", quota_cost: { pool: "gsc-url-inspection", per_site: "UNKNOWN" }, state: "PLANNED",
     writes: ["data/index-history/*.json (commit, main)", "data/canonical-backlog/*.json (commit, main)", "artifact:index-alarms-<run_id>"], depends_on: [],

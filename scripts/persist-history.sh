@@ -13,7 +13,7 @@
 set -euo pipefail
 
 # İzin listesi: fail-closed. Yeni bir yazıcı yolu eklemek bu dizinin (ve docs'un) bilinçli değişmesi demektir.
-ALLOWED=("data/clarity-history/" "reports/" "content/topic-ledger.json")
+ALLOWED=("data/clarity-history/" "data/performance-history/" "reports/" "content/topic-ledger.json")
 # Sert tavan; ortam değişkeni yalnız AŞAĞI çekebilir. Sonsuz döngü yok.
 MAX_ATTEMPTS=3
 if [[ "${PERSIST_MAX_ATTEMPTS:-}" =~ ^[1-3]$ ]]; then MAX_ATTEMPTS="$PERSIST_MAX_ATTEMPTS"; fi

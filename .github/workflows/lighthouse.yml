@@ -1,0 +1,124 @@
+# Search Growth OS — Lighthouse/CrUX HAFTALIK olcum + gecmis (salt-okunur AG: yalniz PageSpeed Insights GET).
+#
+# NEDEN VAR: src/performance.ts ve CLI performance-measure zaten kod/test/persistence tamamlanmis
+# (orchestration.ts'te daha once PLANNED idi); bu dosya o motoru calistirmaya alir, yeni bir olcum
+# sistemi EKLEMEZ.
+#
+# KIMLIK BILGISI: anahtar yalniz secrets.PAGESPEED_API_KEY -> ortam degiskeni PAGESPEED_API_KEY.
+# Deger hicbir adimda yazdirilmaz/loglanmaz/CLI argumani olarak verilmez (src/cli.ts bunu zaten reddeder).
+# Secret tanimli degilse src/performance.ts siteyi NOT_CONNECTED isaretler (asla 0 degil).
+#
+# 7 SITE: workflow ikinci bir site listesi TASIMAZ; config/sites.yaml (canonical registry) tek kaynak.
+# Bir sitenin PSI hatasi digerlerinin kaydini bozmaz (src/performance.ts fail-late; bkz. testler).
+#
+# YAZMA: yalniz `data/performance-history/` altina gecmis commit'i (main), scripts/persist-history.sh
+# uzerinden (clarity-daily.yml ile AYNI kalicilik sozlesmesi: fetch -> rebase -> push, force yok).
+# Bu is default GITHUB_TOKEN ile main'e push ettigi icin tests.yml'in push tetigini TETIKLEMEZ
+# (Option B kor noktasi, PR #51'de Clarity icin cozuldu) — asagidaki verify-persistence is'i ayni
+# cozumu burada da uygular: persist edilen TAM SHA tests-reusable.yml ile dogrulanir (github.sha DEGIL).
+
+name: Lighthouse weekly (native, read-only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      site:
+        description: "Tek site kimliği (boş = registry'deki tüm siteler)."
+        type: string
+        default: ""
+      commit_history:
+        description: "Gecmisi main'e yaz (kapatırsan yalnız artifact üretir)."
+        type: boolean
+        default: true
+  schedule:
+    # 07:10 UTC, haftada bir (Pazartesi) — orchestration.ts modelindeki lighthouse-weekly cron'u.
+    - cron: "10 7 * * 1"
+
+permissions:
+  contents: write # yalnız data/performance-history/ commit'i için
+
+concurrency:
+  group: main-writes
+  cancel-in-progress: false
+
+jobs:
+  lighthouse-weekly:
+    name: lighthouse haftalik (PSI, 7 site)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      persisted_sha: ${{ steps.persist.outputs.persisted_sha }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: "24"
+
+      - name: Registry gate
+        run: node --experimental-strip-types src/cli.ts registry config/sites.yaml
+
+      - name: Lighthouse haftalik
+        id: measure
+        env:
+          PAGESPEED_API_KEY: ${{ secrets.PAGESPEED_API_KEY }}
+          SITE: ${{ inputs.site }}
+        run: |
+          set -o pipefail
+          case "$SITE" in ''|*[!a-z0-9]*) [ -z "$SITE" ] || { echo "site kimligi kucuk harf/rakam olmali"; exit 1; };; esac
+          node --experimental-strip-types src/cli.ts performance-measure config/sites.yaml --history data/performance-history --write --out performance-out ${SITE:+--site "$SITE"} | tee performance.txt
+
+      - name: Ozet
+        if: always()
+        run: |
+          { cat performance-out/performance-report.md 2>/dev/null || echo "Lighthouse haftalik raporu uretilemedi — adim loglarina bak."; } >> "$GITHUB_STEP_SUMMARY"
+
+      # Gecmis main zincirinde yasar (clarity-daily.yml ile aynı sozlesme, docs/persistence-safety.md):
+      # izin listeli add, degisiklik yoksa commit yok, push oncesi fetch+rebase, sinirli yeniden deneme,
+      # force yok, catismada kirmizi.
+      - name: Gecmisi main'e yaz
+        id: persist
+        if: always() && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || inputs.commit_history)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          bash scripts/persist-history.sh -m "lighthouse: haftalik olcum $(date -u +%Y-%m-%d) (otomatik)" \
+            data/performance-history/
+
+      - name: Artifact
+        if: always()
+        uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5.0
+        with:
+          name: lighthouse-${{ github.run_id }}
+          path: |
+            performance-out/
+            performance.txt
+          retention-days: 30
+          if-no-files-found: warn
+
+  # Option B: push-recursion kör noktasi (default GITHUB_TOKEN push'u tests.yml'in push tetigini
+  # TETIKLEMEZ). Persist adimi basariliysa, tam pushlanan SHA'yi acikca Tests'e verip dogrulatiyoruz.
+  # github.sha KULLANILMAZ (bu is'in tetikleyen ref'i, persist edilen commit degil). Bu is kirmizi
+  # olursa (continue-on-error / if: always() YOK), genel çalışma da kırmızı olur — gizlenmez.
+  verify-persistence:
+    name: dogrula — persisted SHA testleri gecer mi
+    needs: lighthouse-weekly
+    if: needs.lighthouse-weekly.outputs.persisted_sha != ''
+    permissions:
+      contents: read
+    uses: ./.github/workflows/tests-reusable.yml
+    with:
+      ref: ${{ needs.lighthouse-weekly.outputs.persisted_sha }}
+
+  # Gözlemlenebilirlik (yük taşımaz — sadece durumu adlandırır): persist basarili oldu ama dogrulama
+  # kirmizi oldugunda PERSISTED_BUT_VERIFICATION_FAILED durumunu is ozetine yazar. verify-persistence
+  # zaten kirmiziyla genel calismayi kirmiziya cevirir; bu adim sadece neden'i acikca soyler.
+  verify-persistence-note:
+    name: not — persisted ama dogrulama basarisiz mi
+    needs: [lighthouse-weekly, verify-persistence]
+    if: failure() && needs.lighthouse-weekly.outputs.persisted_sha != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Durumu kaydet
+        run: |
+          echo "PERSISTED_BUT_VERIFICATION_FAILED: SHA ${{ needs.lighthouse-weekly.outputs.persisted_sha }} main'e push edildi ama tests-reusable.yml bu SHA icin basarisiz oldu." >> "$GITHUB_STEP_SUMMARY"
