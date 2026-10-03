@@ -270,7 +270,9 @@ const cli = (cwd: string, ...a: string[]) => spawnSync("node", ["--experimental-
 test("cli: varsayilan strateji gsc (Phase 1 cikti bicimi), segment bolumu yok", () => {
   const cwd = mkdtempSync(join(tmpdir(), "seg-"));
   const f = join(cwd, "u.txt"); writeFileSync(f, "https://pamistanbul.com/\n");
-  const r = cli(cwd, "--urls", f);
+  // --urls yalniz tek-site kosusunda anlamlidir (hangi sitenin aday listesi oldugu belirsiz
+  // olmasin diye); PAM-only varsayilan KALDIRILDI, bu yuzden --site acikca verilir.
+  const r = cli(cwd, "--site", "pamistanbul", "--urls", f);
   assert.equal(r.status, 0);
   assert.match(r.stdout, /NOT_CONNECTED/);
   assert.ok(!/## Segmentler/.test(r.stdout));
@@ -279,7 +281,7 @@ test("cli: varsayilan strateji gsc (Phase 1 cikti bicimi), segment bolumu yok", 
 
 test("cli: --strategy segmented kimlik yokken NOT_CONNECTED + SAMPLE; --urls ile birlikte reddedilir; gecersiz deger reddedilir", () => {
   const cwd = mkdtempSync(join(tmpdir(), "seg-"));
-  const r = cli(cwd, "--strategy", "segmented");
+  const r = cli(cwd, "--site", "pamistanbul", "--strategy", "segmented");
   assert.equal(r.status, 0);
   assert.match(r.stdout, /NOT_CONNECTED/);
   assert.match(r.stdout, /TAM COVERAGE DEĞİL/);
@@ -287,7 +289,10 @@ test("cli: --strategy segmented kimlik yokken NOT_CONNECTED + SAMPLE; --urls ile
   assert.match(r.stdout, /SITEMAP_NOT_OBSERVED_IN_GSC_WINDOW \| UNKNOWN/);
   assert.equal(cli(cwd, "--strategy", "segmented", "--urls", "x").status, 1);
   assert.equal(cli(cwd, "--strategy", "bogus").status, 1);
-  assert.equal(cli(cwd, "--site", "spryhand", "--strategy", "segmented").status, 1, "pamistanbul kilidi");
+  // PAM-only kilit KALDIRILDI: registry'deki herhangi bir site (orn. spryhand) artik calisir.
+  assert.equal(cli(cwd, "--site", "spryhand", "--strategy", "segmented").status, 0, "spryhand artik registry uzerinden calisabilir");
+  // Bilinmeyen/kayit-disi bir site kimligi hala KAPALI-BASARISIZ olmalidir.
+  assert.equal(cli(cwd, "--site", "evil-not-registered", "--strategy", "segmented").status, 1, "kayit-disi site reddedilir");
 });
 
 test("workflow: strategy input varsayilan gsc, schedule YOK, Indexing API yok", () => {

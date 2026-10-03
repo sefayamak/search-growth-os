@@ -91,7 +91,7 @@ test("cli: kimlik yokken NOT_CONNECTED yazar, cikis 0, dosya yazmaz", () => {
   const cwd = mkdtempSync(join(tmpdir(), "ip-"));
   const f = join(cwd, "urls.txt"); writeFileSync(f, "https://pamistanbul.com/\n");
   const env = { ...process.env }; delete env.SEARCH_GROWTH_GSC_CREDENTIALS_JSON;
-  const out = execFileSync("node", ["--experimental-strip-types", join(ROOT, "src/cli.ts"), "inspect-index", join(ROOT, "config/sites.yaml"), "--urls", f], { cwd, env, encoding: "utf8" });
+  const out = execFileSync("node", ["--experimental-strip-types", join(ROOT, "src/cli.ts"), "inspect-index", join(ROOT, "config/sites.yaml"), "--site", "pamistanbul", "--urls", f], { cwd, env, encoding: "utf8" });
   assert.match(out, /NOT_CONNECTED/);
   assert.match(out, /TAM COVERAGE DEĞİL/);
   assert.deepEqual(readdirSync(cwd), ["urls.txt"]);
