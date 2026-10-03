@@ -154,6 +154,9 @@ export const JOBS: Job[] = [
     note: "clarity-<run_id> artifact'ini tuketir; LLM maliyeti bu modelde olculmedi (UNKNOWN)." },
   { id: "tests-ci", loop: "on_demand", cadence: "event", runner: "github_actions", workflow: "tests.yml",
     api_calls_per_site: 0, quota_cost: null, state: "ACTIVE", writes: [], depends_on: [], note: "pull_request / push; schedule yok." },
+  { id: "tests-reusable", loop: "on_demand", cadence: "event", runner: "github_actions", workflow: "tests-reusable.yml",
+    api_calls_per_site: 0, quota_cost: null, state: "ACTIVE", writes: [], depends_on: [],
+    note: "Yeniden kullanilabilir test mantigi (on: workflow_call). Bagimsiz tetikleyici degil, callee: tests.yml (github.sha) ve clarity-daily.yml'in verify-persistence job'i (persisted_sha) cagirir. Schedule yok, main'e commit/push yok, data/ veya reports/ altina yazmaz (Option B, bkz. docs/persistence-safety.md)." },
 
   // ---------------- PLANNED (yeni katmanlar; henuz kod/workflow yok) ----------------
   { id: "lighthouse-weekly", loop: "weekly", cadence: "weekly", cron: "10 7 * * 1", runner: "github_actions", workflow: "lighthouse.yml",
