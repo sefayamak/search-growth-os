@@ -11,7 +11,7 @@
 // verdi ve gerçekten sıfır" demektir ve o zaman state MEASURED'dır.
 //
 // Bu dosya VERİ ÇEKMEZ; ağ, dosya ya da env okumaz (commit için çağıran verir).
-import type { SearchAnalyticsRow } from "./adapters/index.ts";
+import type { Ga4Row, SearchAnalyticsRow } from "./adapters/index.ts";
 import { classifyQuery, splitByBrand, topicOpportunities, type Period, type Totals } from "./measure.ts";
 
 export const MEASURE_REPORT_SCHEMA = "sgos.measure-report.v1" as const;
@@ -121,14 +121,20 @@ export type SiteOutcome =
   | { kind: "not_connected"; reason: string }
   | { kind: "error"; message: string };
 
+/** GSC'nin `SiteOutcome`'uyla ayni sozlesme: `totals` boyutsuz (site-genel) GA4
+ *  cagrisinin satirlaridir — API 200 + satir yok ise [] (dogrulanmis sifir), null DEGIL. */
+export type Ga4Outcome =
+  | { kind: "ok"; totals: Ga4Row[] }
+  | { kind: "not_connected"; reason: string }
+  | { kind: "error"; message: string };
+
 export interface SiteMeasureInput {
   siteId: string;
   gscProperty: string;
   ga4Property: string;
   patterns: string[];
   outcome: SiteOutcome;
-  /** adapters.ga4.status() — `measure` GA4'ü çağırmaz; durum yalnızca kimlik varlığını söyler. */
-  ga4Status: { state: "CONNECTED" | "NOT_CONNECTED" | "UNKNOWN" | "ERROR"; note: string };
+  ga4Outcome: Ga4Outcome;
 }
 
 export interface BuildOptions {
@@ -154,6 +160,20 @@ function totalsFrom(rows: SearchAnalyticsRow[]): { totals: ReportTotals; source:
 }
 
 const brandTotals = (t: Totals): BrandTotals => ({ clicks: t.clicks, impressions: t.impressions, ctr: t.ctr, position: t.impressions === 0 ? null : t.position, queries: t.queries });
+
+/** Boyutsuz GA4 satırı -> metrik. Satır yoksa API 200 dönmüştür (dogrulanmis sifir); kimlik yoksa buraya hic gelinmez. */
+const ga4TotalsFrom = (rows: Ga4Row[]): Ga4["metrics"] => {
+  const r = rows[0];
+  return { sessions: r?.sessions ?? 0, engaged_sessions: r?.engagedSessions ?? 0, conversions: r?.conversions ?? 0, revenue: r?.revenue ?? 0 };
+};
+
+function unmeasuredGa4(state: Exclude<MeasureState, "MEASURED">, reason: string, property: string | null): Ga4 {
+  return {
+    state, state_reason: reason, confidence: "UNKNOWN", evidence_label: "FACT", retrieved_at: null,
+    source: { system: "google_analytics_4", property },
+    metrics: { sessions: null, engaged_sessions: null, conversions: null, revenue: null },
+  };
+}
 
 // Yüzde değişim yalnız önceki dönem sıfır DEĞİLSE tanımlıdır (markdown'daki "(yeni)" / "(=)" ile aynı kural).
 const delta = (cur: number | null, prev: number | null): Delta =>
@@ -244,15 +264,23 @@ export function buildSiteReport(input: SiteMeasureInput, o: BuildOptions): SiteR
     };
   }
 
-  // GA4: `measure` hiç çağırmaz. Kimlik yoksa NOT_CONNECTED; varsa "çağrılmadı" => UNKNOWN. Metrik 0 DEĞİL, null.
-  const ga4State: MeasureState = ga4Prop === null || input.ga4Status.state === "NOT_CONNECTED" ? "NOT_CONNECTED" : "UNKNOWN";
-  const ga4: Ga4 = {
-    state: ga4State,
-    state_reason: ga4Prop === null ? "registry'de ga4_property yok" : input.ga4Status.state === "NOT_CONNECTED" ? input.ga4Status.note : "kimlik var ama `measure` GA4'ü çağırmıyor (yalnız smoke testi çağırır); metrik ölçülmedi",
-    confidence: "UNKNOWN", evidence_label: "FACT", retrieved_at: null,
-    source: { system: "google_analytics_4", property: ga4Prop },
-    metrics: { sessions: null, engaged_sessions: null, conversions: null, revenue: null },
-  };
+  // GA4: boyutsuz (site-genel) toplam. Registry'de property yoksa oncelik onda;
+  // sonra adapter'in gercek sonucu (not_connected: kimlik yok; error: cagri hata verdi;
+  // ok: MEASURED, 0 dahil gercek sayi — asla uydurulmaz).
+  let ga4: Ga4;
+  if (ga4Prop === null) {
+    ga4 = unmeasuredGa4("NOT_CONNECTED", "registry'de ga4_property yok", null);
+  } else if (input.ga4Outcome.kind === "not_connected") {
+    ga4 = unmeasuredGa4("NOT_CONNECTED", input.ga4Outcome.reason, ga4Prop);
+  } else if (input.ga4Outcome.kind === "error") {
+    ga4 = unmeasuredGa4("ERROR", input.ga4Outcome.message, ga4Prop);
+  } else {
+    ga4 = {
+      state: "MEASURED", state_reason: null, confidence: "CONFIRMED", evidence_label: "FACT", retrieved_at: o.now.toISOString(),
+      source: { system: "google_analytics_4", property: ga4Prop },
+      metrics: ga4TotalsFrom(input.ga4Outcome.totals),
+    };
+  }
 
   return {
     site_id: input.siteId, generated_at,
@@ -274,7 +302,7 @@ export function buildMeasureReport(inputs: SiteMeasureInput[], o: BuildOptions):
       tool: "search-growth-os", command: "measure", tool_version: o.toolVersion, commit: o.commit ?? null, registry_path: o.registryPath ?? null,
       notes: [
         "GSC: searchAnalytics.query (web, dataState final), sorgu boyutu + boyutsuz site toplamı; dönem karşılaştırması yıl-yıl.",
-        "GA4: measure komutu çağırmaz; metrikler null ve state UNKNOWN/NOT_CONNECTED.",
+        "GA4: Data API runReport boyutsuz (site-genel) çağrı; sessions/engagedSessions/conversions/totalRevenue toplamı, dönem karşılaştırması yok.",
         "Marka/marka-dışı: registry brand_entities/people_entities/domain desenleriyle kural-tabanlı sınıflama (INFERENCE/CANDIDATE).",
       ],
     },

@@ -9,7 +9,7 @@
     "registry_path": "tests/fixtures/measure-report/sites.fixture.json",
     "notes": [
       "GSC: searchAnalytics.query (web, dataState final), sorgu boyutu + boyutsuz site toplamı; dönem karşılaştırması yıl-yıl.",
-      "GA4: measure komutu çağırmaz; metrikler null ve state UNKNOWN/NOT_CONNECTED.",
+      "GA4: Data API runReport boyutsuz (site-genel) çağrı; sessions/engagedSessions/conversions/totalRevenue toplamı, dönem karşılaştırması yok.",
       "Marka/marka-dışı: registry brand_entities/people_entities/domain desenleriyle kural-tabanlı sınıflama (INFERENCE/CANDIDATE)."
     ]
   },
@@ -182,7 +182,7 @@
       },
       "ga4": {
         "state": "NOT_CONNECTED",
-        "state_reason": "set SEARCH_GROWTH_GA4_CREDENTIALS_JSON (see docs/integrations/)",
+        "state_reason": "SEARCH_GROWTH_GA4_CREDENTIALS_JSON yok",
         "confidence": "UNKNOWN",
         "evidence_label": "FACT",
         "retrieved_at": null,
@@ -359,7 +359,7 @@
       },
       "ga4": {
         "state": "NOT_CONNECTED",
-        "state_reason": "set SEARCH_GROWTH_GA4_CREDENTIALS_JSON (see docs/integrations/)",
+        "state_reason": "SEARCH_GROWTH_GA4_CREDENTIALS_JSON yok",
         "confidence": "UNKNOWN",
         "evidence_label": "FACT",
         "retrieved_at": null,
@@ -475,7 +475,7 @@
       },
       "ga4": {
         "state": "NOT_CONNECTED",
-        "state_reason": "set SEARCH_GROWTH_GA4_CREDENTIALS_JSON (see docs/integrations/)",
+        "state_reason": "SEARCH_GROWTH_GA4_CREDENTIALS_JSON yok",
         "confidence": "UNKNOWN",
         "evidence_label": "FACT",
         "retrieved_at": null,
@@ -591,7 +591,7 @@
       },
       "ga4": {
         "state": "NOT_CONNECTED",
-        "state_reason": "set SEARCH_GROWTH_GA4_CREDENTIALS_JSON (see docs/integrations/)",
+        "state_reason": "SEARCH_GROWTH_GA4_CREDENTIALS_JSON yok",
         "confidence": "UNKNOWN",
         "evidence_label": "FACT",
         "retrieved_at": null,
@@ -950,7 +950,7 @@
       },
       "ga4": {
         "state": "NOT_CONNECTED",
-        "state_reason": "set SEARCH_GROWTH_GA4_CREDENTIALS_JSON (see docs/integrations/)",
+        "state_reason": "SEARCH_GROWTH_GA4_CREDENTIALS_JSON yok",
         "confidence": "UNKNOWN",
         "evidence_label": "FACT",
         "retrieved_at": null,
@@ -1128,7 +1128,7 @@
       },
       "ga4": {
         "state": "NOT_CONNECTED",
-        "state_reason": "set SEARCH_GROWTH_GA4_CREDENTIALS_JSON (see docs/integrations/)",
+        "state_reason": "SEARCH_GROWTH_GA4_CREDENTIALS_JSON yok",
         "confidence": "UNKNOWN",
         "evidence_label": "FACT",
         "retrieved_at": null,

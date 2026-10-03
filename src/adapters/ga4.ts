@@ -87,6 +87,11 @@ async function runReport(
   return out;
 }
 
+/** Boyutsuz (site-genel) toplam — GSC'deki `searchAnalytics(..., [])` ile ayni mantik:
+ *  sorgu/sayfa kirilimina DAYANMAZ, dusuk-hacimli kuyruktan etkilenmez. API 200 + satir
+ *  yok ise dogrulanmis sifirdir (bos dizi), null DEGIL — null yalnizca kimlik yokken doner. */
+export const totals = (p: string, r: DateRange) => runReport(p, r, []);
+
 export const landingPages = (p: string, r: DateRange) => runReport(p, r, ["date", "landingPagePlusQueryString"]);
 
 /** Organik arama edinimi — kanal degil KAYNAK/ARAC ile: "Organic Search"

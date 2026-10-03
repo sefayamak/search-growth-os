@@ -277,18 +277,40 @@ async function main() {
       const buf: string[] = [];
       const say = (l: string) => buf.push(l);
       const gscPre = searchConsole.status();
+      const ga4Pre = ga4.status();
       // sgos.measure-report.v1 icin ayni sonuclarin yapilandirilmis kaydi (Markdown'a dokunmaz).
       const reportInputs: import("./measure-report.ts").SiteMeasureInput[] = [];
       for (const site of reg.registry.sites) {
         const prop = String(site.google_search_console_property);
         const ga = String(site.ga4_property);
+        // GA4: GSC ile ayni boyutsuz-toplam deseni. Kimlik yoksa (portfoy geneli) ya da
+        // registry'de property yoksa (siteye ozel) cagri YAPILMAZ — ikisi ayri sebep olarak
+        // raporlanir. Cagri yapilirsa sonuc ga4Outcome'a tasinir, ga4.status() yalnizca
+        // ozet satirinda kullanilir (adapters.index liveStatus — observedState'e dayanir).
+        let ga4Outcome: import("./measure-report.ts").Ga4Outcome;
+        if (ga4Pre.state === "NOT_CONNECTED") ga4Outcome = { kind: "not_connected", reason: `${ga4Pre.envVar} yok` };
+        else if (!ga || ga === "NOT_CONNECTED" || ga === "UNKNOWN") ga4Outcome = { kind: "not_connected", reason: "registry'de ga4_property yok" };
+        else {
+          try {
+            const rows = await ga4.totals(ga, p.current);
+            ga4Outcome = rows === null ? { kind: "not_connected", reason: "kimlik okunamadı" } : { kind: "ok", totals: rows };
+          } catch (e) { ga4Outcome = { kind: "error", message: (e as Error).message }; }
+        }
         const rec = (outcome: import("./measure-report.ts").SiteOutcome) =>
-          reportInputs.push({ siteId: site.id, gscProperty: prop, ga4Property: ga, patterns: brandPatterns(site), outcome, ga4Status: ga4.status() });
+          reportInputs.push({ siteId: site.id, gscProperty: prop, ga4Property: ga, patterns: brandPatterns(site), outcome, ga4Outcome });
         say(`${site.id}`);
         say(`  GSC property : ${prop}`);
         say(`  GA4 property : ${ga}`);
         const patterns = brandPatterns(site);
         say(`  marka deseni : ${patterns.join(" · ") || "(yok — brand_entities boş)"}`);
+        if (ga4Outcome.kind === "ok") {
+          const t = ga4Outcome.totals[0];
+          say(`  GA4 toplam   : ${t?.sessions ?? 0} oturum · ${t?.engagedSessions ?? 0} etkileşimli · ${t?.conversions ?? 0} dönüşüm · ${t?.revenue ?? 0} gelir`);
+        } else if (ga4Outcome.kind === "error") {
+          say(`  GA4          : HATA — ${ga4Outcome.message}`);
+        } else {
+          say(`  GA4          : NOT_CONNECTED — ${ga4Outcome.reason}`);
+        }
 
         // Gercek olcum. Iki sebep ayri ayri raporlanir ve BIRBIRINE
         // karistirilmaz: kimligin olmamasi (portfoyun tamami icin tek bir

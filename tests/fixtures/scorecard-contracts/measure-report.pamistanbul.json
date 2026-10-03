@@ -9,7 +9,7 @@
     "registry_path": null,
     "notes": [
       "GSC: searchAnalytics.query (web, dataState final), sorgu boyutu + boyutsuz site toplamı; dönem karşılaştırması yıl-yıl.",
-      "GA4: measure komutu çağırmaz; metrikler null ve state UNKNOWN/NOT_CONNECTED.",
+      "GA4: Data API runReport boyutsuz (site-genel) çağrı; sessions/engagedSessions/conversions/totalRevenue toplamı, dönem karşılaştırması yok.",
       "Marka/marka-dışı: registry brand_entities/people_entities/domain desenleriyle kural-tabanlı sınıflama (INFERENCE/CANDIDATE)."
     ]
   },

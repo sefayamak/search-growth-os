@@ -96,7 +96,7 @@ export function buildMeasure(m: any): unknown {
   const report = m.buildMeasureReport([{
     siteId: SITE, gscProperty: "sc-domain:pamistanbul.com", ga4Property: "NOT_CONNECTED", patterns: ["pamistanbul", "pam istanbul"],
     outcome: { kind: "ok", current, yearAgo, currentTotal: total(current), yearAgoTotal: total(yearAgo) },
-    ga4Status: { state: "NOT_CONNECTED", note: "GA4 kimligi yok" },
+    ga4Outcome: { kind: "not_connected", reason: "GA4 kimligi yok" },
   }], {
     now: new Date(GEN_NOW), current: { label: "son 28 gun", start: "2026-09-04", end: "2026-10-01" }, yearAgo: { label: "gecen yil", start: "2025-09-05", end: "2025-10-02" },
     toolVersion: "0.1.0", commit: null, registryPath: null,
