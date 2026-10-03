@@ -338,8 +338,13 @@ test("CLAUDE.md başlangıç protokolü: tetikleyici cümle, kimlik, PAM CRM/ST1
   assert.match(head, /Owner-gated eylem yapma/);
 });
 
-test("schedule/workflow değişmedi: bu PR yalnız ops dosyaları ekler (workflow dizini dokunulmaz)", () => {
-  const r = spawnSync("git", ["diff", "--name-only", "origin/main...HEAD", "--", ".github"], { cwd: ROOT, encoding: "utf8", env: ENV });
-  // origin/main CI'da olmayabilir; varsa .github farkı BOŞ olmalı.
+test("#47 (handoff protokolü) yalnız ops dosyaları ekledi, workflow dizinine dokunmadı — sabit tarihsel commit, CALISAN DAL DEGIL", () => {
+  // DIKKAT: bilerek origin/main...HEAD (calisan dal) DEGIL, #47'nin kendi sabit commit'i test edilir.
+  // Eski surum "su an hangi dal calisiyor" diye dinamik kontrol ediyordu; bu da workflow'a MESRU ve
+  // KASITLI dokunan her gelecekteki PR'i (#45 gibi) yanlislikla kirardi — oyle bir dal #47 degil, #47'nin
+  // "ops-only" sozunu hic vermemisti. Dogru/degismez invariant: #47'nin KENDI commit'i hic workflow eklemedi.
+  const HANDOFF_COMMIT = "e96d4ebc0578779ed05f03e369aba97b68e5215f"; // Ops: GitHub-first cross-PC handoff protocol (#47)
+  const r = spawnSync("git", ["diff", "--name-only", `${HANDOFF_COMMIT}^`, HANDOFF_COMMIT, "--", ".github"], { cwd: ROOT, encoding: "utf8", env: ENV });
+  // Bu commit'in ataları yerel repoda yoksa (orn. shallow clone) atla; mevcutsa fark BOS olmali.
   if (r.status === 0) assert.equal(r.stdout.trim(), "");
 });
