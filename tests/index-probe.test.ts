@@ -1,7 +1,7 @@
-// inspect-index: pamistanbul'a kilitli, salt-okunur, kota korumali ORNEKLEM.
+// inspect-index: registry-driven (config/sites.yaml), salt-okunur, kota korumali ORNEKLEM.
 // Buradaki testlerin cogu NE YAPILMAMASI gerektigi hakkinda: 403/429'u "indekslenmemis"
 // diye okumak, baska bir siteyi sorgulamak, kota bitince devam etmek, Indexing API'ye
-// yazmak.
+// yazmak, bilinmeyen bir site kimligini kabul etmek.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -9,13 +9,15 @@ import { mkdtempSync, writeFileSync, readFileSync, readdirSync, statSync } from 
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import {
-  PROBE_SITE_ID, DEFAULT_LIMIT, HARD_LIMIT, MAX_CONSECUTIVE_ERRORS, assertProbeSite, hostAllowed, resolveLimit, classifyInspection,
+  DEFAULT_LIMIT, HARD_LIMIT, MAX_CONSECUTIVE_ERRORS, assertKnownSite, hostAllowed, resolveLimit, classifyInspection,
   classifyError, runProbe, summarizeSitemaps, usedOn, recordUsage, probeToMarkdown,
+  statusOf, hasCompletedToday, mergeRunLog, emptyRunLog, RUN_LOG_SCHEMA,
 } from "../src/index-probe.ts";
 import { googleJson } from "../src/adapters/google-auth.ts";
 
 const ROOT = new URL("..", import.meta.url).pathname;
 const SITE = { id: "pamistanbul", production_domain: "pamistanbul.com" };
+const KNOWN = ["pamistanbul", "pamaistudio", "spryhand", "decideplan", "rightlisted", "untitledportraits", "myhappymade"];
 const urls = (n: number) => Array.from({ length: n }, (_, i) => `https://pamistanbul.com/sayfa-${i}`);
 const PASS = { indexStatusResult: { verdict: "PASS", coverageState: "Submitted and indexed", googleCanonical: "https://pamistanbul.com/x" } };
 
@@ -25,23 +27,39 @@ function opts(over: Partial<Parameters<typeof runProbe>[0]> = {}) {
   return { o, calls };
 }
 
-// --- kilit: yalniz pamistanbul, yalniz kendi host'lari --------------------------
+// --- registry kilit: bilinen site id'leri kabul; bilinmeyen reddedilir ----------
 
-test("yalnizca pamistanbul: baska site kimligi reddedilir", () => {
-  assert.doesNotThrow(() => assertProbeSite(PROBE_SITE_ID));
-  for (const id of ["spryhand", "pamaistudio", "decideplan", "", "PAMISTANBUL"]) assert.throws(() => assertProbeSite(id), /yalnizca 'pamistanbul'/);
+test("assertKnownSite: registry'deki tum siteler kabul, bilinmeyen/bos/yanlis-case reddedilir", () => {
+  for (const id of KNOWN) assert.doesNotThrow(() => assertKnownSite(id, KNOWN));
+  for (const id of ["not-a-site", "", "PAMISTANBUL", "evil"]) assert.throws(() => assertKnownSite(id, KNOWN), /kayit defterinde/);
 });
 
-test("runProbe baska site icin tek bir cagri yapmadan reddeder", async () => {
-  const { o, calls } = opts({ site: { id: "spryhand", production_domain: "spryhand.com" } });
-  await assert.rejects(runProbe(o), /yalnizca/);
+test("runProbe: knownSiteIds verilirse bilinmeyen site tek bir cagri yapmadan reddedilir; verilmezse bu savunma katmani atlanir", async () => {
+  const { o, calls } = opts({ site: { id: "not-a-site", production_domain: "not-a-site.com" }, knownSiteIds: KNOWN });
+  await assert.rejects(runProbe(o), /kayit defterinde/);
   assert.equal(calls.length, 0);
+
+  // 7 bilinen sitenin HER BIRI calisabilir (PAM-only kilit kaldirildi).
+  for (const id of KNOWN) {
+    const { o: o2 } = opts({ site: { id, production_domain: `${id}.example` }, urls: [`https://${id}.example/a`], knownSiteIds: KNOWN });
+    const r = await runProbe(o2);
+    assert.equal(r.results.length, 1, id);
+  }
 });
 
-test("cli: --site spryhand cikis kodu 1 ve hicbir cagri/yazma yok", () => {
-  const r = spawnSync("node", ["--experimental-strip-types", join(ROOT, "src/cli.ts"), "inspect-index", join(ROOT, "config/sites.yaml"), "--site", "spryhand"], { encoding: "utf8", cwd: mkdtempSync(join(tmpdir(), "ip-")) });
+test("cli: --site bilinmeyen-site cikis kodu 1, hicbir API cagrisi/yazma yok, ikinci sabit-kodlu 7-site listesi YOK", () => {
+  const r = spawnSync("node", ["--experimental-strip-types", join(ROOT, "src/cli.ts"), "inspect-index", join(ROOT, "config/sites.yaml"), "--site", "evil-not-registered"], { encoding: "utf8", cwd: mkdtempSync(join(tmpdir(), "ip-")) });
   assert.equal(r.status, 1);
-  assert.match(r.stderr, /yalnizca 'pamistanbul'/);
+  assert.match(r.stderr, /kayit defterinde/);
+});
+
+test("registry'de TAM 7 site var; inspect-index artik hepsini kullanabilir (PROBE_SITE_ID / tek-site kilidi kodda YOK)", () => {
+  const text = readFileSync(join(ROOT, "config/sites.yaml"), "utf8");
+  const count = [...text.matchAll(/^\s*-\s*id:\s*\S+/gm)].length;
+  assert.equal(count, 7);
+  const src = readFileSync(join(ROOT, "src/index-probe.ts"), "utf8");
+  assert.ok(!/PROBE_SITE_ID/.test(src), "sabit-kodlu PROBE_SITE_ID kaldirilmis olmali");
+  assert.ok(!/assertProbeSite/.test(src), "eski pamistanbul-only gate kaldirilmis olmali");
 });
 
 test("hostAllowed: apex ve www kabul; taklitci/baska host ret", () => {
@@ -273,4 +291,84 @@ test("gsc.urlInspection GERCEK yolu: 429'da tek istek atar (retries=0), token is
     globalThis.fetch = realFetch; _resetTokenCache();
     if (old === undefined) delete process.env.SEARCH_GROWTH_GSC_CREDENTIALS_JSON; else process.env.SEARCH_GROWTH_GSC_CREDENTIALS_JSON = old;
   }
+});
+
+// --- PER-SITE ayni-gun guard --------------------------------------------------
+
+test("statusOf: limit_reached/null = COMPLETE; 403/429/consecutive_errors/not_connected = INCOMPLETE (yeniden denenebilir)", () => {
+  assert.equal(statusOf(null), "COMPLETE");
+  assert.equal(statusOf("limit_reached"), "COMPLETE");
+  for (const s of ["forbidden_403", "rate_limited_429", "consecutive_errors", "not_connected"] as const) assert.equal(statusOf(s), "INCOMPLETE", s);
+});
+
+test("onaylanmis sifir aday (candidates=0, stopped=null) da COMPLETE sayilir: UNKNOWN'dan ayridir", () => {
+  const log = emptyRunLog("pamistanbul");
+  const { file } = mergeRunLog(log, { date: "2026-10-01", status: statusOf(null), stopped: null, candidates: 0, attempted: 0 });
+  assert.ok(hasCompletedToday(file, "2026-10-01"));
+});
+
+test("hasCompletedToday: PER SITE — bir sitenin tamamlanmis kaydi baska bir sitenin log'unu etkilemez (ayri dosyalar)", () => {
+  const a = emptyRunLog("pamistanbul");
+  const b = emptyRunLog("spryhand");
+  const { file: aDone } = mergeRunLog(a, { date: "2026-10-01", status: "COMPLETE", stopped: "limit_reached", candidates: 20, attempted: 20 });
+  assert.ok(hasCompletedToday(aDone, "2026-10-01"));
+  assert.ok(!hasCompletedToday(b, "2026-10-01"), "b hic calismadi; a'nin tamamlanmasi b'yi TAMAMLANMIS yapmaz");
+});
+
+test("mergeRunLog: tamamlanmis gun ASLA ezilmez; yarim/hatali gun yeni kosu ile tamamlanabilir", () => {
+  let log = emptyRunLog("pamistanbul");
+  let m = mergeRunLog(log, { date: "2026-10-01", status: "COMPLETE", stopped: null, candidates: 5, attempted: 5 });
+  assert.equal(m.action, "ADDED");
+  // Ayni gun icin ikinci (farkli) bir deneme: tamamlanmis kaydi EZMEZ.
+  m = mergeRunLog(m.file, { date: "2026-10-01", status: "COMPLETE", stopped: null, candidates: 99, attempted: 99 });
+  assert.equal(m.action, "KEPT_EXISTING");
+  assert.equal(m.file.records[0].candidates, 5);
+
+  // Yarim bir gun sonra tamamlanabilir (retry).
+  let log2 = emptyRunLog("spryhand");
+  let m2 = mergeRunLog(log2, { date: "2026-10-02", status: "INCOMPLETE", stopped: "forbidden_403", candidates: 10, attempted: 1 });
+  assert.equal(m2.action, "ADDED");
+  m2 = mergeRunLog(m2.file, { date: "2026-10-02", status: "COMPLETE", stopped: "limit_reached", candidates: 10, attempted: 10 });
+  assert.equal(m2.action, "REPLACED");
+  assert.ok(hasCompletedToday(m2.file, "2026-10-02"));
+});
+
+test("run-log semasi sgos.index-probe-run-log.v1", () => {
+  assert.equal(RUN_LOG_SCHEMA, "sgos.index-probe-run-log.v1");
+  assert.equal(emptyRunLog("pamistanbul").schema, RUN_LOG_SCHEMA);
+});
+
+// --- Portfoy: siteler arasi IZOLASYON (403/ERROR bir siteyi durdurur, DIGERLERINI DURDURMAZ) ---
+
+test("cli: --site verilmeden TUM registry siteleri calisir; portfoy ozeti basilir", () => {
+  const cwd = mkdtempSync(join(tmpdir(), "ip-"));
+  const env = { ...process.env }; delete env.SEARCH_GROWTH_GSC_CREDENTIALS_JSON; // kimlik yok -> hepsi NOT_CONNECTED, sifir API cagrisi, hicbiri fatal degil
+  const out = execFileSync("node", ["--experimental-strip-types", join(ROOT, "src/cli.ts"), "inspect-index", join(ROOT, "config/sites.yaml")], { cwd, env, encoding: "utf8" });
+  for (const id of KNOWN) assert.match(out, new RegExp(id), id);
+  assert.match(out, /Portfoy özeti/);
+});
+
+// --- DEFAULT_LIMIT/HARD_LIMIT degismedi (bu PR'da bilerek) ------------------------
+
+test("DEFAULT_LIMIT=20, HARD_LIMIT=100 bu PR'da DEGISMEDI (7 site * HARD_LIMIT = tavan 700/gun, kota ~%5'i)", () => {
+  assert.equal(DEFAULT_LIMIT, 20);
+  assert.equal(HARD_LIMIT, 100);
+  assert.equal(KNOWN.length * HARD_LIMIT, 700);
+});
+
+// --- workflow wiring: hardcoded pamistanbul YOK ------------------------------------
+
+test("workflow: index-probe.yml artik 'pamistanbul' site adini sabit kodlamiyor; registry-driven", () => {
+  const wf = readFileSync(join(ROOT, ".github/workflows/index-probe.yml"), "utf8");
+  assert.ok(!/--site pamistanbul/.test(wf), "hardcoded --site pamistanbul kaldirilmis olmali");
+  assert.match(wf, /inputs\.site/, "site artik workflow_dispatch girdisi");
+});
+
+test("orchestration: index-alarms-daily PLANNED kalir; index-alarms.yml YOK; index-probe ACTIVE kalir (alarm aktivasyonu degil)", async () => {
+  const orch = await import("../src/orchestration.ts");
+  const job = orch.JOBS.find((j: { id: string }) => j.id === "index-alarms-daily");
+  assert.equal(job?.state, "PLANNED");
+  const probeJob = orch.JOBS.find((j: { id: string }) => j.id === "index-probe");
+  assert.equal(probeJob?.state, "ACTIVE");
+  try { statSync(join(ROOT, ".github/workflows/index-alarms.yml")); assert.fail("index-alarms.yml olmamali"); } catch { /* beklenen: yok */ }
 });

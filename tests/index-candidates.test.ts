@@ -240,8 +240,15 @@ for (const code of [403, 429]) {
   });
 }
 
-test("segmentli yol da pamistanbul kilidini ve host kilidini korur", async () => {
-  await assert.rejects(runProbe({ site: { id: "spryhand", production_domain: "spryhand.com" }, candidates: [{ url: "https://spryhand.com/", segment: A }], candidateSource: "t", limit: 5, delayMs: 0, connected: true, inspect: async () => PASS }), /yalnizca/);
+test("segmentli yol da registry kilidini (knownSiteIds verilince) ve host kilidini korur", async () => {
+  await assert.rejects(runProbe({ site: { id: "evil-not-registered", production_domain: "evil-not-registered.com" }, knownSiteIds: ["pamistanbul", "spryhand"], candidates: [{ url: "https://evil-not-registered.com/", segment: A }], candidateSource: "t", limit: 5, delayMs: 0, connected: true, inspect: async () => PASS }), /kayit defterinde/);
+  // Registry'de olan, pamistanbul OLMAYAN bir site de artik calisabilir (PAM-only kilit kaldirildi).
+  {
+    let n = 0;
+    const r = await runProbe({ site: { id: "spryhand", production_domain: "spryhand.com" }, knownSiteIds: ["pamistanbul", "spryhand"], candidates: [{ url: "https://spryhand.com/", segment: A }], candidateSource: "t", limit: 5, delayMs: 0, connected: true, inspect: async () => { n++; return PASS; } });
+    assert.equal(n, 1);
+    assert.equal(r.results.length, 1);
+  }
   let calls = 0;
   const r = await runProbe({ site: SITE, candidates: [{ url: "https://evil.example/a", segment: A }, { url: "https://pamistanbul.com/ok", segment: A }], candidateSource: "t", limit: 5, delayMs: 0, connected: true, sleep: async () => {}, inspect: async () => { calls++; return PASS; } });
   assert.equal(calls, 1);

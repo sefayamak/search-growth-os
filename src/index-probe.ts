@@ -1,15 +1,21 @@
 /**
- * index-probe — pamistanbul icin salt-okunur URL Inspection ornekleme.
+ * index-probe — registry-driven, cok-siteli, salt-okunur URL Inspection ornekleme.
  *
  * Bu bir "tam coverage" olcumu DEGILDIR. URL Inspection API sayfa basina tek URL
  * cevaplar; GSC'nin toplu Pages raporu API'de yok. Burada yapilan: kucuk, kota
  * korumali bir ORNEKLEM. Her cikti bunu basligina yazar.
  *
+ * Kapsam: PAM-only pilot kilidi KALDIRILDI (bkz. PR "index-probe 7-site expansion").
+ * Site uygunlugu artik SABIT KODLANMIS bir liste DEGIL, config/sites.yaml kayit
+ * defterinden gelir (bkz. assertKnownSite). Bilinmeyen/kayit-disi site kimligi
+ * KAPALI-BASARISIZ olur; kayit defteri kontrolu zayiflatilmadi.
+ *
  * Guvenlik sozlesmesi (testlerle zorlanir):
- *   - yalnizca PROBE_SITE_ID; baska site kimligi reddedilir
+ *   - site kimligi kayit defterinde (config/sites.yaml) olmali; yoksa reddedilir
  *   - yalnizca production domain'in apex/www hostlari; baska host atlanir
- *   - varsayilan dusuk limit, sert tavan; kota dolunca durur
- *   - 403/429 = ERROR ve kosu durur; "indekslenmemis" DEGILDIR
+ *   - varsayilan dusuk limit, sert tavan (site basina); kota dolunca durur
+ *   - 403/429 = ERROR ve o SITE'nin kosusu durur; "indekslenmemis" DEGILDIR;
+ *     baska bir sitenin kosusunu ETKILEMEZ (cagiran taraf izolasyonu saglar)
  *   - eksik API alani = UNKNOWN
  *   - Google Indexing API'nin publish ucu bu kod tabaninda HICBIR yerde yok
  *     (inspection bir OKUMA cagrisidir; Indexing API'nin bildirim ucu bir YAZMA'dir)
@@ -19,16 +25,20 @@ import { normalizeUrl, type UrlInspectionSummary, type IndexVerdict } from "./ur
 import type { Segment } from "./index-candidates.ts";
 import { classifyCanonicalRelations, type CanonicalRelations } from "./canonical-relations.ts";
 
-export const PROBE_SITE_ID = "pamistanbul";
 export const DEFAULT_LIMIT = 20;
-/** Google property basina gunluk 2000 inspection izin veriyor; biz bunun ~%5'inde durariz. */
+/** Google property basina gunluk 2000 inspection izin veriyor; biz bunun ~%5'inde durariz. Bu SITE BASINADIR (7 site = tavan 700/gun portfoy capinda). */
 export const HARD_LIMIT = 100;
 export const DEFAULT_DELAY_MS = 1500;
 export const MAX_CONSECUTIVE_ERRORS = 3;
 
-export function assertProbeSite(siteId: string): void {
-  if (siteId !== PROBE_SITE_ID) {
-    throw new Error(`inspect-index yalnizca '${PROBE_SITE_ID}' icin calisir (istenen: '${siteId}'). Phase 1 kapsami bilerek dar.`);
+/**
+ * Site kimligi kayit defterinde mi? Bilinmeyen kimlik KAPALI-BASARISIZ olur: ikinci
+ * bir sabit-kodlu site listesi icat edilmez, tek kaynak config/sites.yaml'dir.
+ * Cagiran taraf (cli.ts / orchestrator) registry'den gelen id listesini verir.
+ */
+export function assertKnownSite(siteId: string, knownSiteIds: readonly string[]): void {
+  if (!knownSiteIds.includes(siteId)) {
+    throw new Error(`inspect-index: '${siteId}' kayit defterinde (config/sites.yaml) bulunamadi ya da onboard edilmemis. Bilinen siteler: ${knownSiteIds.join(", ") || "(yok)"}`);
   }
 }
 
@@ -133,6 +143,9 @@ export interface SegmentInfo {
 }
 
 export interface ProbeOptions {
+  /** Verilirse site.id bu listede olmali yoksa runProbe reddeder (kapali-basarisiz savunma katmani;
+   *  asil kontrol cagiran tarafta registry'e karsi yapilir). Testte ya da tek-site cagrilarda atlanabilir. */
+  knownSiteIds?: readonly string[];
   site: Pick<SiteEntry, "id" | "production_domain">;
   /** Duz URL listesi (strategy=gsc, Phase 1 davranisi). `candidates` verilirse kullanilmaz. */
   urls?: string[];
@@ -151,7 +164,7 @@ export interface ProbeOptions {
 }
 
 export async function runProbe(o: ProbeOptions): Promise<ProbeResult> {
-  assertProbeSite(o.site.id);
+  if (o.knownSiteIds) assertKnownSite(o.site.id, o.knownSiteIds);
   const skipped: ProbeResult["skipped"] = [...(o.skippedInput ?? [])];
   const seen = new Set<string>();
   const segmented = !!o.candidates;
@@ -258,6 +271,58 @@ export function summarizeSitemaps(raw: Record<string, unknown>[] | null): { stat
 export type QuotaLedger = Record<string, number>;
 export const usedOn = (l: QuotaLedger, date: string) => l[date] ?? 0;
 export const recordUsage = (l: QuotaLedger, date: string, n: number): QuotaLedger => ({ ...l, [date]: usedOn(l, date) + n });
+
+// ---------------------------------------------------------------------------
+// Ayni-gun koruma (PER SITE) — bir sitenin tamamlanmis kosusu digerini etkilemez.
+// Dosya I/O cli.ts'te (ledger deseniyle ayni); burada yalniz saf karar mantigi.
+// ---------------------------------------------------------------------------
+
+export const RUN_LOG_SCHEMA = "sgos.index-probe-run-log.v1" as const;
+export type RunStatus = "COMPLETE" | "INCOMPLETE";
+
+export interface RunLogRecord {
+  date: string;
+  status: RunStatus;
+  stopped: StopReason;
+  candidates: number;
+  attempted: number;
+}
+export interface RunLog { schema: typeof RUN_LOG_SCHEMA; site_id: string; records: RunLogRecord[] }
+
+export const emptyRunLog = (siteId: string): RunLog => ({ schema: RUN_LOG_SCHEMA, site_id: siteId, records: [] });
+
+/**
+ * Bir kosunun durma nedeninden TAMAMLANDI/TAMAMLANMADI kararı. `limit_reached` ya
+ * da aday listesi sonuna ulasmak (null) TAMAMLANDI sayilir — "onaylanmis sifir aday"
+ * (candidates===0, stopped===null) da TAMAMLANDI'dir ve UNKNOWN'dan ayrilir: bu bir
+ * basarisizlik degil, gozlenen bos adaydir. 403/429/ardisik-hata/kimlik-yok = YARIM,
+ * sinirli bir sonraki kosuda yeniden denenebilir (asagidaki guard tekrar deneme
+ * sayisini SINIRLAMAZ; bu cagiran tarafin -- orn. gunluk zamanlanmis bir is --
+ * sorumlulugundadir; bu PR'da index-probe hala yalniz elle tetiklenir).
+ */
+export function statusOf(stopped: StopReason): RunStatus {
+  return stopped === null || stopped === "limit_reached" ? "COMPLETE" : "INCOMPLETE";
+}
+
+/** Bugun (UTC) icin bu site TAMAMLANMIS bir kosuya mi sahip? Yalniz bu site icin bakilir: PER-SITE guard. */
+export function hasCompletedToday(log: RunLog, date: string): boolean {
+  return log.records.some((r) => r.date === date && r.status === "COMPLETE");
+}
+
+/**
+ * Gunluk kaydi birlestir: tamamlanmis bir gunu ASLA ezme (ayni gun iki defa 'tamam'
+ * kosmaz); yarim/hatali bir gun yeni bir kosu ile TAMAMLANDI'ya yukseltilebilir.
+ */
+export function mergeRunLog(log: RunLog, rec: RunLogRecord): { file: RunLog; action: "ADDED" | "REPLACED" | "KEPT_EXISTING" } {
+  const i = log.records.findIndex((r) => r.date === rec.date);
+  if (i < 0) {
+    const records = [...log.records, rec].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+    return { file: { ...log, records: records.slice(-120) }, action: "ADDED" };
+  }
+  if (log.records[i].status === "COMPLETE") return { file: log, action: "KEPT_EXISTING" };
+  const records = log.records.map((r, j) => (j === i ? rec : r));
+  return { file: { ...log, records: records.slice(-120) }, action: "REPLACED" };
+}
 
 export function probeToMarkdown(p: ProbeResult, sitemaps: ReturnType<typeof summarizeSitemaps> | { state: "ERROR"; error: string }, date: string): string {
   const L: string[] = [

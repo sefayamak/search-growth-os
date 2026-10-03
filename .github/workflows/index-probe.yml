@@ -1,14 +1,24 @@
-# Search Growth OS — index-probe (pamistanbul, salt-okunur URL Inspection ORNEKLEMI)
+# Search Growth OS — index-probe (registry'deki TUM onboard siteler, salt-okunur
+# URL Inspection ORNEKLEMI; bkz. PR "Expand index-probe to all 7 canonical sites")
 #
 # NE DEGIL: tam index coverage olcumu. URL Inspection API sayfa basina tek URL
 # cevaplar; bu is kucuk, kota korumali bir ornek alir ve raporu bunu basliga yazar.
+# NE DEGIL (2): index-alarms-daily ACTIVE edilmesi degildir — o is hala PLANNED'tir,
+# bu workflow'da yoktur ve bu PR onu etkinlestirmez.
+#
+# Site secimi config/sites.yaml KAYIT DEFTERINDEN gelir (onboarding_status !=
+# registered_not_onboarded). Sabit kodlu tek-site kilidi KALDIRILDI; `site` girdisi
+# verilirse CLI onu registry'e karsi dogrular, bilinmeyen/onboard-edilmemis kimlik
+# KAPALI-BASARISIZ olur. Her site izole calisir: birinin 403/429/hatasi digerini
+# durdurmaz (src/cli.ts inspect-index per-site try/catch).
 #
 # strategy=gsc varsayilandir ve Phase 1 davranisidir. strategy=segmented sitemap'i de
 # okur (robots.txt + sitemap.xml, birkac GET; sayfalar fetch edilmez) ve adaylari
 # segmentlere ayirir; canli dogrulanana kadar varsayilan DEGISTIRILMEZ.
 #
-# SADECE ELLE: zamanlayici yok. Kota (property basina gunluk 2000) paylasimli bir
-# kaynaktir; kendi kendine tetiklenen bir is onu sessizce tuketebilirdi.
+# SADECE ELLE: zamanlayici yok. Kota (property basina gunluk 2000, 7 site icin
+# normal kullanim ~140/gun, teorik tavan ~700/gun — ikisi de kotanin cok altinda)
+# paylasimli bir kaynaktir; kendi kendine tetiklenen bir is onu sessizce tuketebilirdi.
 #
 # YAZMA YOK: kod `searchconsole.googleapis.com/v1/urlInspection/index:inspect`
 # (okuma) ve Sitemaps listesi (okuma) cagirir. Google Indexing API'nin yazma ucu
@@ -17,13 +27,17 @@
 #
 # KIMLIK YOKSA: is yesil kalir ve rapor NOT_CONNECTED yazar; hicbir API cagrisi yapilmaz.
 
-name: Index probe (pamistanbul, read-only sample)
+name: Index probe (registry, read-only sample, no alarm activation)
 
 on:
   workflow_dispatch:
     inputs:
+      site:
+        description: "Bos = registry'deki TUM onboard siteler (izole, sirayla). Doldurulursa: tek site id'si (config/sites.yaml'da olmali)."
+        type: string
+        default: ""
       limit:
-        description: "Kosu basina en fazla kac URL denetlensin (varsayilan 20, kod sert tavani 100)"
+        description: "Kosu basina, SITE BASINA en fazla kac URL denetlensin (varsayilan 20, kod sert tavani 100)"
         type: string
         default: "20"
       strategy:
@@ -61,11 +75,17 @@ jobs:
           SEARCH_GROWTH_GSC_CREDENTIALS_JSON: ${{ secrets.SEARCH_GROWTH_GSC_CREDENTIALS_JSON }}
           LIMIT: ${{ inputs.limit }}
           STRATEGY: ${{ inputs.strategy }}
+          SITE: ${{ inputs.site }}
         run: |
           set -o pipefail
           case "$LIMIT" in ''|*[!0-9]*) echo "limit sayi olmali"; exit 1;; esac
           case "$STRATEGY" in gsc|segmented) ;; *) echo "strategy gsc ya da segmented olmali"; exit 1;; esac
-          node --experimental-strip-types src/cli.ts inspect-index config/sites.yaml --site pamistanbul --limit "$LIMIT" --strategy "$STRATEGY" --write | tee probe.md
+          # SITE bos olabilir (= registry'deki tum siteler); doluysa yalniz [a-z0-9_-] kabul edilir.
+          # Asil gecerlilik kontrolu (registry'de var mi, onboard mu) CLI tarafinda (config/sites.yaml'a karsi) yapilir.
+          case "$SITE" in '') ;; *[!a-z0-9_-]*) echo "site kimligi gecersiz karakter iceriyor"; exit 1;; esac
+          ARGS=(inspect-index config/sites.yaml --limit "$LIMIT" --strategy "$STRATEGY" --write)
+          if [ -n "$SITE" ]; then ARGS+=(--site "$SITE"); fi
+          node --experimental-strip-types src/cli.ts "${ARGS[@]}" | tee probe.md
           cat probe.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Artifact
@@ -75,6 +95,6 @@ jobs:
           name: index-probe-${{ github.run_id }}
           path: |
             probe.md
-            sites/pamistanbul/index-baseline/
+            sites/*/index-baseline/
           retention-days: 30
           if-no-files-found: warn
