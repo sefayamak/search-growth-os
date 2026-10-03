@@ -31,6 +31,36 @@
         "bot_pct": 80
       },
       "source_run_id": "36983089184"
+    },
+    {
+      "site_id": "untitledportraits",
+      "date": "2026-10-03",
+      "measured_at": "2026-10-03T08:04:01.017Z",
+      "measurement_state": "MEASURED",
+      "confidence": "CONFIRMED",
+      "row_count": 80,
+      "metric_row_count_total": 80,
+      "max_metric_row_count": 11,
+      "rows_complete": true,
+      "is_zero": false,
+      "measurement_success": true,
+      "usable": true,
+      "friction": {
+        "dead_click_count": 0,
+        "rage_click_count": 0,
+        "script_error_count": 0,
+        "error_click_count": 0,
+        "excessive_scroll": 0,
+        "quickback_click": 0
+      },
+      "friction_total": 0,
+      "sessions": {
+        "real": 7,
+        "bot": 6,
+        "total": 13,
+        "bot_pct": 46.2
+      },
+      "source_run_id": "37108427420"
     }
   ]
 }
