@@ -237,14 +237,20 @@ test("disk: bozuk bir site gecmisi yalniz o siteyi dusurur, digerleri etkilenmez
   assert.equal(s.chain_state, "NONE");
 });
 
-test("gercek commit'li history (2026-10-02): COVERAGE, tazelik NOT_FULL (pamistanbul eski kosudan), FULL asla; checklist PENDING", () => {
+test("gercek commit'li history: 2026-10-02 COVERAGE/NOT_FULL (pamistanbul eski kosudan), 2026-10-03 FULL_TAKEOVER_SUCCESS (Day-1) -> chain 1/2, 2/2 asla tek gunden; checklist PENDING", () => {
   const s = loadAndEvaluate(REG, "data/clarity-history");
   assert.equal(s.sites.length, 7);
-  assert.ok(s.days.every((d) => d.status !== "FULL_TAKEOVER_SUCCESS"));
-  assert.equal(s.chain_state, "NONE");
-  const d = s.days.find((x) => x.date === "2026-10-02")!;
-  assert.equal(d.status, "COVERAGE_VALIDATION_SUCCESS");
-  assert.equal(d.freshness, "NOT_FULL");
-  assert.equal(d.guard_skips_observed, 1);
+  const d2 = s.days.find((x) => x.date === "2026-10-02")!;
+  assert.equal(d2.status, "COVERAGE_VALIDATION_SUCCESS");
+  assert.equal(d2.freshness, "NOT_FULL");
+  assert.equal(d2.guard_skips_observed, 1);
+  const d3 = s.days.find((x) => x.date === "2026-10-03")!;
+  assert.equal(d3.status, "FULL_TAKEOVER_SUCCESS");
+  assert.equal(d3.freshness, "FRESH_7_OF_7");
+  assert.equal(d3.guard_skips_observed, 0);
+  // Tek nitelikli gun -> 1/2; iki AYRI nitelikli UTC gunu olmadan asla 2/2.
+  assert.equal(s.days.filter((d) => d.status === "FULL_TAKEOVER_SUCCESS").length, 1);
+  assert.equal(s.chain_state, "FULL_TAKEOVER_1_OF_2");
+  assert.deepEqual(s.chain_days, ["2026-10-03"]);
   assert.ok(s.owner_checklist.every((c) => c.state === "OWNER_ACTION_PENDING"));
 });

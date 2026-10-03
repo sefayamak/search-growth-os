@@ -350,16 +350,21 @@ test("bos history dizini => gun yok, chain NONE, 7 site 'history okunamadi' DEGI
   assert.deepEqual(s.site_problems, []);
 });
 
-test("commit'li gercek history (data/clarity-history, YALNIZ OKUNUR) => COVERAGE_VALIDATION_SUCCESS, chain NONE; dosyalar degismez", () => {
+test("commit'li gercek history (data/clarity-history, YALNIZ OKUNUR) => 2026-10-02 COVERAGE_VALIDATION_SUCCESS, 2026-10-03 FULL_TAKEOVER_SUCCESS (Day-1), chain 1/2; dosyalar degismez", () => {
   const real = join(ROOT, "data/clarity-history");
   const before = snapshot(real);
   const s = evalBoth(real);
   ownerPending(s);
-  const d = s.days.find((x) => x.date === "2026-10-02")!;
-  assert.equal(d.status, "COVERAGE_VALIDATION_SUCCESS");
-  assert.notEqual(d.freshness, "FRESH_7_OF_7");
-  assert.ok(s.days.every((x) => x.status !== "FULL_TAKEOVER_SUCCESS"));
-  assert.equal(s.chain_state, "NONE");
+  const d2 = s.days.find((x) => x.date === "2026-10-02")!;
+  assert.equal(d2.status, "COVERAGE_VALIDATION_SUCCESS");
+  assert.notEqual(d2.freshness, "FRESH_7_OF_7");
+  const d3 = s.days.find((x) => x.date === "2026-10-03")!;
+  assert.equal(d3.status, "FULL_TAKEOVER_SUCCESS");
+  assert.equal(d3.freshness, "FRESH_7_OF_7");
+  // Tek nitelikli gun -> 1/2; iki AYRI nitelikli UTC gunu olmadan asla 2/2.
+  assert.equal(s.days.filter((x) => x.status === "FULL_TAKEOVER_SUCCESS").length, 1);
+  assert.equal(s.chain_state, "FULL_TAKEOVER_1_OF_2");
+  assert.deepEqual(s.chain_days, ["2026-10-03"]);
   assert.deepEqual(s.site_problems, []);
   assert.deepEqual(snapshot(real), before);
 });
