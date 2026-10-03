@@ -95,10 +95,19 @@ test("dogrulayici sema hatalari yakalanir", () => {
 });
 
 test("model: yeni katmanlar PLANNED, event isi cron tasimaz, legacy ccr_routine", () => {
-  for (const id of ["lighthouse-weekly", "index-alarms-daily", "deployment-verifier", "scorecard-weekly"]) assert.equal(JOBS.find((j) => j.id === id)?.state, "PLANNED");
+  for (const id of ["index-alarms-daily", "deployment-verifier", "scorecard-weekly"]) assert.equal(JOBS.find((j) => j.id === id)?.state, "PLANNED");
   assert.equal(JOBS.find((j) => j.id === "deployment-verifier")!.cadence, "event");
   assert.equal(JOBS.find((j) => j.id === "legacy-site-health-monitor")!.runner, "ccr_routine");
   assert.equal(JOBS.find((j) => j.id === "legacy-site-health-monitor")!.cron, "10 6 * * *");
+});
+
+test("model: lighthouse-weekly PLANNED -> ACTIVE (workflow olustu, secret owner tarafindan eklendi)", () => {
+  const j = JOBS.find((x) => x.id === "lighthouse-weekly")!;
+  assert.equal(j.state, "ACTIVE");
+  assert.equal(j.cron, "10 7 * * 1");
+  assert.equal(j.workflow, "lighthouse.yml");
+  assert.equal(j.commits_to_main, true);
+  assert.equal(j.push_strategy, "rebase_retry_bounded");
 });
 
 test("markdown cikti bulgulari icerir", () => {

@@ -51,11 +51,15 @@ test("tohum: zincir halkalari dolu; sema kimlikleri uretici semalariyla ayni; ay
 });
 
 test("tohum: model PLANNED/GATED kalir ve PLANNED isler icin workflow dosyasi YOK (hicbir schedule acilmadi)", () => {
-  for (const id of ["lighthouse-weekly", "index-alarms-daily", "deployment-verifier", "scorecard-weekly"]) {
+  for (const id of ["index-alarms-daily", "deployment-verifier", "scorecard-weekly"]) {
     const j = JOBS.find((x) => x.id === id)!;
     assert.equal(j.state, "PLANNED");
     assert.ok(!existsSync(new URL(j.workflow!, WF_DIR)), `${j.workflow} olusturulmamali`);
   }
+  // lighthouse-weekly: PLANNED -> ACTIVE (bu PR), workflow dosyasi artik var.
+  const lh = JOBS.find((x) => x.id === "lighthouse-weekly")!;
+  assert.equal(lh.state, "ACTIVE");
+  assert.ok(existsSync(new URL(lh.workflow!, WF_DIR)), `${lh.workflow} olusmali`);
   assert.equal(JOBS.find((j) => j.id === "clarity-daily")!.state, "GATED");
 });
 
@@ -143,9 +147,13 @@ test("gercek duzen (iki dunya): measure/clarity-daily FARKLI gruplarla main'e ya
   assert.ok(!issues().some((i) => i.code === "PUSH_WITHOUT_REBASE"));
   assert.equal(issues().find((i) => i.code === "MAIN_COMMIT_RACE" && i.jobs.includes("measure") && i.jobs.includes("clarity-daily"))?.severity, "INFO");
   // planli isler ortak grupta ve rebase'li: aralarinda yaris yok
-  const planned = ["lighthouse-weekly", "index-alarms-daily", "deployment-verifier"];
+  const planned = ["index-alarms-daily", "deployment-verifier"];
   for (const id of planned) { assert.equal(job(cj(), id).commit_group, TARGET_COMMIT_GROUP); assert.equal(job(cj(), id).push_strategy, "rebase_then_push"); }
-  assert.ok(!issues().some((i) => i.code === "MAIN_COMMIT_RACE" && i.jobs.every((x) => planned.includes(x))));
+  // lighthouse-weekly artik ACTIVE: ayni ortak grupta ama betik formu (rebase_retry_bounded) kullanir.
+  assert.equal(job(cj(), "lighthouse-weekly").commit_group, TARGET_COMMIT_GROUP);
+  assert.equal(job(cj(), "lighthouse-weekly").push_strategy, "rebase_retry_bounded");
+  const grouped = [...planned, "lighthouse-weekly"];
+  assert.ok(!issues().some((i) => i.code === "MAIN_COMMIT_RACE" && i.jobs.every((x) => grouped.includes(x))));
 });
 
 test("FP: ortak commit grubu yarisi kaldirir; tek commit eden plain_push is sorun degildir; rebase'li is PUSH_WITHOUT_REBASE uretmez", () => {
@@ -169,9 +177,13 @@ test("MAIN_COMMIT_RACE/PUSH_WITHOUT_REBASE betik korumasi: FP (korumali + ayrik 
 });
 
 test("FN: PLANNED is plain_push ise ERROR (tasarim asamasinda yakalanir); live ise WARN", () => {
-  const j = cj(); job(j, "lighthouse-weekly").push_strategy = "plain_push";
-  const p = issues(j).find((i) => i.code === "PUSH_WITHOUT_REBASE" && i.jobs[0] === "lighthouse-weekly");
+  const j = cj(); job(j, "index-alarms-daily").push_strategy = "plain_push";
+  const p = issues(j).find((i) => i.code === "PUSH_WITHOUT_REBASE" && i.jobs[0] === "index-alarms-daily");
   assert.ok(p && p.severity === "ERROR");
+  // lighthouse-weekly artik ACTIVE (live): ayni durum WARN uretir, ERROR degil.
+  const j2 = cj(); job(j2, "lighthouse-weekly").push_strategy = "plain_push";
+  const p2 = issues(j2).find((i) => i.code === "PUSH_WITHOUT_REBASE" && i.jobs[0] === "lighthouse-weekly");
+  assert.ok(p2 && p2.severity === "WARN");
 });
 
 test("commit politikasi: commit eden isin grup+push stratejisi zorunlu; 'writes (commit, main)' bayraksiz olamaz; depo yolu olmadan commit olmaz", () => {
@@ -207,7 +219,7 @@ test("gercek workflow'lar (iki dunya): commit/push/concurrency/git-add modelle u
   assert.equal(extractPushStrategy(workflows["clarity-daily.yml"]), want("clarity-daily.yml", "rebase_then_push"));
   assert.equal(extractConcurrencyGroup(workflows["measure.yml"]), "measure");
   assert.equal(extractConcurrencyGroup(workflows["clarity-daily.yml"]), "clarity");
-  assert.deepEqual(Object.entries(workflows).filter(([, t]) => extractPushStrategy(t)).map(([f]) => f).sort(), ["clarity-daily.yml", "measure.yml"]);
+  assert.deepEqual(Object.entries(workflows).filter(([, t]) => extractPushStrategy(t)).map(([f]) => f).sort(), ["clarity-daily.yml", "lighthouse.yml", "measure.yml"]);
   // Betik formunda git add kumesi = betik argumanlari: gercek yollar modelde (reports/, ledger, clarity-history) ve baska yol yok.
   const adds = (f: string) => extractGitAddPaths(workflows[f]);
   assert.ok(adds("clarity-daily.yml").includes("data/clarity-history/") || adds("clarity-daily.yml").some((p) => p.startsWith("data/clarity-history")));

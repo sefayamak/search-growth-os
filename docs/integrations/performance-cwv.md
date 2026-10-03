@@ -1,10 +1,18 @@
 # Performans / Core Web Vitals (Lighthouse + CrUX)
 
-Durum: **kod ve testler hazır, CLI/workflow bağlanmadı** (orkestratör bağlayacak). Canlı PSI çağrısı bu
-sprintte yapılmadı; ölçülmüş canlı değer yoktur, bu belgede de yazılmaz.
+Durum: **aktif** — `.github/workflows/lighthouse.yml`, haftalık `10 7 * * 1` UTC (ve `workflow_dispatch`),
+`src/orchestration.ts` içinde `lighthouse-weekly` işi `ACTIVE`. Canlı PSI çağrısı yalnız bu workflow
+(veya elle `performance-measure --write`) çalıştığında olur.
 
 Modül: `src/performance.ts` (ayrıştırma, geçmiş, regresyon, koşu, markdown),
 `src/performance-psi.ts` (PSI istemcisi). Şema: `schemas/performance-record.schema.json`.
+
+## Kimlik bilgisi
+
+Yerel ortam değişkeni: `PAGESPEED_API_KEY` (bkz. `.env.example`). GitHub Actions secret adı aynı:
+`PAGESPEED_API_KEY`. Değer hiçbir zaman commit edilmez, loglanmaz, CLI argümanı olarak kabul edilmez
+(`src/cli.ts` bunu açıkça reddeder). Secret tanımlı değilse `src/performance.ts` siteyi `NOT_CONNECTED`
+olarak işaretler — asla `0` ölçüm değeri üretmez (kural 1, aşağıda).
 
 ## Ne ölçer
 

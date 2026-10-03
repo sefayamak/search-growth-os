@@ -28,7 +28,7 @@ iki yazarı olamaz. Yol çakışması dizin önekiyle de yakalanır (`reports/` 
 | Yol | Ölçüm modülü | Çıktı şeması | TEK yazar (`writes`) | Kalıcılık | Scorecard tüketimi | Üretici durumu |
 |---|---|---|---|---|---|---|
 | `data/clarity-history/` | `src/clarity-daily.ts` | `sgos.clarity-history.v1` | `clarity-daily` (GATED) | commit_main | `measurement_health`, `ux_friction` | main |
-| `data/performance-history/` | `src/performance.ts` | `sgos.performance-history.v1` | `lighthouse-weekly` (PLANNED) | commit_main | `performance` | PR #36 |
+| `data/performance-history/` | `src/performance.ts` | `sgos.performance-history.v1` | `lighthouse-weekly` (ACTIVE) | commit_main | `performance` | PR #36 |
 | `data/index-history/` | `src/index-alarms.ts` | `sgos.index-history.v1` | `index-alarms-daily` (PLANNED) | commit_main | `index_health` | PR #34 |
 | `data/canonical-backlog/` | `src/index-alarms.ts` | `sgos.canonical-backlog.v1` | `index-alarms-daily` (PLANNED) | commit_main | **okunmuyor** | PR #34 |
 | `data/deployment-timeline/` | `src/deployment-timeline.ts` | `sgos.deployment-timeline.v1` | `deployment-verifier` (PLANNED) | commit_main | `deployment_change` | PR #32 |
