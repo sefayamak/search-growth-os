@@ -48,7 +48,7 @@
 //   scorecard [registry] [--site id] [--json] [--clarity d] [--performance d] [--index d] [--deployments d] [--measure f]   OFFLINE: site basina 6 boyutlu durum karti
 //   orchestration-check [--drift] [--json]                                           OFFLINE: is/kota/cron modeli dogrulama (+ workflow drift)
 //   <yukaridaki 12 entegrasyon komutundan biri> --help   kullanim satirini basar (exit 0, yan etki yok)
-import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from "node:fs";
+import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, renameSync, rmSync } from "node:fs";
 import { join, dirname, relative, resolve, isAbsolute } from "node:path";
 import { crawl } from "./crawler.ts";
 import { assessPortfolio, cadenceToMarkdown } from "./cadence.ts";
@@ -264,10 +264,13 @@ async function main() {
     // baglanmadigini tek bakista gostermek.
     case "measure": {
       const { periods, brandPatterns, splitByBrand } = await import("./measure.ts");
+      const { invalidGscRows } = await import("./measure-report.ts");
       const { searchConsole, ga4 } = await import("./adapters/index.ts");
       const reg = loadRegistry(args[1] ?? "config/sites.yaml");
       if (!reg.ok || !reg.registry) { console.error(reg.errors.join("\n")); process.exitCode = 1; return; }
-      const p = periods(new Date());
+      // TEK saat damgasi: donemler, rapor generated_at ve retrieved_at ayni kosunun ayni ani (gece yarisini asan iki new Date() farki olmasin).
+      const runNow = new Date();
+      const p = periods(runNow);
       console.log(`dönemler  : ${p.current.label} ${p.current.start}..${p.current.end}`);
       console.log(`            ${p.previous.label} ${p.previous.start}..${p.previous.end}`);
       console.log(`            ${p.yearAgo.label} ${p.yearAgo.start}..${p.yearAgo.end}`);
@@ -336,6 +339,12 @@ async function main() {
             searchConsole.searchAnalytics(prop, p.yearAgo, []),
           ]);
           if (now === null || nowTotal === null) { rec({ kind: "not_connected", reason: "kimlik okunamadı" }); say(`  veri         : NOT_CONNECTED — kimlik okunamadı`); continue; }
+          // Beklenmeyen/bozuk yanit sayiya cevrilmez: gecerli yanitta bu kontrol hicbir sey degistirmez (Markdown ayni),
+          // bozuk yanitta site HATA olur (catch'e duser) — NaN sessizce toplama girmez, JSON'da null-MEASURED olmaz.
+          for (const [label, rows] of [["sorgu satirlari", now], ["site toplami", nowTotal], ["onceki donem sorgu satirlari", then], ["onceki donem site toplami", thenTotal]] as const) {
+            const bad = rows ? invalidGscRows(rows) : null;
+            if (bad) throw new Error(`beklenmeyen GSC yaniti (${label}): ${bad}`);
+          }
           rec({ kind: "ok", current: now, yearAgo: then, currentTotal: nowTotal, yearAgoTotal: thenTotal });
           const a = splitByBrand(now, patterns);
           const b = then ? splitByBrand(then, patterns) : null;
@@ -374,18 +383,33 @@ async function main() {
       console.log("");
       for (const l of buf) console.log(l);
       // Makine-okunur cikti YALNIZ --out verilirse yazilir; varsayilan davranis (yalniz stdout) degismedi.
+      // JSON AYNI bellek-ici sonuclardan (reportInputs) uretilir: ikinci GSC cagrisi yok. Markdown yukarida tamamen
+      // basildi; JSON basarisizsa Markdown KAYBOLMAZ, ama hata SESSIZ DEGIL: stderr + exit 1 + `<out>/measure-report.error.txt`
+      // (workflow bu isaretle "JSON yok" ile "olcum cokmesi"ni ayirir) ve eski/yarim JSON dosyasi birakilmaz.
       if (flag("out")) {
-        const { buildMeasureReport } = await import("./measure-report.ts");
         const outDir = opt("out", "reports/runs");
-        const report = buildMeasureReport(reportInputs, {
-          now: new Date(), current: p.current, yearAgo: p.yearAgo,
-          toolVersion: JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version,
-          commit: process.env.GITHUB_SHA ?? null, registryPath: args[1] ?? "config/sites.yaml",
-        });
-        mkdirSync(outDir, { recursive: true });
         const file = join(outDir, "measure-report.json");
-        writeFileSync(file, JSON.stringify(report, null, 2) + "\n");
-        console.error(`written: ${file}`);
+        try {
+          const { buildMeasureReport } = await import("./measure-report.ts");
+          const report = buildMeasureReport(reportInputs, {
+            now: runNow, current: p.current, yearAgo: p.yearAgo,
+            toolVersion: JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version,
+            commit: process.env.GITHUB_SHA ?? null, registryPath: args[1] ?? "config/sites.yaml",
+          });
+          mkdirSync(outDir, { recursive: true });
+          // Atomik yazim: yarim dosya asla canonical yola kopyalanmaz.
+          const tmp = `${file}.tmp`;
+          writeFileSync(tmp, JSON.stringify(report, null, 2) + "\n");
+          renameSync(tmp, file);
+          console.error(`written: ${file}`);
+        } catch (e) {
+          const msg = (e as Error).message;
+          console.error(`measure-report HATA: ${msg} (Markdown ciktisi etkilenmedi; JSON yazilmadi)`);
+          // Isaret ONCE yazilir (temizlik hata verse bile kaybolmasin); eski/yarim JSON dosyasi birakilmaz.
+          try { writeFileSync(join(outDir, "measure-report.error.txt"), msg + "\n"); } catch { /* isaret yazilamadiysa exit 1 yine de bildirir */ }
+          for (const f of [file, `${file}.tmp`]) { try { rmSync(f, { force: true }); } catch { /* dizin vb.: dokunma */ } }
+          process.exitCode = 1;
+        }
       }
       return;
     }
