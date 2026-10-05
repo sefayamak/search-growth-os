@@ -2,13 +2,13 @@
   "pamistanbul": {
     "gemini ile fotoğraf yapma": {
       "firstSeen": "2026-09-22",
-      "lastSeen": "2026-09-28",
-      "weeksOpen": 2
+      "lastSeen": "2026-10-05",
+      "weeksOpen": 3
     },
     "gemini fotoğraf yapma": {
       "firstSeen": "2026-09-22",
-      "lastSeen": "2026-09-28",
-      "weeksOpen": 2
+      "lastSeen": "2026-10-05",
+      "weeksOpen": 3
     },
     "kikis": {
       "firstSeen": "2026-09-22",
@@ -54,8 +54,8 @@
   "pamaistudio": {
     "harika şeyler dükkanı": {
       "firstSeen": "2026-09-22",
-      "lastSeen": "2026-09-28",
-      "weeksOpen": 2
+      "lastSeen": "2026-10-05",
+      "weeksOpen": 3
     },
     "high-efficiency & high-quality production with midjourney & stable diffusion": {
       "firstSeen": "2026-09-22",
@@ -69,20 +69,20 @@
     },
     "midjourney vs stable diffusion": {
       "firstSeen": "2026-09-22",
-      "lastSeen": "2026-09-28",
-      "weeksOpen": 2
+      "lastSeen": "2026-10-05",
+      "weeksOpen": 3
     }
   },
   "spryhand": {
     "rental property spreadsheet": {
       "firstSeen": "2026-09-22",
-      "lastSeen": "2026-09-28",
-      "weeksOpen": 2
+      "lastSeen": "2026-10-05",
+      "weeksOpen": 3
     },
     "rental property excel spreadsheet": {
       "firstSeen": "2026-09-22",
-      "lastSeen": "2026-09-28",
-      "weeksOpen": 2
+      "lastSeen": "2026-10-05",
+      "weeksOpen": 3
     },
     "rent spreadsheet": {
       "firstSeen": "2026-09-22",
@@ -103,7 +103,12 @@
     },
     "budget decision tools: common mistakes and how to avoid them": {
       "firstSeen": "2026-09-28",
-      "lastSeen": "2026-09-28",
+      "lastSeen": "2026-10-05",
+      "weeksOpen": 2
+    },
+    "budget decision tools: a beginner's guide": {
+      "firstSeen": "2026-10-05",
+      "lastSeen": "2026-10-05",
       "weeksOpen": 1
     }
   },
@@ -120,7 +125,12 @@
     },
     "etsy and amazon listing grader and keyword tools: common mistakes and how to avoid them": {
       "firstSeen": "2026-09-28",
-      "lastSeen": "2026-09-28",
+      "lastSeen": "2026-10-05",
+      "weeksOpen": 2
+    },
+    "etsy and amazon listing grader and keyword tools: a beginner's guide": {
+      "firstSeen": "2026-10-05",
+      "lastSeen": "2026-10-05",
       "weeksOpen": 1
     }
   },
@@ -139,6 +149,16 @@
       "firstSeen": "2026-09-28",
       "lastSeen": "2026-09-28",
       "weeksOpen": 1
+    },
+    "fashion, commercial and portrait photography: common mistakes and how to avoid them": {
+      "firstSeen": "2026-10-05",
+      "lastSeen": "2026-10-05",
+      "weeksOpen": 1
+    },
+    "fashion, commercial and portrait photography: a beginner's guide": {
+      "firstSeen": "2026-10-05",
+      "lastSeen": "2026-10-05",
+      "weeksOpen": 1
     }
   },
   "myhappymade": {
@@ -154,7 +174,12 @@
     },
     "handmade crochet bags: common mistakes and how to avoid them": {
       "firstSeen": "2026-09-28",
-      "lastSeen": "2026-09-28",
+      "lastSeen": "2026-10-05",
+      "weeksOpen": 2
+    },
+    "handmade crochet bags: a beginner's guide": {
+      "firstSeen": "2026-10-05",
+      "lastSeen": "2026-10-05",
       "weeksOpen": 1
     }
   }
