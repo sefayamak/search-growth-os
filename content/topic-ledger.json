@@ -2,8 +2,8 @@
   "pamistanbul": {
     "gemini ile fotoğraf yapma": {
       "firstSeen": "2026-09-22",
-      "lastSeen": "2026-11-16",
-      "weeksOpen": 9
+      "lastSeen": "2026-11-23",
+      "weeksOpen": 10
     },
     "gemini fotoğraf yapma": {
       "firstSeen": "2026-09-22",
@@ -59,6 +59,11 @@
       "firstSeen": "2026-11-09",
       "lastSeen": "2026-11-16",
       "weeksOpen": 2
+    },
+    "sinema promo filmi": {
+      "firstSeen": "2026-11-23",
+      "lastSeen": "2026-11-23",
+      "weeksOpen": 1
     }
   },
   "pamaistudio": {
@@ -79,13 +84,18 @@
     },
     "midjourney vs stable diffusion": {
       "firstSeen": "2026-09-22",
-      "lastSeen": "2026-10-05",
-      "weeksOpen": 3
+      "lastSeen": "2026-11-23",
+      "weeksOpen": 4
     },
     "kikis": {
       "firstSeen": "2026-10-12",
       "lastSeen": "2026-11-16",
       "weeksOpen": 6
+    },
+    "stable diffusion vs midjourney": {
+      "firstSeen": "2026-11-23",
+      "lastSeen": "2026-11-23",
+      "weeksOpen": 1
     }
   },
   "spryhand": {
@@ -116,13 +126,13 @@
     },
     "how to choose spreadsheet templates, calculators and trackers: a practical checklist": {
       "firstSeen": "2026-10-19",
-      "lastSeen": "2026-10-26",
-      "weeksOpen": 2
+      "lastSeen": "2026-11-23",
+      "weeksOpen": 3
     },
     "spreadsheet templates, calculators and trackers: common mistakes and how to avoid them": {
       "firstSeen": "2026-10-26",
-      "lastSeen": "2026-11-02",
-      "weeksOpen": 2
+      "lastSeen": "2026-11-23",
+      "weeksOpen": 3
     }
   },
   "decideplan": {
@@ -133,13 +143,13 @@
     },
     "how to choose budget decision tools: a practical checklist": {
       "firstSeen": "2026-09-22",
-      "lastSeen": "2026-11-16",
-      "weeksOpen": 5
+      "lastSeen": "2026-11-23",
+      "weeksOpen": 6
     },
     "budget decision tools: common mistakes and how to avoid them": {
       "firstSeen": "2026-09-28",
-      "lastSeen": "2026-11-02",
-      "weeksOpen": 4
+      "lastSeen": "2026-11-23",
+      "weeksOpen": 5
     },
     "budget decision tools: a beginner's guide": {
       "firstSeen": "2026-10-05",
@@ -155,13 +165,13 @@
     },
     "how to choose etsy and amazon listing grader and keyword tools: a practical checklist": {
       "firstSeen": "2026-09-22",
-      "lastSeen": "2026-11-16",
-      "weeksOpen": 5
+      "lastSeen": "2026-11-23",
+      "weeksOpen": 6
     },
     "etsy and amazon listing grader and keyword tools: common mistakes and how to avoid them": {
       "firstSeen": "2026-09-28",
-      "lastSeen": "2026-11-02",
-      "weeksOpen": 4
+      "lastSeen": "2026-11-23",
+      "weeksOpen": 5
     },
     "etsy and amazon listing grader and keyword tools: a beginner's guide": {
       "firstSeen": "2026-10-05",
@@ -177,8 +187,8 @@
     },
     "how to choose fashion, commercial and portrait photography: a practical checklist": {
       "firstSeen": "2026-09-22",
-      "lastSeen": "2026-11-16",
-      "weeksOpen": 5
+      "lastSeen": "2026-11-23",
+      "weeksOpen": 6
     },
     "photoshoot brief": {
       "firstSeen": "2026-09-28",
@@ -187,8 +197,8 @@
     },
     "fashion, commercial and portrait photography: common mistakes and how to avoid them": {
       "firstSeen": "2026-10-05",
-      "lastSeen": "2026-11-02",
-      "weeksOpen": 3
+      "lastSeen": "2026-11-23",
+      "weeksOpen": 4
     },
     "fashion, commercial and portrait photography: a beginner's guide": {
       "firstSeen": "2026-10-05",
@@ -204,13 +214,13 @@
     },
     "how to choose handmade crochet bags: a practical checklist": {
       "firstSeen": "2026-09-22",
-      "lastSeen": "2026-11-16",
-      "weeksOpen": 5
+      "lastSeen": "2026-11-23",
+      "weeksOpen": 6
     },
     "handmade crochet bags: common mistakes and how to avoid them": {
       "firstSeen": "2026-09-28",
-      "lastSeen": "2026-11-02",
-      "weeksOpen": 4
+      "lastSeen": "2026-11-23",
+      "weeksOpen": 5
     },
     "handmade crochet bags: a beginner's guide": {
       "firstSeen": "2026-10-05",
